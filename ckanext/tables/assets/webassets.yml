@@ -1,0 +1,21 @@
+
+tables-js:
+  filter: rjsmin
+  output: ckanext-tables/%(version)s-tables.js
+  contents:
+    - js/vendor/tabulator.min.js
+    - js/tables-toast.js
+    - js/tables-confirm.js
+    - js/tables-tabulator.js
+
+  extra:
+    preload:
+      - base/main
+
+tables-css:
+  output: ckanext-tables/%(version)s-tables.css
+  contents:
+    - css/vendor/tabulator.min.css
+    - css/vendor/tabulator-theme.min.css
+
+    - css/style.css
