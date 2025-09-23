@@ -1,0 +1,60 @@
+    .shimmer {
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 5px;
+        overflow: hidden;
+        border: 1px solid #ced4da;
+
+        .shimmer__header {
+            background: #f9fafb;
+        }
+
+        .shimmer__row {
+            display: flex;
+            padding: 20px;
+
+
+            .shimmer__cell {
+                flex: 1;
+                margin-right: 16px;
+
+                &:last-child {
+                    margin-right: 0;
+                }
+            }
+
+            .shimmer__block {
+                animation-duration: 2s;
+                animation-fill-mode: forwards;
+                animation-iteration-count: infinite;
+                animation-name: placeHolderShimmer;
+                animation-timing-function: linear;
+                background-color: #ededed;
+                background-image: linear-gradient(90deg,
+                        #ededed 14.36%,
+                        #d7d6d6 56.29%,
+                        #ededed 100%);
+                background-repeat: no-repeat;
+                background-size: 244px 104px;
+                border-radius: 6px;
+                height: 16px;
+                width: 100%;
+            }
+
+            &:not(:last-child) {
+                border-bottom: 1px solid #ced4da;
+            }
+        }
+    }
+
+
+
+    @keyframes placeHolderShimmer {
+        0% {
+            background-position: -300px 0;
+        }
+
+        100% {
+            background-position: 300px 0;
+        }
+    }

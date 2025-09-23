@@ -1,4 +1,5 @@
 $color-active: #206b82;
+
 .tabulator-wrapper {
     position: relative;
 
@@ -65,9 +66,11 @@ $color-active: #206b82;
         // this is to hide a "Loading..." message that appears when the table is loading
         // I'm not sure, that something important is lost by hiding it
         .tabulator-alert {
+            background: transparent;
+
             .tabulator-alert-msg {
-                border: 1px solid var(--ap-form-control-border);
-                color: var(--ap-color);
+                border: 1px solid #ced4da;
+                color: black;
             }
         }
     }

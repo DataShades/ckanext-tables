@@ -1,0 +1,22 @@
+{% set widths = ['20%', '40%', '55%', '70%', '60%', '80%'] %}
+
+<div class="shimmer mt-3">
+    <div class="shimmer__row shimmer__header">
+        {% for i in range(4) %}
+        <div class="shimmer__cell">
+            <div class="shimmer__block" style="width:{{ widths|random }};"></div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Body rows -->
+    {% for i in range(10) %}
+    <div class="shimmer__row">
+        {% for i in range(4) %}
+        <div class="shimmer__cell">
+            <div class="shimmer__block" style="width:{{ widths|random }};"></div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>

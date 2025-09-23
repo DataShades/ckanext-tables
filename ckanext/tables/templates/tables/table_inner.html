@@ -76,8 +76,7 @@
             data-module-config="{{ h.tables_json_dumps(table.get_tabulator_config()) }}"
         >
             <span class="ap-loading-indicator">
-                {% snippet "tables/snippets/loading_indicator.html" %}
-                {{ _("Loading data...") }}
+                {% snippet "tables/snippets/table_skeleton.html" %}
             </span>
         </div>
     </div>

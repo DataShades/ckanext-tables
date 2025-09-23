@@ -28,7 +28,14 @@ ckan.module("tables-tabulator", function ($, _) {
                 return console.error("No config provided for tabulator");
             }
 
-            // Assign elements
+            this._initAssignVariables();
+            this._initTabulatorInstance();
+            this._initAddTableEvents();
+
+            this.sandbox.subscribe("tables:tabulator:refresh", this._refreshData);
+        },
+
+        _initAssignVariables: function () {
             this.filterField = document.getElementById("filter-field");
             this.filterOperator = document.getElementById("filter-operator");
             this.filterValue = document.getElementById("filter-value");
@@ -36,9 +43,24 @@ ckan.module("tables-tabulator", function ($, _) {
             this.globalAction = document.getElementById("global-action");
             this.applyGlobalAction = document.getElementById("apply-global-action");
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
+        },
 
-            this.initialPage = parseInt(getQueryParam("page")) || 5;
+        _initTabulatorInstance: function () {
+            this.table = new Tabulator(this.el[0], {
+                ...this.options.config,
+                paginationInitialPage: parseInt(getQueryParam("page")) || 1,
+                footerElement: this.templates.footerElement,
+                ajaxParams: () => {
+                    return {
+                        field: this.filterField.value,
+                        operator: this.filterOperator.value,
+                        q: this.filterValue.value,
+                    };
+                }
+            });
+        },
 
+        _initAddTableEvents: function () {
             // Update filters on change
             this.filterField.addEventListener("change", this._onUpdateFilter);
             this.filterOperator.addEventListener("change", this._onUpdateFilter);
@@ -49,33 +71,12 @@ ckan.module("tables-tabulator", function ($, _) {
                 this.applyGlobalAction.addEventListener("click", this._onApplyGlobalAction);
             }
 
-            this.sandbox.subscribe("tables:tabulator:refresh", this._refreshData);
-
-            this.table = new Tabulator(this.el[0], {
-                ...this.options.config,
-                footerElement: this.templates.footerElement,
-                ajaxParams: () => {
-                    return {
-                        field: this.filterField.value,
-                        operator: this.filterOperator.value,
-                        q: this.filterValue.value,
-                    };
-                }
-            });
-
-            // Table events
+            // Tabulator events
             this.table.on("tableBuilt", () => {
-                this._onUpdateFilter();
-
                 if (this.options.enableFullscreenToggle) {
                     this.btnFullscreen = document.getElementById("btn-fullscreen");
                     this.btnFullscreen.addEventListener("click", this._onFullscreen);
                 }
-
-                // Set initial page from URL query parameter
-                console.log('Setting initial page from URL');
-
-                this.table.setPage(this.initialPage);
             });
 
             this.table.on("renderComplete", function () {
@@ -182,13 +183,13 @@ ckan.module("tables-tabulator", function ($, _) {
                                 type: "error"
                             });
                         }
+                    } else {
+                        this._refreshData()
+                        ckan.tablesToast({
+                            message: ckan.i18n._("Operation completed"),
+                            title: ckan.i18n._("Notification"),
+                        });
                     }
-
-                    this._refreshData()
-                    ckan.tablesToast({
-                        message: ckan.i18n._("Operation completed"),
-                        title: ckan.i18n._("Notification"),
-                    });
                 }).catch(error => {
                     console.error("Error:", error);
                 });
@@ -199,17 +200,20 @@ ckan.module("tables-tabulator", function ($, _) {
         },
 
         _onFullscreen: function () {
-            const isFullscreen = this.tableWrapper.classList.contains("fullscreen");
-
-            if (isFullscreen) {
-                this.tableWrapper.classList.remove("fullscreen");
-            } else {
-                this.tableWrapper.classList.add("fullscreen");
-            }
+            this.tableWrapper.classList.toggle("fullscreen");
         },
     };
 });
 
+/**
+ * Creates a debounced function that delays invoking `func` until after `delay`
+ * milliseconds have passed since the last time the debounced function was invoked.
+ *
+ * @param {Function} func The function to debounce.
+ * @param {number} delay The number of milliseconds to delay.
+ *
+ * @returns {Function} Returns the new debounced function.
+*/
 function debounce(func, delay) {
     let timeout;
     return function (...args) {
@@ -219,6 +223,12 @@ function debounce(func, delay) {
     };
 }
 
+/**
+ * Retrieves the value of a specified query string parameter from the current URL.
+ *
+ * @param {string} name The name of the query parameter whose value you want to retrieve.
+ * @returns {string|null} The value of the first query parameter with the specified name, or null if the parameter is not found.
+*/
 function getQueryParam(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name);

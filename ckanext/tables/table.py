@@ -79,7 +79,7 @@ class TableDefinition:
             "placeholder": self.placeholder,
             "ajaxURL": self.ajax_url,
             "sortMode": "remote",
-            "layout": "fitData",
+            "layout": "fitColumns",
         }
 
         if self.pagination:
