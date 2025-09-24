@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import uuid
-from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import field as dataclass_field
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Integer
-from sqlalchemy.orm import Query
-from sqlalchemy.sql import Select
-from sqlalchemy.sql.elements import BinaryExpression, ClauseElement, ColumnElement
-
 import ckan.plugins.toolkit as tk
+from ckan.types import Context
+
+from ckanext.tables.data_sources import BaseDataSource
+from ckanext.tables.types import GlobalActionHandlerResult, Row
 
 
 @dataclass
@@ -26,50 +24,45 @@ class QueryParams:
     sort_order: str | None = None
 
 
+@dataclass
 class TableDefinition:
-    """Defines a table to be rendered with Tabulator."""
+    """Table definition.
 
-    def __init__(  # noqa: PLR0913
-        self,
-        name: str,
-        ajax_url: str,
-        columns: list[ColumnDefinition] | None = None,
-        actions: list[ActionDefinition] | None = None,
-        global_actions: list[GlobalActionDefinition] | None = None,
-        placeholder: str | None = None,
-        pagination: bool = True,
-        page_size: int = 10,
-        selectable: bool = False,
-        table_action_snippet: str | None = None,
-        table_template: str = "tables/base.html",
-    ):
-        """Initialize a table definition.
+    Attributes:
+        name: Unique identifier for the table.
+        data_source: Data source for the table.
+        ajax_url: (Optional) URL to fetch data from. Defaults to an auto-generated URL.
+        columns: (Optional) List of ColumnDefinition objects.
+        actions: (Optional) List of ActionDefinition objects for each row.
+        global_actions: (Optional) List of GlobalActionDefinition objects for bulk actions.
+        placeholder: (Optional) Placeholder text for an empty table.
+        page_size: (Optional) Number of rows per page. Defaults to 10.
+        table_action_snippet: (Optional) Snippet to render table actions.
+        table_template: (Optional) Template to render the table. Defaults to "tables/base.html".
+    """
 
-        Args:
-            name (str): Unique identifier for the table
-            ajax_url (str): URL to fetch data from
-            columns (list, optional): List of ColumnDefinition objects
-            actions (list, optional): List of ActionDefinition objects
-            global_actions (list, optional): List of GlobalActionDefinition objects
-            placeholder (str, optional): Placeholder text for the table
-            pagination (bool): Whether to enable pagination
-            page_size (int): Number of rows per page
-            selectable (bool): Whether rows can be selected
-            table_action_snippet (optional): Snippet to render table actions
-            table_template (optional): Template to render the table
-        """
-        self.id = f"table_{name}_{uuid.uuid4().hex[:8]}"
-        self.name = name
-        self.ajax_url = ajax_url
-        self.columns = columns or []
-        self.actions = actions or []
-        self.global_actions = global_actions or []
-        self.placeholder = placeholder or "No data found"
-        self.pagination = pagination
-        self.page_size = page_size
-        self.selectable = True if self.global_actions else selectable
-        self.table_action_snippet = table_action_snippet
-        self.table_template = table_template
+    name: str
+    data_source: BaseDataSource
+    ajax_url: str | None = None
+    columns: list[ColumnDefinition] = dataclass_field(default_factory=list)
+    actions: list[ActionDefinition] = dataclass_field(default_factory=list)
+    global_actions: list[GlobalActionDefinition] = dataclass_field(default_factory=list)
+    placeholder: str | None = None
+    page_size: int = 10
+    table_action_snippet: str | None = None
+    table_template: str = "tables/base.html"
+
+    def __post_init__(self):
+        self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
+
+        if self.ajax_url is None:
+            self.ajax_url = tk.url_for("tables.ajax", table_name=self.name)
+
+        if self.placeholder is None:
+            self.placeholder = tk._("No data found")
+
+        if self.global_actions:
+            self.selectable = True
 
     def get_tabulator_config(self) -> dict[str, Any]:
         columns = [col.to_dict() for col in self.columns]
@@ -80,17 +73,11 @@ class TableDefinition:
             "ajaxURL": self.ajax_url,
             "sortMode": "remote",
             "layout": "fitColumns",
+            "pagination": True,
+            "paginationMode": "remote",
+            "paginationSize": self.page_size,
+            "paginationSizeSelector": [5, 10, 25, 50, 100],
         }
-
-        if self.pagination:
-            options.update(
-                {
-                    "pagination": True,
-                    "paginationMode": "remote",
-                    "paginationSize": self.page_size,
-                    "paginationSizeSelector": [5, 10, 25, 50, 100],
-                }
-            )
 
         if self.selectable or self.global_actions:
             options.update(
@@ -107,90 +94,23 @@ class TableDefinition:
     def render_table(self, **kwargs: Any) -> str:
         return tk.render(self.table_template, extra_vars={"table": self, **kwargs})
 
-    @abstractmethod
-    def get_raw_data(self, params: QueryParams) -> list[dict[str, Any]]:
-        """Return the list of rows to be rendered in the table.
-
-        Args:
-            params: Query parameters
-
-        Returns:
-            list[dict[str, Any]]: List of rows to be rendered in the table
-        """
-
-    @abstractmethod
-    def get_total_count(self, params: QueryParams) -> int:
-        """Return the total number of rows in the table."""
-
     def get_data(self, params: QueryParams) -> list[Any]:
         """Get the data for the table with applied formatters."""
         self._formatters = tk.h.tables_get_all_formatters()
 
         return [self.apply_formatters(dict(row)) for row in self.get_raw_data(params)]
 
-    def filter_query(
-        self,
-        stmt: Select,
-        model: type[Any],
-        params: QueryParams,
-        apply_pagination: bool = True,
-    ) -> Select:
-        # Filtering
-        if params.field and params.operator and params.value:
-            column = getattr(model, params.field, None)
+    def get_raw_data(self, params: QueryParams) -> list[dict[str, Any]]:
+        return (
+            self.data_source.filter(params.field, params.operator, params.value)
+            .sort(params.sort_by, params.sort_order)
+            .paginate(params.page, params.size)
+            .all()
+        )
 
-            if column:
-                filter_expr = self.build_filter(column, params.operator, params.value)
-                if filter_expr is not None:
-                    stmt = stmt.where(filter_expr)
-
-        # Sorting
-        if params.sort_by and hasattr(model, params.sort_by):
-            column = getattr(model, params.sort_by)
-            if params.sort_order and params.sort_order.lower() == "desc":
-                stmt = stmt.order_by(column.desc())
-            else:
-                stmt = stmt.order_by(column.asc())
-
-        # Pagination
-        if apply_pagination and params.page and params.size:
-            stmt = stmt.limit(params.size).offset((params.page - 1) * params.size)
-
-        return stmt
-
-    def build_filter(
-        self, column: ColumnElement, operator: str, value: str
-    ) -> BinaryExpression | ClauseElement | None:
-        try:
-            if isinstance(column.type, Boolean):
-                casted_value = value.lower() in ("true", "1", "yes", "y")
-            elif isinstance(column.type, Integer):
-                casted_value = int(value)
-            elif isinstance(column.type, DateTime):
-                casted_value = datetime.fromisoformat(value)
-            else:
-                casted_value = str(value)
-        except ValueError:
-            return None
-
-        operators: dict[
-            str,
-            Callable[[ColumnElement, Any], BinaryExpression | ClauseElement | None],
-        ] = {
-            "=": lambda col, val: col == val,
-            "<": lambda col, val: col < val,
-            "<=": lambda col, val: col <= val,
-            ">": lambda col, val: col > val,
-            ">=": lambda col, val: col >= val,
-            "!=": lambda col, val: col != val,
-            "like": lambda col, val: (
-                col.ilike(f"%{val}%") if isinstance(val, str) else None
-            ),
-        }
-
-        func = operators.get(operator)
-
-        return func(column, casted_value) if func else None
+    def get_total_count(self, params: QueryParams) -> int:
+        # for total count we only apply filter, without sort and pagination
+        return self.data_source.filter(params.field, params.operator, params.value).count()
 
     def apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
@@ -203,61 +123,66 @@ class TableDefinition:
             for formatter, formatter_options in column.formatters:
                 formatter_function = self._formatters[formatter]
 
-                cell_value = formatter_function(
-                    cell_value, formatter_options, column, row, self
-                )
+                cell_value = formatter_function(cell_value, formatter_options, column, row, self)
 
             row[column.field] = cell_value
 
         return row
 
-
-class ColumnDefinition:
-    """Defines how a column should be rendered in Tabulator."""
-
-    def __init__(  # noqa: PLR0913
-        self,
-        field: str,
-        title: str | None = None,
-        formatters: list[tuple[str, dict[str, Any]]] | None = None,
-        tabulator_formatter: str | None = None,
-        tabulator_formatter_params: dict[str, Any] | None = None,
-        width: int | None = None,
-        min_width: int | None = None,
-        visible: bool = True,
-        sorter: str | None = "string",
-        filterable: bool = True,
-        resizable: bool = True,
-    ):
-        """Initialize a column definition.
+    @classmethod
+    def check_access(cls, context: Context) -> None:
+        """Check if the current user has access to view the table.
 
         Args:
-            field: The field name in the data dict
-            title: The display title for the column
-            formatters: List of formatters to apply to the column
-            tabulator_formatter: Tabulator formatter to apply to the column
-            tabulator_formatter_params: Parameters for the tabulator formatter
-            width: Width of the column
-            min_width: Minimum width of the column
-            visible: Whether the column is visible
-            sorter: Default sorter for the column
-            filterable: Whether the column can be filtered
-            resizable: Whether the column is resizable
-        """
-        self.field = field
-        self.title = title or field.replace("_", " ").title()
-        self.formatters = formatters
-        self.tabulator_formatter = tabulator_formatter
-        self.tabulator_formatter_params = tabulator_formatter_params
-        self.width = width
-        self.min_width = min_width
-        self.visible = visible
-        self.sorter = sorter
-        self.filterable = filterable
-        self.resizable = resizable
+            context: The CKAN auth context
 
-    def __repr__(self):
-        return f"ColumnDefinition(field={self.field}, title={self.title})"
+        Raises:
+            tk.NotAuthorized: if the user does not have access
+        """
+        tk.check_access("package_search", context)
+
+    def get_global_action(self, action: str) -> GlobalActionDefinition | None:
+        for ga in self.global_actions:
+            if ga.action != action:
+                continue
+            return ga
+
+        return None
+
+
+@dataclass(frozen=True)
+class ColumnDefinition:
+    """Column definition.
+
+    Attributes:
+        field: The field name in the data dictionary.
+        title: The display title for the column. Defaults to a formatted version of `field`.
+        formatters: List of custom server-side formatters to apply to the column's value.
+        tabulator_formatter: The name of a built-in Tabulator.js formatter (e.g., "plaintext").
+        tabulator_formatter_params: Parameters for the built-in tabulator formatter.
+        width: The width of the column in pixels.
+        min_width: The minimum width of the column in pixels.
+        visible: Whether the column is visible.
+        sorter: The default sorter for the column (e.g., "string", "number").
+        filterable: Whether the column can be filtered by the user.
+        resizable: Whether the column is resizable by the user.
+    """
+
+    field: str
+    title: str | None = None
+    formatters: list[tuple[str, dict[str, Any]]] = dataclass_field(default_factory=list)
+    tabulator_formatter: str | None = None
+    tabulator_formatter_params: dict[str, Any] = dataclass_field(default_factory=dict)
+    width: int | None = None
+    min_width: int | None = None
+    visible: bool = True
+    sortable: bool = True
+    filterable: bool = True
+    resizable: bool = True
+
+    def __post_init__(self):
+        if self.title is None:
+            object.__setattr__(self, "title", self.field.replace("_", " ").title())
 
     def to_dict(self) -> dict[str, Any]:
         """Convert the column definition to a dict for JSON serialization."""
@@ -268,109 +193,70 @@ class ColumnDefinition:
             "resizable": self.resizable,
         }
 
-        if self.sorter:
-            result["sorter"] = self.sorter
+        mappings = {
+            "width": "width",
+            "min_width": "minWidth",
+            "tabulator_formatter": "formatter",
+            "tabulator_formatter_params": "formatterParams",
+        }
+
+        for name, tabulator_name in mappings.items():
+            if value := getattr(self, name):
+                result[tabulator_name] = value
+
+        if self.sortable:
+            result["sorter"] = "string"
         else:
             result["headerSort"] = False
 
-        if self.tabulator_formatter:
-            result["formatter"] = self.tabulator_formatter
-
-        if self.tabulator_formatter_params:
-            result["formatterParams"] = self.tabulator_formatter_params
-
-        if self.width:
-            result["width"] = self.width
-
-        if self.min_width:
-            result["minWidth"] = self.min_width
-
         return result
 
 
+@dataclass(frozen=True)
 class ActionDefinition:
-    """Defines an action that can be performed on a row."""
+    """Defines an action that can be performed on a row.
 
-    def __init__(  # noqa: PLR0913
-        self,
-        name: str,
-        label: str | None = None,
-        icon: str | None = None,
-        url: str | None = None,
-        endpoint: str | None = None,
-        url_params: dict[str, Any] | None = None,
-        css_class: str | None = None,
-        visible_callback: Callable[..., bool] | None = None,
-        attrs: dict[str, Any] | None = None,
-    ):
-        """Initialize an action definition.
+    Attributes:
+        name: Unique identifier for the action.
+        label: Display label for the action.
+        icon: CSS class for an icon (e.g., "fa fa-edit").
+        url: A static URL for the action's link.
+        endpoint: A dynamic endpoint to generate a URL.
+        url_params: A dictionary of parameters to use when generating a URL from an endpoint.
+        css_class: An additional CSS class for styling the action's link or button.
+        attrs: A dictionary of extra HTML attributes to add to the action's link.
+    """
 
-        Args:
-            name: Unique identifier for the action
-            label: Display label for the action
-            icon: Icon class (e.g., "fa fa-edit")
-            url: Static URL for the action
-            endpoint: Flask endpoint to generate URL
-            url_params: Parameters for the URL
-            css_class: CSS class for styling
-            visible_callback: Function that determines if action is visible
-            attrs: Additional attributes for the action
-        """
-        self.name = name
-        self.label = label
-        self.icon = icon
-        self.url = url
-        self.endpoint = endpoint
-        self.url_params = url_params
-        self.css_class = css_class
-        self.visible_callback = visible_callback
-        self.attrs = attrs or {}
+    name: str
+    label: str | None = None
+    icon: str | None = None
+    url: str | None = None
+    endpoint: str | None = None
+    url_params: dict[str, Any] = dataclass_field(default_factory=dict)
+    css_class: str | None = None
+    attrs: dict[str, Any] = dataclass_field(default_factory=dict)
 
-    def __repr__(self):
-        return f"ActionDefinition(name={self.name})"
+    def __post_init__(self):
+        if self.url and self.endpoint:
+            raise ValueError("Provide either a `url` or an `endpoint`, but not both.")  # noqa: TRY003
 
-    def to_dict(self, row_data: Any | None = None):
-        # Check if action should be visible for this row
-        if self.visible_callback and row_data and not self.visible_callback(row_data):
-            return None
+    def get_url(self, row: Row) -> str:
+        if self.endpoint:
+            return tk.h.tables_build_url_from_params(self.endpoint, self.url_params, row)
 
-        result = {
-            "name": self.name,
-            "label": self.label,
-            "attrs": self.attrs,
-        }
+        if self.url:
+            return self.url
 
-        if self.icon:
-            result["icon"] = self.icon
-
-        if self.css_class:
-            result["cssClass"] = self.css_class
-
-        return result
+        return "#"
 
 
+@dataclass(frozen=True)
 class GlobalActionDefinition:
     """Defines an action that can be performed on multiple rows."""
 
-    def __init__(
-        self,
-        action: str,
-        label: str,
-    ):
-        """Initialize a global action definition.
+    action: str
+    label: str
+    callback: Callable[[list[Row]], GlobalActionHandlerResult]
 
-        Args:
-            action (str): Unique identifier for the action
-            label (str): Display label for the action
-        """
-        self.action = action
-        self.label = label
-
-    def __repr__(self):
-        return f"GlobalActionDefinition(action={self.action}, label={self.label})"
-
-    def to_dict(self):
-        return {
-            "action": self.action,
-            "label": self.label,
-        }
+    def __call__(self, rows: list[Row]) -> GlobalActionHandlerResult:
+        return self.callback(rows)

@@ -79,9 +79,7 @@ def user_link(
 
     return tk.h.literal(
         "{icon} {link}".format(
-            icon=tk.h.snippet(
-                "user/snippets/placeholder.html", size=avatar, user_name=display_name
-            ),
+            icon=tk.h.snippet("user/snippets/placeholder.html", size=avatar, user_name=display_name),
             link=tk.h.link_to(display_name, tk.h.url_for("user.read", id=user.name)),
         )
     )

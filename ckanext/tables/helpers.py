@@ -3,17 +3,10 @@ from typing import Any
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables import formatters, types
-
-_formatter_cache: dict[str, types.Formatter] = {}
-
-collect_formatters_signal = tk.signals.ckanext.signal(
-    "ckanext.tables.get_formatters",
-    "Collect table cell formatters from plugins",
-)
+from ckanext.tables import table, types
 
 
-def tables_get_all_formatters() -> dict[str, types.Formatter]:
+def tables_get_all_formatters() -> types.Registry[str, types.Formatter]:
     """Get all registered table cell formatters.
 
     A formatter is a function that takes a cell value and can modify its appearance
@@ -22,15 +15,10 @@ def tables_get_all_formatters() -> dict[str, types.Formatter]:
     Returns:
         A mapping of formatter names to formatter functions
     """
-    if _formatter_cache:
-        return _formatter_cache
+    for _, plugin_formatters in types.collect_formatters_signal.send():
+        types.formatter_registry.update(plugin_formatters)
 
-    _formatter_cache.update(formatters.get_formatters())
-
-    for _, plugin_formatters in collect_formatters_signal.send():
-        _formatter_cache.update(plugin_formatters)
-
-    return _formatter_cache
+    return types.formatter_registry
 
 
 def tables_json_dumps(value: Any) -> str:
@@ -45,9 +33,7 @@ def tables_json_dumps(value: Any) -> str:
     return json.dumps(value)
 
 
-def tables_build_url_from_params(
-    endpoint: str, url_params: dict[str, Any], row: dict[str, Any]
-) -> str:
+def tables_build_url_from_params(endpoint: str, url_params: dict[str, Any], row: dict[str, Any]) -> str:
     """Build an action URL based on the endpoint and URL parameters.
 
     The url_params might contain values like $id, $type, etc.
@@ -65,3 +51,22 @@ def tables_build_url_from_params(
             params[key] = row[value[1:]]
 
     return tk.url_for(endpoint, **params)
+
+
+def tables_get_table(table_name: str) -> table.TableDefinition | None:
+    """Get a table definition by its name.
+
+    Args:
+        table_name: The name of the table to get
+
+    Returns:
+        The table definition or None if the table does not exist
+    """
+    table_class = types.table_registry.get(table_name)
+
+    if not table_class:
+        return None
+
+    table_class.check_access({"user": tk.current_user.name})
+
+    return table_class
