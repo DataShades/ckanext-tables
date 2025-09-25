@@ -15,7 +15,7 @@ class BaseFormatter(abc.ABC):
 
     def __init__(
         self,
-        column: type[table.ColumnDefinition],
+        column: table.ColumnDefinition,
         row: types.Row,
         table: table.TableDefinition,
     ):
@@ -24,9 +24,7 @@ class BaseFormatter(abc.ABC):
         self.table = table
 
     @abc.abstractmethod
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         raise NotImplementedError
 
 
@@ -38,9 +36,7 @@ class DateFormatter(BaseFormatter):
           Defaults to "%d/%m/%Y - %H:%M".
     """
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         date_format = options.get("date_format", "%d/%m/%Y - %H:%M")
         return tk.h.render_datetime(value, date_format=date_format)
 
@@ -57,9 +53,7 @@ class UserLinkFormatter(BaseFormatter):
         - `avatar` (int): The size of the avatar placeholder in pixels. Defaults to 20.
     """
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not value:
             return ""
         user = model.User.get(value)
@@ -73,9 +67,7 @@ class UserLinkFormatter(BaseFormatter):
         if len(display_name) > maxlength:
             display_name = f"{display_name[:maxlength]}..."
 
-        icon = tk.h.snippet(
-            "user/snippets/placeholder.html", size=avatar_size, user_name=display_name
-        )
+        icon = tk.h.snippet("user/snippets/placeholder.html", size=avatar_size, user_name=display_name)
         link = tk.h.link_to(display_name, tk.h.url_for("user.read", id=user.name))
         return tk.h.literal(f"{icon} {link}")
 
@@ -83,18 +75,14 @@ class UserLinkFormatter(BaseFormatter):
 class BooleanFormatter(BaseFormatter):
     """Renders a boolean value as 'Yes' or 'No'."""
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         return "Yes" if value else "No"
 
 
 class ListFormatter(BaseFormatter):
     """Renders a list as a comma-separated string."""
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not isinstance(value, list):
             return ""
         return ", ".join(map(str, value))
@@ -103,9 +91,7 @@ class ListFormatter(BaseFormatter):
 class NoneAsEmptyFormatter(BaseFormatter):
     """Renders a `None` value as an empty string."""
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         return value if value is not None else ""
 
 
@@ -118,9 +104,7 @@ class TrimStringFormatter(BaseFormatter):
           Defaults to True.
     """
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not isinstance(value, str):
             return ""
 
@@ -142,9 +126,7 @@ class ActionsFormatter(BaseFormatter):
           Defaults to `tables/formatters/actions.html`.
     """
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         template = options.get("template", "tables/formatters/actions.html")
         return tk.literal(
             tk.render(
@@ -165,20 +147,14 @@ class JsonDisplayFormatter(BaseFormatter):
     to ensure proper HTML rendering in the frontend.
     """
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
-        return tk.literal(
-            tk.render("tables/formatters/json.html", extra_vars={"value": value})
-        )
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
+        return tk.literal(tk.render("tables/formatters/json.html", extra_vars={"value": value}))
 
 
 class TextBoldFormatter(BaseFormatter):
     """Renders text in bold."""
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not value:
             return ""
         return tk.literal(f"<strong>{value}</strong>")

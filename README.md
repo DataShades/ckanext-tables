@@ -4,7 +4,7 @@
 
 A CKAN extension to display tabular data in a nice way using [Tabulator](http://tabulator.info/).
 
-See the [documentation](https://datashades.github.io/ckanext-**tables**/) for more information.
+See the [documentation](https://datashades.github.io/ckanext-tables/) for more information.
 
 ## Tests
 

@@ -64,7 +64,6 @@ class TableDefinition:
         if self.placeholder is None:
             self.placeholder = tk._("No data found")
 
-
     def get_tabulator_config(self) -> dict[str, Any]:
         columns = [col.to_dict() for col in self.columns]
 
@@ -96,8 +95,7 @@ class TableDefinition:
         return tk.render(self.table_template, extra_vars={"table": self, **kwargs})
 
     def get_data(self, params: QueryParams) -> list[Any]:
-        """Get the data for the table with applied formatters."""
-        return [self.apply_formatters(dict(row)) for row in self.get_raw_data(params)]
+        return [self._apply_formatters(dict(row)) for row in self.get_raw_data(params)]
 
     def get_raw_data(self, params: QueryParams) -> list[dict[str, Any]]:
         return (
@@ -109,11 +107,9 @@ class TableDefinition:
 
     def get_total_count(self, params: QueryParams) -> int:
         # for total count we only apply filter, without sort and pagination
-        return self.data_source.filter(
-            params.field, params.operator, params.value
-        ).count()
+        return self.data_source.filter(params.field, params.operator, params.value).count()
 
-    def apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
         for column in self.columns:
             cell_value = row.get(column.field)
@@ -122,23 +118,24 @@ class TableDefinition:
                 continue
 
             for formatter_class, formatter_options in column.formatters:
-                cell_value = formatter_class(column, row, self).format(
-                    cell_value, formatter_options
-                )
+                cell_value = formatter_class(column, row, self).format(cell_value, formatter_options)
 
             row[column.field] = cell_value
 
         return row
 
-    def get_formatter(self, name: str) -> type[formatters.BaseFormatter] | None:
-        return formatters.formatter_registry.get(name, None)
-
     @classmethod
     def check_access(cls, context: Context) -> None:
         """Check if the current user has access to view the table.
 
+        This class method can be overridden in subclasses to implement
+        custom access control logic.
+
+        By default, it checks if the user has the `package_search` permission,
+        which means that the table is publicly accessible.
+
         Raises:
-            tk.NotAuthorized: if the user does not have access
+            tk.NotAuthorized: If the user does not have an access
         """
         tk.check_access("package_search", context)
 
@@ -171,9 +168,7 @@ class ColumnDefinition:
 
     field: str
     title: str | None = None
-    formatters: list[tuple[type[formatters.BaseFormatter], dict[str, Any]]] = (
-        dataclass_field(default_factory=list)
-    )
+    formatters: list[tuple[type[formatters.BaseFormatter], dict[str, Any]]] = dataclass_field(default_factory=list)
     tabulator_formatter: str | None = None
     tabulator_formatter_params: dict[str, Any] = dataclass_field(default_factory=dict)
     width: int | None = None
@@ -241,9 +236,9 @@ class ActionDefinition:
 
     def __post_init__(self):
         if self.url and self.endpoint:
-            raise ValueError(
+            raise ValueError(  # noqa: TRY003
                 "Provide either a `url` or an `endpoint`, but not both."
-            )  # noqa: TRY003
+            )
 
     def get_url(self, row: types.Row) -> str:
         if self.endpoint:
@@ -254,9 +249,7 @@ class ActionDefinition:
 
         return "#"
 
-    def _build_url_from_params(
-        self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]
-    ) -> str:
+    def _build_url_from_params(self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]) -> str:
         """Build an action URL based on the endpoint and URL parameters.
 
         The url_params might contain values like `$id`, `$type`, etc.
