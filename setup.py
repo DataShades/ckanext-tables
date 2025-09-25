@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from setuptools import setup
 
 # Note: Do not add new arguments to setup(), instead add setuptools
@@ -12,10 +11,10 @@ setup(
     # message extraction at
     # http://babel.pocoo.org/docs/messages/#extraction-method-mapping-and-configuration
     message_extractors={
-        'ckanext': [
-            ('**.py', 'python', None),
-            ('**.js', 'javascript', None),
-            ('**/templates/**.html', 'ckan', None),
+        "ckanext": [
+            ("**.py", "python", None),
+            ("**.js", "javascript", None),
+            ("**/templates/**.html", "ckan", None),
         ],
     }
 )

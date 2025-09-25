@@ -1,0 +1,87 @@
+site_name: ckanext-tables
+site_url: https://github.io/ckanext-tables/
+repo_url:  https://github.com/DataShades/ckanext-tables
+
+theme:
+  name: material
+  logo: image/logo.png
+  favicon: image/favicon.ico
+  font:
+    text: Roboto
+    code: Fira Code
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.footer
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+
+watch:
+  - README.md
+  - ckanext/tables/
+
+nav:
+  - Home: index.md
+  - Install: install.md
+
+  - Usage: usage.md
+
+  - Formatters:
+    - Overview: formatters/index.md
+    - Built-in Formatters: formatters/built-in.md
+    - Custom Formatters: formatters/custom.md
+
+  - Data Sources:
+    - Overview: data_sources/index.md
+    - Database: data_sources/database.md
+    - List: data_sources/list.md
+
+  - Generics: generics.md
+
+  - Helpers: helpers.md
+
+markdown_extensions:
+    - pymdownx.snippets
+    - admonition
+    - pymdownx.details
+    - pymdownx.emoji:
+        emoji_index: !!python/name:material.extensions.emoji.twemoji
+        emoji_generator: !!python/name:material.extensions.emoji.to_svg
+    - pymdownx.superfences:
+        custom_fences:
+          - name: mermaid
+            class: mermaid
+            format: !!python/name:pymdownx.superfences.fence_code_format
+    - pymdownx.tabbed:
+        alternate_style: true
+
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["ckanext"]
+          options:
+            show_root_full_path: false
+            show_root_toc_entry: false
+            show_symbol_type_heading: true
+            show_source: false
+            docstring_section_style: spacy
+  - search:
+      separator: '[\s\-\.\_]+'
