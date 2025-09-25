@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2025-09-25
+
+### 🚀 Features
+
+- Use dataclasses, rework formatters system, bug fixes
+
+### 🐛 Bug Fixes
+
+- Fix data sources count mechanism, update type hints, update doc
+
+### 💼 Other
+
+- Update changelog [no ci]
+
 ## [0.1.0] - 2025-09-23
 
 ### 🚀 Features
