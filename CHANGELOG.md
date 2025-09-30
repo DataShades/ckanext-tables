@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-09-30
+
+### 🚀 Features
+
+- Add DialogModalFormatter formatter
+
+### 💼 Other
+
+- Update changelog [no ci]
+
 ## [0.3.1] - 2025-09-25
 
 ### 🚀 Features
