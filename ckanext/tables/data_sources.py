@@ -13,9 +13,7 @@ from ckan import model
 
 
 class BaseDataSource:
-    def filter(
-        self, field: str | None, operator: str | None, value: str | None
-    ) -> Self: ...
+    def filter(self, field: str | None, operator: str | None, value: str | None) -> Self: ...
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self: ...
     def paginate(self, page: int, size: int) -> Self: ...
     def all(self) -> list[dict[str, Any]]: ...
@@ -35,9 +33,7 @@ class DatabaseDataSource(BaseDataSource):
         self.stmt = stmt
         self.model = model
 
-    def filter(
-        self, field: str | None, operator: str | None, value: str | None
-    ) -> Self:
+    def filter(self, field: str | None, operator: str | None, value: str | None) -> Self:
         self.stmt = self.base_stmt
 
         if field and hasattr(self.model, field) and value and operator:
@@ -49,9 +45,7 @@ class DatabaseDataSource(BaseDataSource):
 
         return self
 
-    def build_filter(
-        self, column: ColumnElement, operator: str, value: str
-    ) -> BinaryExpression | ClauseElement | None:
+    def build_filter(self, column: ColumnElement, operator: str, value: str) -> BinaryExpression | ClauseElement | None:
         try:
             if isinstance(column.type, Boolean):
                 casted_value = value.lower() in ("true", "1", "yes", "y")
@@ -74,9 +68,7 @@ class DatabaseDataSource(BaseDataSource):
             ">": lambda col, val: col > val,
             ">=": lambda col, val: col >= val,
             "!=": lambda col, val: col != val,
-            "like": lambda col, val: (
-                col.ilike(f"%{val}%") if isinstance(val, str) else None
-            ),
+            "like": lambda col, val: (col.ilike(f"%{val}%") if isinstance(val, str) else None),
         }
 
         func = operators.get(operator)
@@ -108,9 +100,7 @@ class DatabaseDataSource(BaseDataSource):
         return [dict(row) for row in model.Session.execute(self.stmt).mappings().all()]
 
     def count(self):
-        return model.Session.execute(
-            select(func.count()).select_from(self.stmt.subquery())
-        ).scalar_one()
+        return model.Session.execute(select(func.count()).select_from(self.stmt.subquery())).scalar_one()
 
 
 class ListDataSource(BaseDataSource):
@@ -128,9 +118,7 @@ class ListDataSource(BaseDataSource):
         self.data = data
         self.filtered = data
 
-    def filter(
-        self, field: str | None, operator: str | None, value: str | None
-    ) -> Self:
+    def filter(self, field: str | None, operator: str | None, value: str | None) -> Self:
         self.filtered = self.data
 
         if field and operator and value:
@@ -139,9 +127,7 @@ class ListDataSource(BaseDataSource):
                 self.filtered = [row for row in self.filtered if pred(row)]
         return self
 
-    def build_filter(
-        self, field: str, operator: str, value: str
-    ) -> Callable[[dict[str, Any]], bool] | None:
+    def build_filter(self, field: str, operator: str, value: str) -> Callable[[dict[str, Any]], bool] | None:
         operators: dict[str, Callable[[str, str], bool]] = {
             "=": lambda a, b: a == b,
             "!=": lambda a, b: a != b,

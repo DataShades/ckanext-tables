@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import uuid
 
 from ckan import model
 from ckan.plugins import toolkit as tk
@@ -158,3 +159,35 @@ class TextBoldFormatter(BaseFormatter):
         if not value:
             return ""
         return tk.literal(f"<strong>{value}</strong>")
+
+
+class DialogModalFormatter(BaseFormatter):
+    """Renders a link that opens a dialog modal with detailed information.
+
+    Options:
+        - `template` (str): The path to the template to render inside the modal.
+          Defaults to `tables/formatters/dialog_modal.html`.
+        - `modal_title` (str): The title of the modal dialog.
+          Defaults to "Details".
+    """
+
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
+        if not value:
+            return ""
+
+        template = options.get("template", "tables/formatters/dialog_modal.html")
+        modal_title = options.get("modal_title", "Details")
+
+        return tk.literal(
+            tk.render(
+                template,
+                extra_vars={
+                    "value": value,
+                    "table": self.table,
+                    "column": self.column,
+                    "row": self.row,
+                    "modal_title": modal_title,
+                    "modal_id": f"modal-{uuid.uuid4().hex}",
+                },
+            )
+        )
