@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+from flask.globals import request
+
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables import table
@@ -38,3 +40,19 @@ def tables_get_table(table_name: str) -> table.TableDefinition | None:
         return None
 
     return table_class
+
+
+def tables_get_filters_from_request() -> list[dict[str, str]]:
+    """Get the filters from the request arguments.
+
+    Returns:
+        A dictionary of filters
+    """
+    fields = tk.request.args.getlist("field")
+    operators = tk.request.args.getlist("operator")
+    values = tk.request.args.getlist("q")
+
+    return [
+        {"field": f, "operator": op, "q": q}
+        for f, op, q in zip(fields, operators, values, strict=True)
+    ]

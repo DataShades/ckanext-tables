@@ -36,40 +36,57 @@ ckan.module("tables-tabulator", function ($, _) {
         },
 
         _initAssignVariables: function () {
-            this.filterField = document.getElementById("filter-field");
-            this.filterOperator = document.getElementById("filter-operator");
-            this.filterValue = document.getElementById("filter-value");
-            this.filterClear = document.getElementById("filter-clear");
-            this.globalAction = document.getElementById("global-action");
-            this.applyGlobalAction = document.getElementById("apply-global-action");
+            this.filtersContainer = document.getElementById("filters-container");
+            this.applyFiltersBtn = document.getElementById("apply-filters");
+            this.clearFiltersBtn = document.getElementById("clear-filters");
+            this.filterTemplate = document.getElementById("filter-template");
+            this.addFilterBtn = document.getElementById("add-filter");
+            this.closeFiltersBtn = document.getElementById("close-filters");
+            this.filtersCounter = document.getElementById("filters-counter");
+            this.rowActionsMenu = document.getElementById("row-actions-menu");
+            this.tableActionsMenu = document.getElementById("table-actions-menu");
+
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
+            this.tableFilters = this._updateTableFilters();
         },
 
         _initTabulatorInstance: function () {
+
             this.table = new Tabulator(this.el[0], {
                 ...this.options.config,
                 paginationInitialPage: parseInt(getQueryParam("page")) || 1,
                 footerElement: this.templates.footerElement,
-                ajaxParams: () => {
-                    return {
-                        field: this.filterField.value,
-                        operator: this.filterOperator.value,
-                        q: this.filterValue.value,
-                    };
-                }
+                ajaxParams: () => { filters: this.tableFilters }
             });
         },
 
         _initAddTableEvents: function () {
-            // Update filters on change
-            this.filterField.addEventListener("change", this._onUpdateFilter);
-            this.filterOperator.addEventListener("change", this._onUpdateFilter);
-            this.filterValue.addEventListener("keyup", debounce(this._onUpdateFilter, this.options.debounceDelay));
-            this.filterClear.addEventListener("click", this._onClearFilter);
+            this.applyFiltersBtn.addEventListener("click", this._onApplyFilters);
+            this.clearFiltersBtn.addEventListener("click", this._onClearFilters);
+            this.addFilterBtn.addEventListener("click", this._onAddFilter);
+            this.closeFiltersBtn.addEventListener("click", this._onCloseFilters);
+            this.filtersContainer.addEventListener("click", (e) => {
+                const removeBtn = e.target.closest(".btn-remove-filter");
 
-            if (this.applyGlobalAction) {
-                this.applyGlobalAction.addEventListener("click", this._onApplyGlobalAction);
+                if (removeBtn && this.filtersContainer.contains(removeBtn)) {
+                    console.log("Remove filter clicked!", removeBtn);
+                    this._onFilterItemRemove(removeBtn);
+                }
+            });
+
+            if (this.rowActionsMenu) {
+                let buttons = this.rowActionsMenu.querySelectorAll("button");
+                buttons.forEach(button => {
+                    button.addEventListener("click", this._onApplyRowAction);
+                });
             }
+
+            if (this.tableActionsMenu) {
+                let buttons = this.tableActionsMenu.querySelectorAll("button");
+                buttons.forEach(button => {
+                    button.addEventListener("click", this._onApplyTableAction);
+                });
+            };
 
             // Tabulator events
             this.table.on("tableBuilt", () => {
@@ -96,55 +113,124 @@ ckan.module("tables-tabulator", function ($, _) {
             });
         },
 
-        /**
-         * Update the filter based on the selected field, operator and value
-         */
-        _onUpdateFilter: function () {
+        _onApplyFilters: function () {
+            this._updateTableFilters();
+            this._removeUnfilledFilters();
+            this._updateUrl();
+        },
+
+        _updateTableFilters: function () {
+            const filters = [];
+
+            this.filtersContainer.querySelectorAll(".filter-item").forEach(function (item) {
+                const field = item.querySelector(".filter-field").value;
+                const operator = item.querySelector(".filter-operator").value;
+                const value = item.querySelector(".filter-value").value;
+
+                if (field && operator && value) {
+                    filters.push({ field, operator, value });
+                }
+            });
+
+            this.tableFilters = filters;
+            this.filtersCounter.textContent = filters.length;
+            this.filtersCounter.classList.toggle("d-none", filters.length === 0);
+
+            return filters;
+        },
+
+        _removeUnfilledFilters: function () {
+            this.filtersContainer.querySelectorAll(".filter-item").forEach(function (item) {
+                const field = item.querySelector(".filter-field").value;
+                const operator = item.querySelector(".filter-operator").value;
+                const value = item.querySelector(".filter-value").value;
+
+                if (!field || !operator || !value) {
+                    item.remove();
+                }
+            });
+        },
+
+        _onClearFilters: function () {
+            this.filtersContainer.innerHTML = "";
+            this.tableFilters = [];
+
+            this._updateUrl();
             this._refreshData();
+        },
+
+        _onAddFilter: function () {
+            const newFilter = this.filterTemplate.cloneNode(true);
+            newFilter.style.display = "block";
+
+            this.filtersContainer.appendChild(newFilter);
+        },
+
+        _onFilterItemRemove: function (filterEl) {
+            filterEl.closest(".filter-item").remove();
+        },
+
+        _onCloseFilters: function () {
+            this._recreateFilters();
+        },
+
+        _recreateFilters: function () {
+            this.filtersContainer.innerHTML = "";
+
+            this.tableFilters.forEach((filter) => {
+                const newFilter = this.filterTemplate.cloneNode(true);
+                newFilter.style.display = "block";
+
+                newFilter.querySelector(".filter-field").value = filter.field;
+                newFilter.querySelector(".filter-operator").value = filter.operator;
+                newFilter.querySelector(".filter-value").value = filter.value;
+
+                this.filtersContainer.appendChild(newFilter);
+            });
+
             this._updateUrl();
         },
 
         /**
-         * Clear the filter
-         */
-        _onClearFilter: function () {
-            this.filterField.value = "";
-            this.filterOperator.value = "=";
-            this.filterValue.value = "";
-
-            this._refreshData();
-            this._updateUrl();
-        },
-
-        /**
-         * Update the URL with the current filter values
+         * Update the URL with the current applied filters
          */
         _updateUrl: function () {
             const url = new URL(window.location.href);
-            url.searchParams.set("field", this.filterField.value);
-            url.searchParams.set("operator", this.filterOperator.value);
-            url.searchParams.set("q", this.filterValue.value);
+
+            // Clear existing filter parameters
+            Array.from(url.searchParams.keys()).forEach(key => {
+                if (key.startsWith('field') || key.startsWith('operator') || key.startsWith('q')) {
+                    url.searchParams.delete(key);
+                }
+            });
+
+            // Add current filters
+            this.tableFilters.forEach((filter) => {
+                url.searchParams.append('field', filter.field);
+                url.searchParams.append('operator', filter.operator);
+                url.searchParams.append('q', filter.value);
+            });
 
             window.history.replaceState({}, "", url);
         },
 
         /**
-         * Apply the global action to the selected rows
+         * Apply the row action to the selected rows
          */
-        _onApplyGlobalAction: function () {
-            const globalAction = this.globalAction.options[this.globalAction.selectedIndex].value;
+        _onApplyRowAction: function (e) {
+            const rowAction = e.target.dataset.action;
 
-            if (!globalAction) {
+            if (!rowAction) {
                 return;
             }
 
             ckan.tablesConfirm({
                 message: ckan.i18n._("Are you sure you want to perform this action?"),
-                onConfirm: () => this._onGlobalActionConfirm(globalAction)
+                onConfirm: () => this._onRowActionConfirm(rowAction)
             });
         },
 
-        _onGlobalActionConfirm: function (globalAction) {
+        _onRowActionConfirm: function (rowAction) {
             const selectedData = this.table.getSelectedData();
 
             if (!selectedData.length) {
@@ -162,7 +248,7 @@ ckan.module("tables-tabulator", function ($, _) {
             const csrf_field = $('meta[name=csrf_field_name]').attr('content');
             const csrf_token = $('meta[name=' + csrf_field + ']').attr('content');
 
-            form.append("global_action", globalAction);
+            form.append("row_action", rowAction);
             form.append("rows", JSON.stringify(data));
 
             fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
@@ -187,6 +273,56 @@ ckan.module("tables-tabulator", function ($, _) {
                         this._refreshData()
                         ckan.tablesToast({
                             message: ckan.i18n._("Operation completed"),
+                            title: ckan.i18n._("Notification"),
+                        });
+                    }
+                }).catch(error => {
+                    console.error("Error:", error);
+                });
+        },
+
+        _onApplyTableAction: function (e) {
+            const method = e.target.dataset.method;
+            const url = e.target.dataset.url;
+            const label = e.target.textContent;
+
+            if (!method || !url) {
+                return;
+            }
+
+            ckan.tablesConfirm({
+                message: ckan.i18n._(`Are you sure you want to perform this action: ${label}?`),
+                onConfirm: () => this._onTableActionConfirm(method, url, label)
+            });
+        },
+
+        _onTableActionConfirm: function (method, url, label) {
+            const form = new FormData();
+
+            const csrf_field = $('meta[name=csrf_field_name]').attr('content');
+            const csrf_token = $('meta[name=' + csrf_field + ']').attr('content');
+
+            fetch(url, {
+                method: method,
+                body: form,
+                headers: {
+                    'X-CSRFToken': csrf_token
+                }
+            })
+                .then(resp => {
+                    if (resp.status != 200) {
+                        ckan.tablesToast({ message: resp.errors[0], type: "danger" });
+
+                        if (resp.errors.length > 1) {
+                            ckan.tablesToast({
+                                message: ckan.i18n._("Multiple errors occurred and were suppressed"),
+                                type: "error"
+                            });
+                        }
+                    } else {
+                        this._refreshData()
+                        ckan.tablesToast({
+                            message: ckan.i18n._(`Table action completed: ${label}`),
                             title: ckan.i18n._("Notification"),
                         });
                     }

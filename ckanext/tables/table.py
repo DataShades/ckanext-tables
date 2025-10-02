@@ -36,10 +36,10 @@ class TableDefinition:
         ajax_url: (Optional) URL to fetch data from. Defaults to an auto-generated URL.
         columns: (Optional) List of ColumnDefinition objects.
         actions: (Optional) List of ActionDefinition objects for each row.
-        global_actions: (Optional) List of GlobalActionDefinition objects for bulk actions.
+        row_actions: (Optional) List of RowActionDefinition objects for action on multiple rows.
+        table_actions: (Optional) List of TableActionDefinition objects for actions on the table itself.
         placeholder: (Optional) Placeholder text for an empty table.
         page_size: (Optional) Number of rows per page. Defaults to 10.
-        table_action_snippet: (Optional) Snippet to render table actions.
         table_template: (Optional) Template to render the table. Defaults to `tables/base.html`.
     """
 
@@ -48,15 +48,15 @@ class TableDefinition:
     ajax_url: str | None = None
     columns: list[ColumnDefinition] = dataclass_field(default_factory=list)
     actions: list[ActionDefinition] = dataclass_field(default_factory=list)
-    global_actions: list[GlobalActionDefinition] = dataclass_field(default_factory=list)
+    row_actions: list[RowActionDefinition] = dataclass_field(default_factory=list)
+    table_actions: list[TableActionDefinition] = dataclass_field(default_factory=list)
     placeholder: str | None = None
     page_size: int = 10
-    table_action_snippet: str | None = None
     table_template: str = "tables/base.html"
 
     def __post_init__(self):
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
-        self.selectable = bool(self.global_actions)
+        self.selectable = bool(self.row_actions)
 
         if self.ajax_url is None:
             self.ajax_url = tk.url_for("tables.ajax", table_name=self.name)
@@ -89,6 +89,19 @@ class TableDefinition:
                 }
             )
 
+            columns.insert(
+                0,
+                {
+                    "formatter": "rowSelection",
+                    "titleFormatter": "rowSelection",
+                    "width": 50,
+                    "hozAlign": "center",
+                    "vertAlign": "middle",
+                    "headerHozAlign": "center",
+                    "headerSort": False,
+                },
+            )
+
         return options
 
     def render_table(self, **kwargs: Any) -> str:
@@ -107,7 +120,9 @@ class TableDefinition:
 
     def get_total_count(self, params: QueryParams) -> int:
         # for total count we only apply filter, without sort and pagination
-        return self.data_source.filter(params.field, params.operator, params.value).count()
+        return self.data_source.filter(
+            params.field, params.operator, params.value
+        ).count()
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
@@ -118,7 +133,9 @@ class TableDefinition:
                 continue
 
             for formatter_class, formatter_options in column.formatters:
-                cell_value = formatter_class(column, row, self).format(cell_value, formatter_options)
+                cell_value = formatter_class(column, row, self).format(
+                    cell_value, formatter_options
+                )
 
             row[column.field] = cell_value
 
@@ -139,11 +156,11 @@ class TableDefinition:
         """
         tk.check_access("package_search", context)
 
-    def get_global_action(self, action: str) -> GlobalActionDefinition | None:
-        for ga in self.global_actions:
-            if ga.action != action:
+    def get_rows_action(self, action: str) -> RowActionDefinition | None:
+        for row_action in self.row_actions:
+            if row_action.action != action:
                 continue
-            return ga
+            return row_action
 
         return None
 
@@ -168,7 +185,9 @@ class ColumnDefinition:
 
     field: str
     title: str | None = None
-    formatters: list[tuple[type[formatters.BaseFormatter], dict[str, Any]]] = dataclass_field(default_factory=list)
+    formatters: list[tuple[type[formatters.BaseFormatter], dict[str, Any]]] = (
+        dataclass_field(default_factory=list)
+    )
     tabulator_formatter: str | None = None
     tabulator_formatter_params: dict[str, Any] = dataclass_field(default_factory=dict)
     width: int | None = None
@@ -249,7 +268,9 @@ class ActionDefinition:
 
         return "#"
 
-    def _build_url_from_params(self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]) -> str:
+    def _build_url_from_params(
+        self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]
+    ) -> str:
         """Build an action URL based on the endpoint and URL parameters.
 
         The url_params might contain values like `$id`, `$type`, etc.
@@ -271,12 +292,23 @@ class ActionDefinition:
 
 
 @dataclass(frozen=True)
-class GlobalActionDefinition:
+class RowActionDefinition:
     """Defines an action that can be performed on multiple rows."""
 
     action: str
     label: str
-    callback: Callable[[types.Row], types.GlobalActionHandlerResult]
+    callback: Callable[[types.Row], types.RowActionHandlerResult]
+    icon: str | None = None
 
-    def __call__(self, row: types.Row) -> types.GlobalActionHandlerResult:
+    def __call__(self, row: types.Row) -> types.RowActionHandlerResult:
         return self.callback(row)
+
+
+@dataclass(frozen=True)
+class TableActionDefinition:
+    """Defines an action that can be performed on the table itself."""
+
+    method: str
+    label: str
+    url: str
+    icon: str | None = None

@@ -1,0 +1,41 @@
+{% from 'tables/macros/filter_item.html' import filter_item %}
+
+<div class="modal fade filters-modal" id="filters-modal" tabindex="-1" role="dialog"
+    aria-labelledby="filters-modal-label">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _("Table filters") }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div id="filters-container">
+                    {% for filter in h.tables_get_filters_from_request() %}
+                        {{ filter_item(table, filter.field, filter.operator, filter.q) }}
+                    {% endfor %}
+                </div>
+
+                <div class="d-flex mb-3">
+                    <button class="btn btn-secondary" id="add-filter" type="button">
+                        <i class="fa fa-plus"></i> {{ _("Add filter") }}
+                    </button>
+                </div>
+
+                <div id="filter-actions" class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-primary" id="apply-filters" type="button" data-bs-dismiss="modal">
+                        {{ _("Apply") }}
+                    </button>
+
+                    <button class="btn btn-danger" id="clear-filters" type="button" data-bs-dismiss="modal">
+                        {{ _("Clear") }}
+                    </button>
+
+                    <button class="btn btn-secondary" id="close-filters" type="button" data-bs-dismiss="modal">
+                        {{ _("Close") }}
+                    </button>
+                </div>
+            </div> <!-- modal-body -->
+        </div>
+    </div>
+</div>

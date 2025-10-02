@@ -12,7 +12,7 @@
 <div class="d-flex gap-2">
     {% for action in table.actions %}
         <a
-            class="{{ action.css_class or 'btn btn-outline-primary' }}"
+            class="{{ action.css_class or 'btn btn-primary btn-sm' }}"
             href="{{ action.get_url(row) }}"
             title="{{ action.name | capitalize }}" {{ form.attributes(action.attrs) }}>
             {% if action.icon %}

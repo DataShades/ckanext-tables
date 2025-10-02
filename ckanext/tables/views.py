@@ -34,27 +34,27 @@ class AjaxURLView(MethodView):
         if not table_class:
             return tk.abort(404, tk._(f"Table {table_name} not found"))
 
-        global_action = tk.request.form.get("global_action")
+        row_action = tk.request.form.get("row_action")
         rows = tk.request.form.get("rows")
 
         table = table_class()
-        global_action_func = table.get_global_action(global_action) if global_action else None
+        row_action_func = table.get_rows_action(row_action) if row_action else None
 
-        if not global_action_func or not rows:
+        if not row_action_func or not rows:
             return jsonify(
                 {
                     "success": False,
-                    "errors": [tk._("The global action is not implemented")],
+                    "errors": [tk._("The row action is not implemented")],
                 }
             )
 
         errors = []
 
         for row in json.loads(rows):
-            success, error = global_action_func(row)
+            success, error = row_action_func(row)
 
             if not success:
-                log.debug("Error during global action %s: %s", global_action, error)
+                log.debug("Error during row action %s: %s", row_action, error)
                 errors.append(error)
 
         return jsonify({"success": not errors, "errors": errors})

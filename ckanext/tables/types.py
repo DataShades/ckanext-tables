@@ -15,8 +15,8 @@ ItemValue: TypeAlias = Any
 Value: TypeAlias = Any
 Options: TypeAlias = "dict[str, Any]"
 Row: TypeAlias = dict[str, Any]
-GlobalActionHandlerResult: TypeAlias = tuple[bool, str | None]
-GlobalActionHandler: TypeAlias = Callable[[Row], GlobalActionHandlerResult]
+RowActionHandlerResult: TypeAlias = tuple[bool, str | None]
+RowActionHandler: TypeAlias = Callable[[Row], RowActionHandlerResult]
 FormatterResult: TypeAlias = str
 
 

@@ -1,72 +1,65 @@
 {% import 'macros/form.html' as form %}
+{% from 'tables/macros/filter_item.html' import filter_item %}
 
-{% block table_filters %}
-    <div class="d-flex gap-2 mb-3 flex-column">
-        <label>{{ _("Filters") }}</label>
+{% block table_control %}
+    <div class="table-control d-flex gap-2">
+        {% block table_filters %}
+            <div id="filter-template" style="display:none;">
+                {{ filter_item(table, '', '=', '') }}
+            </div>
 
-        <div class="d-flex gap-2">
-            <select id="filter-field" class="form-select">
-                <option value="">{{ _('Select a field') }}</option>
-                {% for column in table.columns %}
-                    {% if column.filterable %}
-                        <option value="{{ column.field }}" {{ "selected" if request.args.get('field') == column.field }}>
-                            {{ column.title }}
-                        </option>
-                    {% endif %}
-                {% endfor %}
-            </select>
+            {% snippet "tables/snippets/table_filters_modal.html", table=table %}
 
-            <select id="filter-operator" class="form-select">
-                {% for operator in ["=", "<", "<=", ">", ">=", "!=", "like"] %}
-                    <option value="{{ operator }}" {{ "selected" if request.args.get('operator') == operator }}>
-                        {{ operator }}
-                    </option>
-                {% endfor %}
-            </select>
-
-            <input class="form-control" id="filter-value" value="{{ request.args.get('q', '')}}" type="text" placeholder="{{ _('Value to filter') }}">
-
-            <button class="btn btn-primary" id="filter-clear" title="{{ _('Clear filter') }}">
-                <i class="fa fa-times"></i>
+            <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#filters-modal">
+                <i class="fa fa-filter"></i> {{ _("Filters") }} <span class="badge bg-primary d-none" id="filters-counter">0</span>
             </button>
-        </div>
+        {% endblock %}
+
+        {% block table_global_filters %}
+            {% if table.row_actions %}
+                <div class="dropdown d-inline-block">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa fa-list-check"></i> {{ _("Row Actions") }}
+                    </button>
+                    <ul class="dropdown-menu" id="row-actions-menu">
+                        {% for action in table.row_actions %}
+                            <li>
+                                <button class="dropdown-item" data-action="{{ action.action }}">
+                                    {% if action.icon %}
+                                        <i class="{{ action.icon }} me-1"></i>
+                                    {% endif %}
+                                    {{ action.label }}
+                                </button>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endblock %}
+
+        {% block table_actions %}
+            {% if table.table_actions %}
+                <div class="dropdown d-inline-block">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa fa-table"></i> {{ _("Table Actions") }}
+                    </button>
+                    <ul class="dropdown-menu" id="table-actions-menu">
+                        {% for action in table.table_actions %}
+                            <li>
+                                <button class="dropdown-item" data-method="{{ action.method }}" data-url="{{ action.url }}">
+                                    {% if action.icon %}
+                                        <i class="{{ action.icon }} me-1"></i>
+                                    {% endif %}
+                                    {{ action.label }}
+                                </button>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endblock %}
     </div>
-{% endblock %}
-
-{% block table_global_filters %}
-    {% if table.global_actions %}
-        <div class="d-flex gap-2 flex-column">
-            <label for="global-action">{{ _("Global action") }}</label>
-
-            <div class="d-flex gap-2">
-                <select id="global-action" name="global-action" class="form-select">
-                    <option value="">{{ _("Select global action") }}</option>
-
-                    {% for action in table.global_actions %}
-                        <option value="{{ action.action }}">
-                            {{ action.label }}
-                        </option>
-                    {% endfor %}
-                </select>
-                <button class="btn btn-primary" id="apply-global-action" title="{{ _('Apply') }}">
-                    <i class="fa fa-check"></i>
-                </button>
-            </div>
-        </div>
-    {% endif %}
-{% endblock %}
-
-{% block table_actions %}
-    {% if table.table_action_snippet %}
-        <div class="d-flex gap-2 mt-3 flex-column">
-            <label for="table-actions">{{ _("Table actions") }}</label>
-
-            <div class="d-flex gap-2">
-                {% snippet table.table_action_snippet %}
-            </div>
-        </div>
-    {% endif %}
-{% endblock %}
+{% endblock table_control %}
 
 {% block table_container %}
     <div class="tabulator-wrapper">

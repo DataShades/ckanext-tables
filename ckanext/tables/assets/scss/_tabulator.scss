@@ -1,3 +1,5 @@
+@use 'sass:color';
+
 $color-active: #206b82;
 
 .tabulator-wrapper {
@@ -21,12 +23,28 @@ $color-active: #206b82;
         }
     }
 
+    input[type="checkbox"] {
+        accent-color: $color-active;
+    }
+
     .tabulator-container {
         position: relative;
         min-height: 120px;
 
         .tabulator-table {
+            .tabulator-row.tabulator-selected {
+                background-color: rgba(#005d7a, 0.25) !important;
+
+                &:hover {
+                    background-color: rgba(#005d7a, 0.35) !important;
+                }
+            }
+
             .tabulator-row {
+                &:hover {
+                    background-color: #f9fafb !important;
+                }
+
                 &:last-child {
                     border-bottom: unset;
                 }
