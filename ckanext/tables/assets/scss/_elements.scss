@@ -1,0 +1,15 @@
+.btn-table-disabled {
+
+    pointer-events: none;
+
+    &.btn-light {
+        color: #dee2e6;
+    }
+
+    &.btn-danger {
+        color: #fff;
+        background-color: #d43f3a;
+        border-color: #d43f3a;
+        opacity: 0.65;
+    }
+}

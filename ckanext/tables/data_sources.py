@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, DateTime, Integer
 from sqlalchemy.sql import Select, func, select
@@ -11,9 +11,12 @@ from typing_extensions import Self
 
 from ckan import model
 
+if TYPE_CHECKING:
+    from ckanext.tables.table import FilterItem
+
 
 class BaseDataSource:
-    def filter(self, field: str | None, operator: str | None, value: str | None) -> Self: ...
+    def filter(self, filters: list[FilterItem]) -> Self: ...
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self: ...
     def paginate(self, page: int, size: int) -> Self: ...
     def all(self) -> list[dict[str, Any]]: ...
@@ -33,12 +36,12 @@ class DatabaseDataSource(BaseDataSource):
         self.stmt = stmt
         self.model = model
 
-    def filter(self, field: str | None, operator: str | None, value: str | None) -> Self:
+    def filter(self, filters: list[FilterItem]) -> Self:
         self.stmt = self.base_stmt
 
-        if field and hasattr(self.model, field) and value and operator:
-            col = getattr(self.model, field)
-            expr = self.build_filter(col, operator, value)
+        for filter_item in filters:
+            col = getattr(self.model, filter_item.field)
+            expr = self.build_filter(col, filter_item.operator, filter_item.value)
 
             if expr is not None:
                 self.stmt = self.stmt.where(expr)
@@ -118,13 +121,15 @@ class ListDataSource(BaseDataSource):
         self.data = data
         self.filtered = data
 
-    def filter(self, field: str | None, operator: str | None, value: str | None) -> Self:
+    def filter(self, filters: list[FilterItem]) -> Self:
         self.filtered = self.data
 
-        if field and operator and value:
-            pred = self.build_filter(field, operator, value)
+        for filter_item in filters:
+            pred = self.build_filter(filter_item.field, filter_item.operator, filter_item.value)
+
             if pred:
                 self.filtered = [row for row in self.filtered if pred(row)]
+
         return self
 
     def build_filter(self, field: str, operator: str, value: str) -> Callable[[dict[str, Any]], bool] | None:

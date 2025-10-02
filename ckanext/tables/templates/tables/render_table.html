@@ -10,9 +10,14 @@
 
             {% snippet "tables/snippets/table_filters_modal.html", table=table %}
 
-            <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#filters-modal">
-                <i class="fa fa-filter"></i> {{ _("Filters") }} <span class="badge bg-primary d-none" id="filters-counter">0</span>
-            </button>
+            <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
+                <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#filters-modal">
+                    <i class="fa fa-filter"></i> {{ _("Filters") }} <span class="badge bg-primary d-none" id="filters-counter">0</span>
+                </button>
+                <button class="btn btn-light" id="clear-all-filters" title="{{ _('Clear all filters') }}">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
         {% endblock %}
 
         {% block table_global_filters %}
@@ -46,7 +51,7 @@
                     <ul class="dropdown-menu" id="table-actions-menu">
                         {% for action in table.table_actions %}
                             <li>
-                                <button class="dropdown-item" data-method="{{ action.method }}" data-url="{{ action.url }}">
+                                <button class="dropdown-item" data-action="{{ action.action }}">
                                     {% if action.icon %}
                                         <i class="{{ action.icon }} me-1"></i>
                                     {% endif %}

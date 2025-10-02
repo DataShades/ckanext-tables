@@ -1,25 +1,23 @@
 {% macro filter_item(table, column, operator, value) %}
+    {% set unique_id = h.tables_generate_unique_id() %}
+
     <div class="filter-item d-flex gap-2 mb-2">
-        <select name="field" class="form-select filter-field">
+        <select name="field-{{ unique_id }}" class="form-select filter-field">
             <option value="">{{ _('Select a field') }}</option>
             {% for col in table.columns %}
                 {% if col.filterable %}
-                    <option value="{{ col.field }}" {{ "selected" if column == col.field }}>
-                        {{ col.title }}
-                    </option>
+                    <option value="{{ col.field }}" {% if col.field == column %}selected{% endif %}>{{ col.title }}</option>
                 {% endif %}
             {% endfor %}
         </select>
 
-        <select name="operator" class="form-select filter-operator w-25">
+        <select name="operator-{{ unique_id }}" class="form-select filter-operator w-25">
             {% for op in ["=", "<", "<=", ">", ">=", "!=", "like"] %}
-                <option value="{{ op }}" {{ "selected" if operator == op }}>
-                    {{ op }}
-                </option>
+                <option value="{{ op }}" {{ "selected" if op == operator }}>{{ op }}</option>
             {% endfor %}
         </select>
 
-        <input class="form-control filter-value" name="q" value="{{ value }}" type="text" placeholder="{{ _('Value to filter') }}">
+        <input class="form-control filter-value" name="q-{{ unique_id }}" value="{{ value }}" type="text" placeholder="{{ _('Value to filter') }}">
 
         <button class="btn btn-danger btn-remove-filter" title="{{ _('Remove filter') }}">
             <i class="fa fa-times"></i>

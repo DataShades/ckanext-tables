@@ -1,7 +1,6 @@
 import json
+import uuid
 from typing import Any
-
-from flask.globals import request
 
 import ckan.plugins.toolkit as tk
 
@@ -52,7 +51,8 @@ def tables_get_filters_from_request() -> list[dict[str, str]]:
     operators = tk.request.args.getlist("operator")
     values = tk.request.args.getlist("q")
 
-    return [
-        {"field": f, "operator": op, "q": q}
-        for f, op, q in zip(fields, operators, values, strict=True)
-    ]
+    return [{"field": f, "operator": op, "q": q} for f, op, q in zip(fields, operators, values, strict=True)]
+
+
+def tables_generate_unique_id() -> str:
+    return str(uuid.uuid4())

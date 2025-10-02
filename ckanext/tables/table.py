@@ -19,11 +19,16 @@ table_registry: types.Registry[str, TableDefinition] = types.Registry({})
 class QueryParams:
     page: int = 1
     size: int = 10
-    field: str | None = None
-    operator: str | None = None
-    value: str | None = None
+    filters: list[FilterItem] = dataclass_field(default_factory=list)
     sort_by: str | None = None
     sort_order: str | None = None
+
+
+@dataclass(frozen=True)
+class FilterItem:
+    field: str
+    operator: str
+    value: Any
 
 
 @dataclass
@@ -77,6 +82,7 @@ class TableDefinition:
             "paginationMode": "remote",
             "paginationSize": self.page_size,
             "paginationSizeSelector": [5, 10, 25, 50, 100],
+            "minHeight": 300,
         }
 
         if self.selectable:
@@ -112,7 +118,7 @@ class TableDefinition:
 
     def get_raw_data(self, params: QueryParams) -> list[dict[str, Any]]:
         return (
-            self.data_source.filter(params.field, params.operator, params.value)
+            self.data_source.filter(params.filters)
             .sort(params.sort_by, params.sort_order)
             .paginate(params.page, params.size)
             .all()
@@ -120,9 +126,7 @@ class TableDefinition:
 
     def get_total_count(self, params: QueryParams) -> int:
         # for total count we only apply filter, without sort and pagination
-        return self.data_source.filter(
-            params.field, params.operator, params.value
-        ).count()
+        return self.data_source.filter(params.filters).count()
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
@@ -133,9 +137,7 @@ class TableDefinition:
                 continue
 
             for formatter_class, formatter_options in column.formatters:
-                cell_value = formatter_class(column, row, self).format(
-                    cell_value, formatter_options
-                )
+                cell_value = formatter_class(column, row, self).format(cell_value, formatter_options)
 
             row[column.field] = cell_value
 
@@ -157,12 +159,13 @@ class TableDefinition:
         tk.check_access("package_search", context)
 
     def get_rows_action(self, action: str) -> RowActionDefinition | None:
-        for row_action in self.row_actions:
-            if row_action.action != action:
-                continue
-            return row_action
+        return self._get_action(self.row_actions, action)
 
-        return None
+    def get_table_action(self, action: str) -> TableActionDefinition | None:
+        return self._get_action(self.table_actions, action)
+
+    def _get_action(self, actions: list[Any], action: str):
+        return next((a for a in actions if a.action == action), None)
 
 
 @dataclass(frozen=True)
@@ -185,9 +188,7 @@ class ColumnDefinition:
 
     field: str
     title: str | None = None
-    formatters: list[tuple[type[formatters.BaseFormatter], dict[str, Any]]] = (
-        dataclass_field(default_factory=list)
-    )
+    formatters: list[tuple[type[formatters.BaseFormatter], dict[str, Any]]] = dataclass_field(default_factory=list)
     tabulator_formatter: str | None = None
     tabulator_formatter_params: dict[str, Any] = dataclass_field(default_factory=dict)
     width: int | None = None
@@ -268,9 +269,7 @@ class ActionDefinition:
 
         return "#"
 
-    def _build_url_from_params(
-        self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]
-    ) -> str:
+    def _build_url_from_params(self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]) -> str:
         """Build an action URL based on the endpoint and URL parameters.
 
         The url_params might contain values like `$id`, `$type`, etc.
@@ -305,10 +304,7 @@ class RowActionDefinition:
 
 
 @dataclass(frozen=True)
-class TableActionDefinition:
+class TableActionDefinition(RowActionDefinition):
     """Defines an action that can be performed on the table itself."""
 
-    method: str
-    label: str
-    url: str
-    icon: str | None = None
+    callback: Callable[..., types.TableActionHandlerResult]

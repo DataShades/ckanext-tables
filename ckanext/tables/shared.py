@@ -16,6 +16,8 @@ from .types import (
     Row,
     RowActionHandler,
     RowActionHandlerResult,
+    TableActionHandler,
+    TableActionHandlerResult,
     Value,
     collect_tables_signal,
 )
@@ -30,6 +32,8 @@ __all__ = [
     "RowActionDefinition",
     "RowActionHandler",
     "RowActionHandlerResult",
+    "TableActionHandler",
+    "TableActionHandlerResult",
     "ListDataSource",
     "Options",
     "QueryParams",

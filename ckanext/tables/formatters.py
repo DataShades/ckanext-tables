@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import datetime
 import uuid
 
 from ckan import model
@@ -30,14 +31,14 @@ class BaseFormatter(abc.ABC):
 
 
 class DateFormatter(BaseFormatter):
-    """Formats a datetime string into a more readable date.
+    """Formats a datetime object into a more readable date.
 
     Options:
         - `date_format` (str): The strftime format for the output.
           Defaults to "%d/%m/%Y - %H:%M".
     """
 
-    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
+    def format(self, value: datetime.datetime, options: types.Options) -> types.FormatterResult:
         date_format = options.get("date_format", "%d/%m/%Y - %H:%M")
         return tk.h.render_datetime(value, date_format=date_format)
 

@@ -17,6 +17,8 @@ Options: TypeAlias = "dict[str, Any]"
 Row: TypeAlias = dict[str, Any]
 RowActionHandlerResult: TypeAlias = tuple[bool, str | None]
 RowActionHandler: TypeAlias = Callable[[Row], RowActionHandlerResult]
+TableActionHandlerResult: TypeAlias = tuple[bool, str | None]
+TableActionHandler: TypeAlias = Callable[[], TableActionHandlerResult]
 FormatterResult: TypeAlias = str
 
 
