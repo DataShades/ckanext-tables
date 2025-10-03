@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Hashable
-from typing import Any, Generic, TypeAlias, TypeVar
+from typing import Any, Generic, TypeAlias, TypedDict, TypeVar
+
+from typing_extensions import NotRequired
 
 import ckan.plugins.toolkit as tk
 
@@ -15,12 +17,22 @@ ItemValue: TypeAlias = Any
 Value: TypeAlias = Any
 Options: TypeAlias = "dict[str, Any]"
 Row: TypeAlias = dict[str, Any]
-RowActionHandlerResult: TypeAlias = tuple[bool, str | None]
-RowActionHandler: TypeAlias = Callable[[Row], RowActionHandlerResult]
-TableActionHandlerResult: TypeAlias = tuple[bool, str | None]
-TableActionHandler: TypeAlias = Callable[[], TableActionHandlerResult]
 FormatterResult: TypeAlias = str
 
+BulkActionHandlerResult: TypeAlias = tuple[bool, str | None]
+BulkActionHandler: TypeAlias = Callable[[Row], BulkActionHandlerResult]
+
+TableActionHandlerResult: TypeAlias = tuple[bool, str | None]
+TableActionHandler: TypeAlias = Callable[[], TableActionHandlerResult]
+
+
+class RowActionHandlerResult(TypedDict):
+    success: bool
+    error: NotRequired[str | None]
+    redirect: NotRequired[str | None]
+
+
+RowActionHandler: TypeAlias = Callable[[Row], RowActionHandlerResult]
 
 collect_tables_signal = tk.signals.ckanext.signal(
     "ckanext.tables.register_tables",

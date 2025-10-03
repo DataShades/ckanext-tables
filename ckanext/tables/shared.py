@@ -2,7 +2,7 @@ from . import formatters
 from .data_sources import DatabaseDataSource, ListDataSource
 from .generics import GenericTableView
 from .table import (
-    ActionDefinition,
+    BulkActionDefinition,
     ColumnDefinition,
     QueryParams,
     RowActionDefinition,
@@ -11,10 +11,11 @@ from .table import (
     table_registry,
 )
 from .types import (
+    BulkActionHandler,
+    BulkActionHandlerResult,
     FormatterResult,
     Options,
     Row,
-    RowActionHandler,
     RowActionHandlerResult,
     TableActionHandler,
     TableActionHandlerResult,
@@ -23,15 +24,16 @@ from .types import (
 )
 
 __all__ = [
-    "ActionDefinition",
+    "RowActionDefinition",
+    "RowActionHandlerResult",
     "ColumnDefinition",
     "DatabaseDataSource",
     "FormatterResult",
     "formatters",
     "GenericTableView",
-    "RowActionDefinition",
-    "RowActionHandler",
-    "RowActionHandlerResult",
+    "BulkActionDefinition",
+    "BulkActionHandler",
+    "BulkActionHandlerResult",
     "TableActionHandler",
     "TableActionHandlerResult",
     "ListDataSource",

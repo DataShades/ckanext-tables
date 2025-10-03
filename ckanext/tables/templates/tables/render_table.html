@@ -21,13 +21,13 @@
         {% endblock %}
 
         {% block table_global_filters %}
-            {% if table.row_actions %}
+            {% if table.bulk_actions %}
                 <div class="dropdown d-inline-block">
                     <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fa fa-list-check"></i> {{ _("Row Actions") }}
                     </button>
-                    <ul class="dropdown-menu" id="row-actions-menu">
-                        {% for action in table.row_actions %}
+                    <ul class="dropdown-menu" id="bulk-actions-menu">
+                        {% for action in table.bulk_actions %}
                             <li>
                                 <button class="dropdown-item" data-action="{{ action.action }}">
                                     {% if action.icon %}
@@ -72,6 +72,7 @@
             id="{{ table.id }}" class="tabulator-container"
             data-module="tables-tabulator"
             data-module-config="{{ h.tables_json_dumps(table.get_tabulator_config()) }}"
+            data-module-row-actions="{{ h.tables_json_dumps(table.get_row_actions()) }}"
         >
             <span class="ap-loading-indicator">
                 {% snippet "tables/snippets/table_skeleton.html" %}

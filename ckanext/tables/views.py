@@ -33,8 +33,10 @@ class AjaxURLView(MethodView):
         if not table_class:
             return tk.abort(404, tk._(f"Table {table_name} not found"))
 
-        table_action = tk.request.form.get("table_action")
         row_action = tk.request.form.get("row_action")
+        table_action = tk.request.form.get("table_action")
+        bulk_action = tk.request.form.get("bulk_action")
+        row = tk.request.form.get("row")
         rows = tk.request.form.get("rows")
 
         table: TableDefinition = table_class()
@@ -42,7 +44,10 @@ class AjaxURLView(MethodView):
         if table_action:
             return self._apply_table_action(table, table_action)
 
-        return self._apply_row_action(table, row_action, rows)
+        if row_action:
+            return self._apply_row_action(table, row_action, row)
+
+        return self._apply_bulk_action(table, bulk_action, rows)
 
     def _apply_table_action(self, table: TableDefinition, action: str) -> Response:
         table_action = table.get_table_action(action)
@@ -63,24 +68,49 @@ class AjaxURLView(MethodView):
 
         return jsonify({"success": success, "errors": error})
 
-    def _apply_row_action(self, table: TableDefinition, action: str, rows: str | None) -> Response:
-        row_action_func = table.get_rows_action(action) if action else None
+    def _apply_row_action(self, table: TableDefinition, action: str, row: str | None) -> Response:
+        row_action_func = table.get_row_action(action) if action else None
 
-        if not row_action_func or not rows:
+        if not row_action_func or not row:
             return jsonify(
                 {
                     "success": False,
-                    "errors": [tk._("The row action is not implemented")],
+                    "error": [tk._("The row action is not implemented")],
+                }
+            )
+
+        try:
+            result = row_action_func(json.loads(row))
+        except Exception as e:
+            log.exception("Error during row action %s", action)
+            return jsonify({"success": False, "error": str(e)})
+
+        return jsonify(
+            {
+                "success": result["success"],
+                "error": result.get("error", None),
+                "redirect": result.get("redirect", None),
+            }
+        )
+
+    def _apply_bulk_action(self, table: TableDefinition, action: str, rows: str | None) -> Response:
+        bulk_action_func = table.get_bulk_action(action) if action else None
+
+        if not bulk_action_func or not rows:
+            return jsonify(
+                {
+                    "success": False,
+                    "errors": [tk._("The bulk action is not implemented")],
                 }
             )
 
         errors = []
 
         for row in json.loads(rows):
-            success, error = row_action_func(row)
+            success, error = bulk_action_func(row)
 
             if not success:
-                log.debug("Error during row action %s: %s", action, error)
+                log.debug("Error during bulk action %s: %s", action, error)
                 errors.append(error)
 
         return jsonify({"success": not errors, "errors": errors})

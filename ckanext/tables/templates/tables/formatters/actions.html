@@ -1,27 +1,16 @@
 {#
-    Render actions for the table row.
+Render actions for the table row.
 
-    Options:
-        - `table` (types.TableDefinition) - table definition.
-        - `row` (types.Row) - row data.
-        - `column` (types.ColumnDefinition) - column definition.
+Options:
+- `table` (types.TableDefinition) - table definition.
+- `row` (types.Row) - row data.
+- `column` (types.ColumnDefinition) - column definition.
 #}
 
 {% import 'macros/form.html' as form %}
 
 <div class="d-flex gap-2">
-    {% for action in table.actions %}
-        <a
-            class="{{ action.css_class or 'btn btn-primary btn-sm' }}"
-            href="{{ action.get_url(row) }}"
-            title="{{ action.name | capitalize }}" {{ form.attributes(action.attrs) }}>
-            {% if action.icon %}
-                <i class="{{ action.icon }}"></i>
-            {% endif %}
-
-            {% if action.label %}
-                {{ action.label }}
-            {% endif %}
-        </a>
-    {% endfor %}
+    <button class="btn btn-secondary btn-row-actions" type="button">
+        <i class="fa fa-ellipsis-v"></i>
+    </button>
 </div>

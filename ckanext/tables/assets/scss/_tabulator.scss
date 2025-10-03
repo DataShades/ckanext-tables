@@ -25,6 +25,7 @@ $color-active: #206b82;
 
     input[type="checkbox"] {
         accent-color: $color-active;
+        cursor: pointer;
     }
 
     .tabulator-container {
@@ -41,6 +42,17 @@ $color-active: #206b82;
             }
 
             .tabulator-row {
+                .tabulator-cell {
+                    &.tabulator-row-header {
+                        border-right: unset;
+                        background: unset;
+                    }
+
+                    .dropdown-toggle::after {
+                        display: none;
+                    }
+                }
+
                 &:hover {
                     background-color: #f9fafb !important;
                 }
@@ -91,6 +103,22 @@ $color-active: #206b82;
                 border: 1px solid #ced4da;
                 color: black;
             }
+        }
+    }
+}
+
+.tabulator-menu.tabulator-popup-container {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    background-color: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color: #333;
+    border-radius: 4px;
+    min-width: 10rem;
+
+    .tabulator-menu-item {
+        &:hover {
+            color: #2e2e2e;
+            background-color: #e9ecef;
         }
     }
 }

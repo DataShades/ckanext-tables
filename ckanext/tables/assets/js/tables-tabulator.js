@@ -17,6 +17,7 @@ ckan.module("tables-tabulator", function ($, _) {
         },
         options: {
             config: null,
+            rowActions: null,
             enableFullscreenToggle: true,
         },
 
@@ -44,7 +45,7 @@ ckan.module("tables-tabulator", function ($, _) {
             this.addFilterBtn = document.getElementById("add-filter");
             this.closeFiltersBtn = document.getElementById("close-filters");
             this.filtersCounter = document.getElementById("filters-counter");
-            this.rowActionsMenu = document.getElementById("row-actions-menu");
+            this.bulkActionsMenu = document.getElementById("bulk-actions-menu");
             this.tableActionsMenu = document.getElementById("table-actions-menu");
 
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
@@ -52,6 +53,19 @@ ckan.module("tables-tabulator", function ($, _) {
         },
 
         _initTabulatorInstance: function () {
+            if (this.options.rowActions) {
+                this.options.config.rowContextMenu = Object.values(this.options.rowActions).map(action => ({
+                    label: `${action.icon ? `<i class='${action.icon} me-1'></i> ` : ''}${action.label}`,
+                    action: this._rowActionCallback.bind(this, action)
+                }));
+            }
+
+            if (this.options.config.rowHeader) {
+                this.options.config.rowHeader.cellClick = function (e, cell) {
+                    cell.getRow().toggleSelect();
+                }
+            }
+
             this.table = new Tabulator(this.el[0], {
                 ...this.options.config,
                 paginationInitialPage: parseInt(getQueryParam("page")) || 1,
@@ -62,6 +76,53 @@ ckan.module("tables-tabulator", function ($, _) {
                     }
                 }
             });
+        },
+
+        _rowActionCallback: function (action, e, row) {
+            if (!action.with_confirmation) {
+                return this._onRowActionConfirm(action, row);
+            }
+
+            ckan.tablesConfirm({
+                message: ckan.i18n._(`Are you sure you want to perform this action: <b>${action.label}</b>?`),
+                onConfirm: () => this._onRowActionConfirm(action, row)
+            });
+        },
+
+        _onRowActionConfirm: function (action, row) {
+            const form = new FormData();
+
+            form.append("row_action", action.name);
+            form.append("row", JSON.stringify(row.getData()));
+
+            fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
+                method: "POST",
+                body: form,
+                headers: {
+                    'X-CSRFToken': this._getCSRFToken()
+                }
+            })
+                .then(resp => resp.json())
+                .then(resp => {
+                    console.log(resp);
+
+                    if (!resp.success) {
+                        ckan.tablesToast({ message: resp.error, type: "danger", title: ckan.i18n._("Tables") });
+                    } else {
+                        if (resp.redirect) {
+                            window.location.href = resp.redirect;
+                            return;
+                        }
+
+                        this._refreshData()
+                        ckan.tablesToast({
+                            message: ckan.i18n._(`Row action completed: <b>${action.label}</b>`),
+                            title: ckan.i18n._("Tables"),
+                        });
+                    }
+                }).catch(error => {
+                    console.error("Error:", error);
+                });
         },
 
         _initAddTableEvents: function () {
@@ -78,9 +139,9 @@ ckan.module("tables-tabulator", function ($, _) {
                 }
             });
 
-            if (this.rowActionsMenu) {
-                this.rowActionsMenu.querySelectorAll("button").forEach(button => {
-                    button.addEventListener("click", this._onApplyRowAction);
+            if (this.bulkActionsMenu) {
+                this.bulkActionsMenu.querySelectorAll("button").forEach(button => {
+                    button.addEventListener("click", this._onApplyBulkAction);
                 });
             }
 
@@ -89,6 +150,14 @@ ckan.module("tables-tabulator", function ($, _) {
                     button.addEventListener("click", this._onApplyTableAction);
                 });
             };
+
+            document.addEventListener("click", (e) => {
+                const rowActionsBtn = e.target.closest(".btn-row-actions");
+
+                if (rowActionsBtn && this.el[0].contains(rowActionsBtn)) {
+                    this._onRowActionsDropdownClick(e);
+                }
+            });
 
             // Tabulator events
             this.table.on("tableBuilt", () => {
@@ -113,6 +182,26 @@ ckan.module("tables-tabulator", function ($, _) {
                 url.searchParams.set("page", pageno);
                 window.history.replaceState({}, "", url);
             });
+        },
+
+        _onRowActionsDropdownClick: function (e) {
+            e.preventDefault();
+
+            const rowEl = e.target.closest(".tabulator-row");
+
+            if (!rowEl) return;
+
+            // Place the fake right-click at the button position
+            const rect = e.target.getBoundingClientRect();
+
+            rowEl.dispatchEvent(new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: rect.left + rect.width / 2,
+                clientY: rect.bottom,
+                button: 2   // right click
+            }));
         },
 
         _onApplyFilters: function () {
@@ -228,21 +317,21 @@ ckan.module("tables-tabulator", function ($, _) {
         /**
          * Apply the row action to the selected rows
          */
-        _onApplyRowAction: function (e) {
-            const rowAction = e.target.dataset.action;
+        _onApplyBulkAction: function (e) {
+            const bulkAction = e.target.dataset.action;
             const label = e.target.textContent;
 
-            if (!rowAction) {
+            if (!bulkAction) {
                 return;
             }
 
             ckan.tablesConfirm({
-                message: ckan.i18n._("Are you sure you want to perform this action?"),
-                onConfirm: () => this._onRowActionConfirm(rowAction, label)
+                message: ckan.i18n._(`Are you sure you want to perform this action: <b>${label}</b>?`),
+                onConfirm: () => this._onBulkActionConfirm(bulkAction, label)
             });
         },
 
-        _onRowActionConfirm: function (rowAction, label) {
+        _onBulkActionConfirm: function (bulkAction, label) {
             const selectedData = this.table.getSelectedData();
 
             if (!selectedData.length) {
@@ -257,34 +346,32 @@ ckan.module("tables-tabulator", function ($, _) {
 
             const form = new FormData();
 
-            const csrf_field = $('meta[name=csrf_field_name]').attr('content');
-            const csrf_token = $('meta[name=' + csrf_field + ']').attr('content');
-
-            form.append("row_action", rowAction);
+            form.append("bulk_action", bulkAction);
             form.append("rows", JSON.stringify(data));
 
             fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
                 method: "POST",
                 body: form,
                 headers: {
-                    'X-CSRFToken': csrf_token
+                    'X-CSRFToken': this._getCSRFToken()
                 }
             })
                 .then(resp => resp.json())
                 .then(resp => {
                     if (!resp.success) {
-                        ckan.tablesToast({ message: resp.errors[0], type: "danger" });
+                        ckan.tablesToast({ message: resp.errors[0], type: "danger", title: ckan.i18n._("Tables") });
 
                         if (resp.errors.length > 1) {
                             ckan.tablesToast({
                                 message: ckan.i18n._("Multiple errors occurred and were suppressed"),
-                                type: "error"
+                                type: "error",
+                                title: ckan.i18n._("Tables"),
                             });
                         }
                     } else {
                         this._refreshData()
                         ckan.tablesToast({
-                            message: ckan.i18n._(`Row action completed: ${label}`),
+                            message: ckan.i18n._(`Bulk action completed: <b>${label}</b>`),
                             title: ckan.i18n._("Tables"),
                         });
                     }
@@ -302,7 +389,7 @@ ckan.module("tables-tabulator", function ($, _) {
             }
 
             ckan.tablesConfirm({
-                message: ckan.i18n._(`Are you sure you want to perform this action: ${label}?`),
+                message: ckan.i18n._(`Are you sure you want to perform this action: <b>${label}</b>?`),
                 onConfirm: () => this._onTableActionConfirm(action, label)
             });
         },
@@ -310,26 +397,23 @@ ckan.module("tables-tabulator", function ($, _) {
         _onTableActionConfirm: function (action, label) {
             const form = new FormData();
 
-            const csrf_field = $('meta[name=csrf_field_name]').attr('content');
-            const csrf_token = $('meta[name=' + csrf_field + ']').attr('content');
-
             form.append("table_action", action);
 
             fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
                 method: "POST",
                 body: form,
                 headers: {
-                    'X-CSRFToken': csrf_token
+                    'X-CSRFToken': this._getCSRFToken()
                 }
             })
                 .then(resp => resp.json())
                 .then(resp => {
                     if (!resp.success) {
-                        ckan.tablesToast({ message: resp.error, type: "danger" });
+                        ckan.tablesToast({ message: resp.error, type: "danger", title: ckan.i18n._("Tables") });
                     } else {
                         this._refreshData()
                         ckan.tablesToast({
-                            message: ckan.i18n._(`Table action completed: ${label}`),
+                            message: ckan.i18n._(`Table action completed: <b>${label}</b>`),
                             title: ckan.i18n._("Tables"),
                         });
                     }
@@ -345,6 +429,13 @@ ckan.module("tables-tabulator", function ($, _) {
         _onFullscreen: function () {
             this.tableWrapper.classList.toggle("fullscreen");
         },
+
+        _getCSRFToken: function () {
+            const csrf_field = document.querySelector('meta[name="csrf_field_name"]').getAttribute('content');
+            const csrf_token = document.querySelector(`meta[name="${csrf_field}"]`).getAttribute('content');
+
+            return csrf_token;
+        }
     };
 });
 

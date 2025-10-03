@@ -40,8 +40,8 @@ class TableDefinition:
         data_source: Data source for the table.
         ajax_url: (Optional) URL to fetch data from. Defaults to an auto-generated URL.
         columns: (Optional) List of ColumnDefinition objects.
-        actions: (Optional) List of ActionDefinition objects for each row.
-        row_actions: (Optional) List of RowActionDefinition objects for action on multiple rows.
+        row_actions: (Optional) List of RowActionDefinition objects.
+        bulk_actions: (Optional) List of BulkActionDefinition objects for action on multiple rows.
         table_actions: (Optional) List of TableActionDefinition objects for actions on the table itself.
         placeholder: (Optional) Placeholder text for an empty table.
         page_size: (Optional) Number of rows per page. Defaults to 10.
@@ -52,8 +52,8 @@ class TableDefinition:
     data_source: BaseDataSource
     ajax_url: str | None = None
     columns: list[ColumnDefinition] = dataclass_field(default_factory=list)
-    actions: list[ActionDefinition] = dataclass_field(default_factory=list)
     row_actions: list[RowActionDefinition] = dataclass_field(default_factory=list)
+    bulk_actions: list[BulkActionDefinition] = dataclass_field(default_factory=list)
     table_actions: list[TableActionDefinition] = dataclass_field(default_factory=list)
     placeholder: str | None = None
     page_size: int = 10
@@ -61,13 +61,27 @@ class TableDefinition:
 
     def __post_init__(self):
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
-        self.selectable = bool(self.row_actions)
+        self.selectable = bool(self.bulk_actions)
 
         if self.ajax_url is None:
             self.ajax_url = tk.url_for("tables.ajax", table_name=self.name)
 
         if self.placeholder is None:
             self.placeholder = tk._("No data found")
+
+        if self.row_actions:
+            self.columns.append(
+                ColumnDefinition(
+                    field="table_actions",
+                    title=tk._(""),
+                    formatters=[(formatters.ActionsFormatter, {})],
+                    filterable=False,
+                    tabulator_formatter="html",
+                    sortable=False,
+                    resizable=False,
+                    width=50,
+                ),
+            )
 
     def get_tabulator_config(self) -> dict[str, Any]:
         columns = [col.to_dict() for col in self.columns]
@@ -88,27 +102,31 @@ class TableDefinition:
         if self.selectable:
             options.update(
                 {
-                    "selectableRows": True,
-                    "selectableRangeMode": "click",
-                    "selectableRollingSelection": False,
-                    "selectablePersistence": False,
+                    "rowHeader": {
+                        "headerSort": False,
+                        "resizable": False,
+                        "headerHozAlign": "center",
+                        "hozAlign": "center",
+                        "vertAlign": "middle",
+                        "formatter": "rowSelection",
+                        "titleFormatter": "rowSelection",
+                        "width": 50,
+                    }
                 }
             )
 
-            columns.insert(
-                0,
-                {
-                    "formatter": "rowSelection",
-                    "titleFormatter": "rowSelection",
-                    "width": 50,
-                    "hozAlign": "center",
-                    "vertAlign": "middle",
-                    "headerHozAlign": "center",
-                    "headerSort": False,
-                },
-            )
-
         return options
+
+    def get_row_actions(self) -> dict[str, dict[str, Any]]:
+        return {
+            action.action: {
+                "name": action.action,
+                "label": action.label,
+                "icon": action.icon,
+                "with_confirmation": action.with_confirmation,
+            }
+            for action in self.row_actions
+        }
 
     def render_table(self, **kwargs: Any) -> str:
         return tk.render(self.table_template, extra_vars={"table": self, **kwargs})
@@ -158,11 +176,14 @@ class TableDefinition:
         """
         tk.check_access("package_search", context)
 
-    def get_rows_action(self, action: str) -> RowActionDefinition | None:
-        return self._get_action(self.row_actions, action)
+    def get_bulk_action(self, action: str) -> BulkActionDefinition | None:
+        return self._get_action(self.bulk_actions, action)
 
     def get_table_action(self, action: str) -> TableActionDefinition | None:
         return self._get_action(self.table_actions, action)
+
+    def get_row_action(self, action: str) -> RowActionDefinition | None:
+        return self._get_action(self.row_actions, action)
 
     def _get_action(self, actions: list[Any], action: str):
         return next((a for a in actions if a.action == action), None)
@@ -231,80 +252,34 @@ class ColumnDefinition:
 
 
 @dataclass(frozen=True)
-class ActionDefinition:
-    """Defines an action that can be performed on a row.
+class BulkActionDefinition:
+    """Defines an action that can be performed on multiple rows."""
 
-    Attributes:
-        name: Unique identifier for the action.
-        label: Display label for the action.
-        icon: CSS class for an icon (e.g., "fa fa-edit").
-        url: A static URL for the action's link.
-        endpoint: A dynamic endpoint to generate a URL.
-        url_params: A dictionary of parameters to use when generating a URL from an endpoint.
-        css_class: An additional CSS class for styling the action's link or button.
-        attrs: A dictionary of extra HTML attributes to add to the action's link.
-    """
-
-    name: str
-    label: str | None = None
+    action: str
+    label: str
+    callback: Callable[[types.Row], types.BulkActionHandlerResult]
     icon: str | None = None
-    url: str | None = None
-    endpoint: str | None = None
-    url_params: dict[str, Any] = dataclass_field(default_factory=dict)
-    css_class: str | None = None
-    attrs: dict[str, Any] = dataclass_field(default_factory=dict)
 
-    def __post_init__(self):
-        if self.url and self.endpoint:
-            raise ValueError(  # noqa: TRY003
-                "Provide either a `url` or an `endpoint`, but not both."
-            )
+    def __call__(self, row: types.Row) -> types.BulkActionHandlerResult:
+        return self.callback(row)
 
-    def get_url(self, row: types.Row) -> str:
-        if self.endpoint:
-            return self._build_url_from_params(self.endpoint, self.url_params, row)
 
-        if self.url:
-            return self.url
+@dataclass(frozen=True)
+class TableActionDefinition(BulkActionDefinition):
+    """Defines an action that can be performed on the table itself."""
 
-        return "#"
-
-    def _build_url_from_params(self, endpoint: str, url_params: dict[str, Any], row: dict[str, Any]) -> str:
-        """Build an action URL based on the endpoint and URL parameters.
-
-        The url_params might contain values like `$id`, `$type`, etc.
-        We need to replace them with the actual values from the row
-
-        Args:
-            endpoint: The endpoint to build the URL for
-            url_params: The URL parameters to build the URL for
-            row: The row to build the URL for
-        """
-        params = url_params.copy()
-
-        for key, value in params.items():
-            if not value.startswith("$"):
-                continue
-            params[key] = row[value[1:]]
-
-        return tk.url_for(endpoint, **params)
+    callback: Callable[..., types.TableActionHandlerResult]
 
 
 @dataclass(frozen=True)
 class RowActionDefinition:
-    """Defines an action that can be performed on multiple rows."""
+    """Defines an action that can be performed on a row."""
 
     action: str
     label: str
     callback: Callable[[types.Row], types.RowActionHandlerResult]
     icon: str | None = None
+    with_confirmation: bool = False
 
     def __call__(self, row: types.Row) -> types.RowActionHandlerResult:
         return self.callback(row)
-
-
-@dataclass(frozen=True)
-class TableActionDefinition(RowActionDefinition):
-    """Defines an action that can be performed on the table itself."""
-
-    callback: Callable[..., types.TableActionHandlerResult]
