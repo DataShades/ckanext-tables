@@ -61,12 +61,12 @@ class AjaxURLView(MethodView):
             )
 
         try:
-            success, error = table_action.callback()
+            result = table_action.callback()
         except Exception as e:
             log.exception("Error during table action %s", action)
             return jsonify({"success": False, "errors": str(e)})
 
-        return jsonify({"success": success, "errors": error})
+        return jsonify(result)
 
     def _apply_row_action(self, table: TableDefinition, action: str, row: str | None) -> Response:
         row_action_func = table.get_row_action(action) if action else None
@@ -107,11 +107,11 @@ class AjaxURLView(MethodView):
         errors = []
 
         for row in json.loads(rows):
-            success, error = bulk_action_func(row)
+            result = bulk_action_func(row)
 
-            if not success:
-                log.debug("Error during bulk action %s: %s", action, error)
-                errors.append(error)
+            if not result["success"] and "error" in result:
+                log.debug("Error during bulk action %s: %s", action, result["error"])
+                errors.append(result["error"])
 
         return jsonify({"success": not errors, "errors": errors})
 

@@ -19,20 +19,23 @@ Options: TypeAlias = "dict[str, Any]"
 Row: TypeAlias = dict[str, Any]
 FormatterResult: TypeAlias = str
 
-BulkActionHandlerResult: TypeAlias = tuple[bool, str | None]
+
+class BulkActionHandlerResult(TypedDict):
+    success: bool
+    error: NotRequired[str | None]
+
+
 BulkActionHandler: TypeAlias = Callable[[Row], BulkActionHandlerResult]
 
-TableActionHandlerResult: TypeAlias = tuple[bool, str | None]
-TableActionHandler: TypeAlias = Callable[[], TableActionHandlerResult]
 
-
-class RowActionHandlerResult(TypedDict):
+class ActionHandlerResult(TypedDict):
     success: bool
     error: NotRequired[str | None]
     redirect: NotRequired[str | None]
 
 
-RowActionHandler: TypeAlias = Callable[[Row], RowActionHandlerResult]
+TableActionHandler: TypeAlias = Callable[[], ActionHandlerResult]
+RowActionHandler: TypeAlias = Callable[[Row], ActionHandlerResult]
 
 collect_tables_signal = tk.signals.ckanext.signal(
     "ckanext.tables.register_tables",

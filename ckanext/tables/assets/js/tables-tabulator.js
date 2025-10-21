@@ -104,8 +104,6 @@ ckan.module("tables-tabulator", function ($, _) {
             })
                 .then(resp => resp.json())
                 .then(resp => {
-                    console.log(resp);
-
                     if (!resp.success) {
                         ckan.tablesToast({ message: resp.error, type: "danger", title: ckan.i18n._("Tables") });
                     } else {
@@ -411,6 +409,11 @@ ckan.module("tables-tabulator", function ($, _) {
                     if (!resp.success) {
                         ckan.tablesToast({ message: resp.error, type: "danger", title: ckan.i18n._("Tables") });
                     } else {
+                        if (resp.redirect) {
+                            window.location.href = resp.redirect;
+                            return;
+                        }
+
                         this._refreshData()
                         ckan.tablesToast({
                             message: ckan.i18n._(`Table action completed: <b>${label}</b>`),

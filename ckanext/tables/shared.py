@@ -11,21 +11,20 @@ from .table import (
     table_registry,
 )
 from .types import (
+    ActionHandlerResult,
     BulkActionHandler,
     BulkActionHandlerResult,
     FormatterResult,
     Options,
     Row,
-    RowActionHandlerResult,
     TableActionHandler,
-    TableActionHandlerResult,
     Value,
     collect_tables_signal,
 )
 
 __all__ = [
     "RowActionDefinition",
-    "RowActionHandlerResult",
+    "ActionHandlerResult",
     "ColumnDefinition",
     "DatabaseDataSource",
     "FormatterResult",
@@ -35,7 +34,6 @@ __all__ = [
     "BulkActionHandler",
     "BulkActionHandlerResult",
     "TableActionHandler",
-    "TableActionHandlerResult",
     "ListDataSource",
     "Options",
     "QueryParams",

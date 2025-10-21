@@ -268,10 +268,17 @@ class BulkActionDefinition:
 
 
 @dataclass(frozen=True)
-class TableActionDefinition(BulkActionDefinition):
+class TableActionDefinition:
     """Defines an action that can be performed on the table itself."""
 
-    callback: Callable[..., types.TableActionHandlerResult]
+    action: str
+    label: str
+    callback: Callable[..., types.ActionHandlerResult]
+    icon: str | None = None
+
+    def __call__(self, row: types.Row) -> types.ActionHandlerResult:
+        return self.callback(row)
+
 
 
 @dataclass(frozen=True)
@@ -280,9 +287,9 @@ class RowActionDefinition:
 
     action: str
     label: str
-    callback: Callable[[types.Row], types.RowActionHandlerResult]
+    callback: Callable[[types.Row], types.ActionHandlerResult]
     icon: str | None = None
     with_confirmation: bool = False
 
-    def __call__(self, row: types.Row) -> types.RowActionHandlerResult:
+    def __call__(self, row: types.Row) -> types.ActionHandlerResult:
         return self.callback(row)
