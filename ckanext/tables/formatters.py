@@ -19,10 +19,12 @@ class BaseFormatter(abc.ABC):
         self,
         column: table.ColumnDefinition,
         row: types.Row,
+        initial_row: types.Row,
         table: table.TableDefinition,
     ):
         self.column = column
         self.row = row
+        self.initial_row = initial_row
         self.table = table
 
     @abc.abstractmethod
@@ -170,6 +172,8 @@ class DialogModalFormatter(BaseFormatter):
           Defaults to `tables/formatters/dialog_modal.html`.
         - `modal_title` (str): The title of the modal dialog.
           Defaults to "Details".
+        - `max_length` (int): The maximum length of the preview text before
+          truncation. Defaults to 100.
     """
 
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
@@ -177,6 +181,7 @@ class DialogModalFormatter(BaseFormatter):
             return ""
 
         template = options.get("template", "tables/formatters/dialog_modal.html")
+        max_length = options.get("max_length", 100)
         modal_title = options.get("modal_title", "Details")
 
         return tk.literal(
@@ -188,6 +193,7 @@ class DialogModalFormatter(BaseFormatter):
                     "column": self.column,
                     "row": self.row,
                     "modal_title": modal_title,
+                    "max_length": max_length,
                     "modal_id": f"modal-{uuid.uuid4().hex}",
                 },
             )

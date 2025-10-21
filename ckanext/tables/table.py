@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -148,6 +149,8 @@ class TableDefinition:
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
+        formatted_row = copy.deepcopy(row)
+
         for column in self.columns:
             cell_value = row.get(column.field)
 
@@ -155,11 +158,11 @@ class TableDefinition:
                 continue
 
             for formatter_class, formatter_options in column.formatters:
-                cell_value = formatter_class(column, row, self).format(cell_value, formatter_options)
+                cell_value = formatter_class(column, formatted_row, row, self).format(cell_value, formatter_options)
 
-            row[column.field] = cell_value
+            formatted_row[column.field] = cell_value
 
-        return row
+        return formatted_row
 
     @classmethod
     def check_access(cls, context: Context) -> None:
