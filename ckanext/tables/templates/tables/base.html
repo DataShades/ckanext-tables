@@ -1,7 +1,9 @@
 {% extends "page.html" %}
 
 {% block breadcrumb_content %}
-    <li class="active">{% link_for _(breadcrumb_label), request.endpoint %}</li>
+    <li class="active">
+        <a href="{{ request.path }}">{{ _(breadcrumb_label) }}</a>
+    </li>
 {% endblock %}
 
 {% block secondary %}
