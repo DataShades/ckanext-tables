@@ -21,7 +21,7 @@ from .types import (
     Value,
     collect_tables_signal,
 )
-from .views import build_params
+from .utils import tables_build_params
 
 __all__ = [
     "RowActionDefinition",
@@ -45,5 +45,5 @@ __all__ = [
     "Value",
     "collect_tables_signal",
     "table_registry",
-    "build_params"
+    "tables_build_params"
 ]

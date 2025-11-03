@@ -1,0 +1,15 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "compilerOptions": {
+        "target": "es2020",
+        "outDir": "ckanext/tables/assets/js/",
+        "alwaysStrict": false,
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "inlineSources": true,
+        "inlineSourceMap": true,
+    },
+    "include": ["ckanext/tables/assets/ts/"]
+}
