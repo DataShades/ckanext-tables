@@ -12,6 +12,7 @@ from ckan.types import Context
 
 from ckanext.tables import formatters, types
 from ckanext.tables.data_sources import BaseDataSource
+from ckanext.tables.exporters import ExporterBase
 
 table_registry: types.Registry[str, TableDefinition] = types.Registry({})
 
@@ -44,6 +45,7 @@ class TableDefinition:
         row_actions: (Optional) List of RowActionDefinition objects.
         bulk_actions: (Optional) List of BulkActionDefinition objects for action on multiple rows.
         table_actions: (Optional) List of TableActionDefinition objects for actions on the table itself.
+        exporters: (Optional) List of exporter classes for exporting table data.
         placeholder: (Optional) Placeholder text for an empty table.
         page_size: (Optional) Number of rows per page. Defaults to 10.
         table_template: (Optional) Template to render the table. Defaults to `tables/base.html`.
@@ -52,20 +54,24 @@ class TableDefinition:
     name: str
     data_source: BaseDataSource
     ajax_url: str | None = None
+    export_url: str | None = None
     columns: list[ColumnDefinition] = dataclass_field(default_factory=list)
     row_actions: list[RowActionDefinition] = dataclass_field(default_factory=list)
     bulk_actions: list[BulkActionDefinition] = dataclass_field(default_factory=list)
     table_actions: list[TableActionDefinition] = dataclass_field(default_factory=list)
+    exporters: list[type[ExporterBase]] = dataclass_field(default_factory=list)
     placeholder: str | None = None
     page_size: int = 10
     table_template: str = "tables/base.html"
 
     def __post_init__(self):
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
-        self.selectable = bool(self.bulk_actions)
 
         if self.ajax_url is None:
             self.ajax_url = tk.url_for("tables.ajax", table_name=self.name)
+
+        if self.export_url is None:
+            self.export_url = tk.url_for("tables.export", table_name=self.name)
 
         if self.placeholder is None:
             self.placeholder = tk._("No data found")
@@ -87,10 +93,11 @@ class TableDefinition:
     def get_tabulator_config(self) -> dict[str, Any]:
         columns = [col.to_dict() for col in self.columns]
 
-        options = {
+        options: dict[str, Any] = {
             "columns": columns,
             "placeholder": self.placeholder,
             "ajaxURL": self.ajax_url,
+            "exportURL": self.export_url,
             "sortMode": "remote",
             "layout": "fitColumns",
             "pagination": True,
@@ -100,7 +107,7 @@ class TableDefinition:
             "minHeight": 300,
         }
 
-        if self.selectable:
+        if bool(self.bulk_actions):
             options.update(
                 {
                     "rowHeader": {
@@ -135,7 +142,10 @@ class TableDefinition:
     def get_data(self, params: QueryParams) -> list[Any]:
         return [self._apply_formatters(dict(row)) for row in self.get_raw_data(params)]
 
-    def get_raw_data(self, params: QueryParams) -> list[dict[str, Any]]:
+    def get_raw_data(self, params: QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
+        if not paginate:
+            return self.data_source.filter(params.filters).sort(params.sort_by, params.sort_order).all()
+
         return (
             self.data_source.filter(params.filters)
             .sort(params.sort_by, params.sort_order)
@@ -180,16 +190,16 @@ class TableDefinition:
         tk.check_access("package_search", context)
 
     def get_bulk_action(self, action: str) -> BulkActionDefinition | None:
-        return self._get_action(self.bulk_actions, action)
+        return next((a for a in self.bulk_actions if a.action == action), None)
 
     def get_table_action(self, action: str) -> TableActionDefinition | None:
-        return self._get_action(self.table_actions, action)
+        return next((a for a in self.table_actions if a.action == action), None)
 
     def get_row_action(self, action: str) -> RowActionDefinition | None:
-        return self._get_action(self.row_actions, action)
+        return next((a for a in self.row_actions if a.action == action), None)
 
-    def _get_action(self, actions: list[Any], action: str):
-        return next((a for a in actions if a.action == action), None)
+    def get_exporter(self, name: str) -> type[ExporterBase] | None:
+        return next((e for e in self.exporters if e.name == name), None)
 
 
 @dataclass(frozen=True)
@@ -278,7 +288,6 @@ class TableActionDefinition:
 
     def __call__(self, row: types.Row) -> types.ActionHandlerResult:
         return self.callback(row)
-
 
 
 @dataclass(frozen=True)

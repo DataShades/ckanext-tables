@@ -47,7 +47,7 @@ ckan.module("tables-tabulator", function ($, _) {
             this.filtersCounter = document.getElementById("filters-counter");
             this.bulkActionsMenu = document.getElementById("bulk-actions-menu");
             this.tableActionsMenu = document.getElementById("table-actions-menu");
-
+            this.tableExportersMenu = document.getElementById("table-exporters-menu");
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
             this.tableFilters = this._updateTableFilters();
         },
@@ -113,8 +113,11 @@ ckan.module("tables-tabulator", function ($, _) {
                         }
 
                         this._refreshData()
+
+                        let message = resp.message || ckan.i18n._(`Row action completed: <b>${action.label}</b>`);
+
                         ckan.tablesToast({
-                            message: ckan.i18n._(`Row action completed: <b>${action.label}</b>`),
+                            message: message,
                             title: ckan.i18n._("Tables"),
                         });
                     }
@@ -148,6 +151,12 @@ ckan.module("tables-tabulator", function ($, _) {
                     button.addEventListener("click", this._onApplyTableAction);
                 });
             };
+
+            if (this.tableExportersMenu) {
+                this.tableExportersMenu.querySelectorAll("button").forEach(button => {
+                    button.addEventListener("click", this._onTableExportClick);
+                });
+            }
 
             document.addEventListener("click", (e) => {
                 const rowActionsBtn = e.target.closest(".btn-row-actions");
@@ -415,14 +424,42 @@ ckan.module("tables-tabulator", function ($, _) {
                         }
 
                         this._refreshData()
+
+                        let message = resp.message || ckan.i18n._(`Table action completed: <b>${label}</b>`);
+
                         ckan.tablesToast({
-                            message: ckan.i18n._(`Table action completed: <b>${label}</b>`),
+                            message: message,
                             title: ckan.i18n._("Tables"),
                         });
                     }
                 }).catch(error => {
                     console.error("Error:", error);
                 });
+        },
+
+        _onTableExportClick: function (e) {
+            const exporter = e.target.dataset.exporter;
+
+            if (!exporter) {
+                return;
+            }
+
+            const a = document.createElement('a');
+            const url = new URL(window.location.href)
+
+            url.searchParams.set("exporter", exporter);
+            url.searchParams.set("filters", JSON.stringify(this.tableFilters));
+
+            this.table.getSorters().forEach(element => {
+                url.searchParams.set(`sort[0][field]`, element.field);
+                url.searchParams.set(`sort[0][dir]`, element.dir);
+            });
+
+            a.href = this.sandbox.client.url(this.options.config.exportURL) + url.search;
+            a.download = `${this.options.config.tableId || 'table'}.${exporter}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         },
 
         _refreshData: function () {

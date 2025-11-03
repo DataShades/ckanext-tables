@@ -32,6 +32,7 @@ class ActionHandlerResult(TypedDict):
     success: bool
     error: NotRequired[str | None]
     redirect: NotRequired[str | None]
+    message: NotRequired[str | None]
 
 
 TableActionHandler: TypeAlias = Callable[[], ActionHandlerResult]

@@ -63,6 +63,28 @@
                 </div>
             {% endif %}
         {% endblock %}
+
+        {% block table_exporters %}
+            {% if table.exporters %}
+                <div class="dropdown d-inline-block">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa fa-file-export"></i> {{ _("Export") }}
+                    </button>
+                    <ul class="dropdown-menu" id="table-exporters-menu">
+                        {% for exporter in table.exporters %}
+                            <li>
+                                <button class="dropdown-item" data-exporter="{{ exporter.name }}">
+                                    {% if exporter.icon %}
+                                        <i class="{{ exporter.icon }} me-1"></i>
+                                    {% endif %}
+                                    {{ exporter.label }}
+                                </button>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endblock %}
     </div>
 {% endblock table_control %}
 
