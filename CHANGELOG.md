@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2025-11-04
+
+### 🐛 Bug Fixes
+
+- Fix check_access, remove unused table register
+
+## [1.5.0] - 2025-11-04
+
+### 🚀 Features
+
+- Add tables_demo sub plugin for dev and test purposes
+
+## [1.4.0] - 2025-11-04
+
+### 🚀 Features
+
+- Move ajax request and export views to generic
+
+## [1.3.2] - 2025-11-03
+
+### ⚙️ Miscellaneous Tasks
+
+- Refactor tables-tabulator to keep it dry
+
+## [1.3.1] - 2025-11-03
+
+### ⚙️ Miscellaneous Tasks
+
+- Rewrite tables-tabulator script with typescript
+
+## [1.3.0] - 2025-11-03
+
+### 🚀 Features
+
+- Add exporters system, finish
+
+## [1.2.0] - 2025-10-21
+
+### 🚀 Features
+
+- Add redirect support for table action, change actions signatures
+
+## [1.1.1] - 2025-10-21
+
+### 🐛 Bug Fixes
+
+- Fix breadcrumb link
+
+## [1.1.0] - 2025-10-21
+
+### 🚀 Features
+
+- Rework filters and actions, part 1
+- Rework filters and actions, part 2
+- Rework filters and actions, part 3
+- Add initial_row to formatters
+
 ## [0.4.0] - 2025-09-30
 
 ### 🚀 Features
