@@ -1,6 +1,6 @@
 [project]
 name = "ckanext-tables"
-version = "1.4.0"
+version = "1.5.0"
 description = "An extension to render dynamic tables"
 readme = "README.md"
 authors = [
@@ -28,7 +28,7 @@ Homepage = "https://github.com/DataShades/ckanext-tables"
 
 [project.entry-points."ckan.plugins"]
 tables = "ckanext.tables.plugin:TablesPlugin"
-
+tables_demo = "ckanext.tables_demo.plugin:TablesDemoPlugin"
 
 [build-system]
 requires = ["setuptools"]
@@ -111,7 +111,7 @@ section-order = [
 [tool.ruff.lint.isort.sections]
 ckan = ["ckan"]
 ckanext = ["ckanext"]
-self = ["ckanext.tables"]
+self = ["ckanext.tables", "ckanext.tables_demo"]
 
 [tool.pyright]
 pythonVersion = "3.10"
