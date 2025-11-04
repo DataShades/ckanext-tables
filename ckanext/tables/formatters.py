@@ -9,8 +9,6 @@ from ckan.plugins import toolkit as tk
 
 from ckanext.tables import table, types
 
-formatter_registry: types.Registry[str, type[BaseFormatter]] = types.Registry({})
-
 
 class BaseFormatter(abc.ABC):
     """Abstract base class for all formatters."""

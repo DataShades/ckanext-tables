@@ -99,6 +99,9 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
         self.page_title = page_title
 
     def get(self) -> str | Response:
+        if not self.check_access():
+            return tk.abort(403, tk._("You are not authorized to view this table."))
+
         table = self.table()  # type: ignore
 
         if exporter_name := request.args.get("exporter"):
@@ -113,6 +116,9 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
         )
 
     def post(self) -> Response:
+        if not self.check_access():
+            return tk.abort(403, tk._("You are not authorized to perform this action."))
+
         table_instance = self.table()  # type: ignore
         row_action = request.form.get("row_action")
         table_action = request.form.get("table_action")
@@ -128,3 +134,11 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
             return self._apply_bulk_action(table_instance, bulk_action, rows)
 
         return jsonify({"success": False, "error": "No action specified"})
+
+    def check_access(self) -> bool:
+        try:
+            self.table.check_access({})
+        except tk.NotAuthorized:
+            return False
+
+        return True

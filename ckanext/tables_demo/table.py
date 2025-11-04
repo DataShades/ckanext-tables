@@ -1,6 +1,5 @@
 from typing import Any
 
-
 import ckanext.tables.shared as tables
 
 
@@ -48,6 +47,7 @@ class PeopleTable(tables.TableDefinition):
                     label="Remove User",
                     icon="fa fa-trash",
                     callback=self.remove_user,
+                    with_confirmation=True,
                 ),
             ],
             bulk_actions=[
@@ -85,7 +85,7 @@ class PeopleTable(tables.TableDefinition):
 
     def remove_user(self, row: tables.Row) -> tables.ActionHandlerResult:
         """Callback to remove a user from the data source."""
-        global data # noqa: PLW0603
+        global data  # noqa: PLW0603
         data = [r for r in data if r["id"] != row["id"]]
         return tables.ActionHandlerResult(success=True, message="User removed.")
 

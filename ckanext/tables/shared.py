@@ -8,7 +8,6 @@ from .table import (
     RowActionDefinition,
     TableActionDefinition,
     TableDefinition,
-    table_registry,
 )
 from .types import (
     ActionHandlerResult,
@@ -19,7 +18,6 @@ from .types import (
     Row,
     TableActionHandler,
     Value,
-    collect_tables_signal,
 )
 from .utils import tables_build_params
 
@@ -43,7 +41,5 @@ __all__ = [
     "Row",
     "TableDefinition",
     "Value",
-    "collect_tables_signal",
-    "table_registry",
     "tables_build_params",
 ]

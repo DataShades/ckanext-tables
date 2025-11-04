@@ -19,28 +19,6 @@ def tables_json_dumps(value: Any) -> str:
     return json.dumps(value)
 
 
-def tables_get_table(table_name: str) -> table.TableDefinition | None:
-    """Get a table definition by its name.
-
-    Args:
-        table_name: The name of the table to get
-
-    Returns:
-        The table definition or None if the table does not exist
-    """
-    table_class = table.table_registry.get(table_name)
-
-    if not table_class:
-        return None
-
-    try:
-        table_class.check_access({"user": tk.current_user.name})
-    except tk.NotAuthorized:
-        return None
-
-    return table_class
-
-
 def tables_get_filters_from_request() -> list[table.FilterItem]:
     """Get the filters from the request arguments.
 

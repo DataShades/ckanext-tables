@@ -14,8 +14,6 @@ from ckanext.tables import formatters, types
 from ckanext.tables.data_sources import BaseDataSource
 from ckanext.tables.exporters import ExporterBase
 
-table_registry: types.Registry[str, TableDefinition] = types.Registry({})
-
 
 @dataclass
 class QueryParams:
@@ -171,13 +169,13 @@ class TableDefinition:
         This class method can be overridden in subclasses to implement
         custom access control logic.
 
-        By default, it checks if the user has the `package_search` permission,
-        which means that the table is publicly accessible.
+        By default, it checks if the user has the `sysadmin` permission,
+        which means that the table is available only to system administrators.
 
         Raises:
             tk.NotAuthorized: If the user does not have an access
         """
-        tk.check_access("package_search", context)
+        tk.check_access("sysadmin", context)
 
     def get_bulk_action(self, action: str) -> BulkActionDefinition | None:
         return next((a for a in self.bulk_actions if a.action == action), None)
