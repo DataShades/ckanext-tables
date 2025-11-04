@@ -53,8 +53,6 @@ class TableDefinition:
 
     name: str
     data_source: BaseDataSource
-    ajax_url: str | None = None
-    export_url: str | None = None
     columns: list[ColumnDefinition] = dataclass_field(default_factory=list)
     row_actions: list[RowActionDefinition] = dataclass_field(default_factory=list)
     bulk_actions: list[BulkActionDefinition] = dataclass_field(default_factory=list)
@@ -66,12 +64,6 @@ class TableDefinition:
 
     def __post_init__(self):
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
-
-        if self.ajax_url is None:
-            self.ajax_url = tk.url_for("tables.ajax", table_name=self.name)
-
-        if self.export_url is None:
-            self.export_url = tk.url_for("tables.export", table_name=self.name)
 
         if self.placeholder is None:
             self.placeholder = tk._("No data found")
@@ -96,8 +88,6 @@ class TableDefinition:
         options: dict[str, Any] = {
             "columns": columns,
             "placeholder": self.placeholder,
-            "ajaxURL": self.ajax_url,
-            "exportURL": self.export_url,
             "sortMode": "remote",
             "layout": "fitColumns",
             "pagination": True,
@@ -286,8 +276,8 @@ class TableActionDefinition:
     callback: Callable[..., types.ActionHandlerResult]
     icon: str | None = None
 
-    def __call__(self, row: types.Row) -> types.ActionHandlerResult:
-        return self.callback(row)
+    def __call__(self) -> types.ActionHandlerResult:
+        return self.callback()
 
 
 @dataclass(frozen=True)

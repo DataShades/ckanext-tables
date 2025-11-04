@@ -87,6 +87,8 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _initTabulatorInstance: function (): void {
+            this.options.config.ajaxURL = window.location.pathname;
+
             if (this.options.rowActions) {
                 const rowActions = this.options.rowActions as Record<string, TabulatorAction>;
                 this.options.config.rowContextMenu = Object.values(rowActions).map((action: TabulatorAction) => ({
@@ -101,7 +103,7 @@ ckan.module("tables-tabulator", function ($) {
                 };
             }
 
-            let initialPage = new URLSearchParams(window.location.search).get("page");
+            const initialPage = new URLSearchParams(window.location.search).get("page");
 
             this.table = new Tabulator(this.el[0], {
                 ...this.options.config,
@@ -320,14 +322,14 @@ ckan.module("tables-tabulator", function ($) {
         _updateUrl: function (): void {
             const url = new URL(window.location.href);
             Array.from(url.searchParams.keys()).forEach(key => {
-                if (key.startsWith('field') || key.startsWith('operator') || key.startsWith('q')) {
+                if (key.startsWith('field') || key.startsWith('operator') || key.startsWith('value')) {
                     url.searchParams.delete(key);
                 }
             });
             this.tableFilters.forEach((filter: TableFilter) => {
                 url.searchParams.append('field', filter.field);
                 url.searchParams.append('operator', filter.operator);
-                url.searchParams.append('q', filter.value);
+                url.searchParams.append('value', filter.value);
             });
             window.history.replaceState({}, "", url);
         },
@@ -376,7 +378,7 @@ ckan.module("tables-tabulator", function ($) {
                 url.searchParams.set(`sort[0][field]`, s.field);
                 url.searchParams.set(`sort[0][dir]`, s.dir);
             });
-            a.href = this.sandbox.client.url(this.options.config.exportURL) + url.search;
+            a.href = this.sandbox.client.url(this.options.config.ajaxURL) + url.search;
             a.download = `${this.options.config.tableId || 'table'}.${exporter}`;
             document.body.appendChild(a);
             a.click();

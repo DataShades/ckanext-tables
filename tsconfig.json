@@ -8,8 +8,8 @@
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
-        "inlineSources": true,
-        "inlineSourceMap": true,
+        "inlineSourceMap": false,
+        "removeComments": true,
     },
     "include": ["ckanext/tables/assets/ts/"]
 }

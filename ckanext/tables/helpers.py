@@ -41,7 +41,7 @@ def tables_get_table(table_name: str) -> table.TableDefinition | None:
     return table_class
 
 
-def tables_get_filters_from_request() -> list[dict[str, str]]:
+def tables_get_filters_from_request() -> list[table.FilterItem]:
     """Get the filters from the request arguments.
 
     Returns:
@@ -49,9 +49,12 @@ def tables_get_filters_from_request() -> list[dict[str, str]]:
     """
     fields = tk.request.args.getlist("field")
     operators = tk.request.args.getlist("operator")
-    values = tk.request.args.getlist("q")
+    values = tk.request.args.getlist("value")
 
-    return [{"field": f, "operator": op, "q": q} for f, op, q in zip(fields, operators, values, strict=True)]
+    return [
+        table.FilterItem(field=field, operator=op, value=value)
+        for field, op, value in zip(fields, operators, values, strict=True)
+    ]
 
 
 def tables_generate_unique_id() -> str:

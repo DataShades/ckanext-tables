@@ -45,5 +45,5 @@ __all__ = [
     "Value",
     "collect_tables_signal",
     "table_registry",
-    "tables_build_params"
+    "tables_build_params",
 ]

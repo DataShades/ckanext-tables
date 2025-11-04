@@ -7,7 +7,6 @@ from ckanext.tables.types import collect_tables_signal
 
 
 @tk.blanket.helpers
-@tk.blanket.blueprints
 class TablesPlugin(p.SingletonPlugin):
     p.implements(p.IConfigurer)
     p.implements(p.IConfigurable)
