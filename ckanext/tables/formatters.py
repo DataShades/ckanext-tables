@@ -43,6 +43,22 @@ class DateFormatter(BaseFormatter):
         return tk.h.render_datetime(value, date_format=date_format)
 
 
+class URLFormatter(BaseFormatter):
+    """Generates a clickable link for a URL.
+
+    Options:
+        - `target` (str): The target attribute for the link. Defaults to "_blank".
+    """
+
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
+        if not value:
+            return ""
+
+        target = options.get("target", "_blank")
+
+        return tk.literal(f"<a href='{value}' target='{target}'>{value}</a>")
+
+
 class UserLinkFormatter(BaseFormatter):
     """Generates a link to a user's profile with a placeholder avatar.
 
