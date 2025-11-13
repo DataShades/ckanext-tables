@@ -6,6 +6,8 @@ A CKAN extension to display tabular data in a nice way using [Tabulator](http://
 
 See the [documentation](https://datashades.github.io/ckanext-tables/) for more information.
 
+!["Rendered Table Example"](docs/image/usage_result.png)
+
 ## Tests
 
 To run the tests, do:
