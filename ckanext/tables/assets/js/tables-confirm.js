@@ -75,7 +75,7 @@
             </div>
             <div class="modal-body">${opts.message}</div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary btn-cancel" id="${select.cancelBtn.slice(1)}">${opts.cancelText}</button>
+              <button type="button" class="btn btn-light btn-cancel" id="${select.cancelBtn.slice(1)}">${opts.cancelText}</button>
               <button type="button" class="btn ${style.confirm}" id="${select.confirmBtn.slice(1)}">${opts.confirmText}</button>
             </div>
           </div>
