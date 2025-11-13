@@ -36,6 +36,7 @@ theme:
 watch:
   - README.md
   - ckanext/tables/
+  - ckanext/tables_demo/
 
 nav:
   - Home: index.md
@@ -43,7 +44,14 @@ nav:
 
   - Usage: usage.md
 
-  - Table: table.md
+  - Entities:
+    - Overview: entities/index.md
+    - Table: entities/table.md
+    - Column: entities/column.md
+    - Actions: entities/actions.md
+
+  - Exporters:
+    - Overview: exporters/index.md
 
   - Formatters:
     - Overview: formatters/index.md
