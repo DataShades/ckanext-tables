@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Boolean, DateTime, Integer
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.sql import Select, func, select
 from sqlalchemy.sql.elements import BinaryExpression, ClauseElement, ColumnElement
 from typing_extensions import Self
@@ -99,10 +100,13 @@ class DatabaseDataSource(BaseDataSource):
 
         return self
 
-    def all(self):
-        return [dict(row) for row in model.Session.execute(self.stmt).mappings().all()]
+    def all(self) -> list[dict[str, Any]]:
+        return [self.serialize_row(row) for row in model.Session.execute(self.stmt).mappings().all()]  # type: ignore
 
-    def count(self):
+    def serialize_row(self, row: RowMapping) -> dict[str, Any]:
+        return dict(row)
+
+    def count(self) -> int:
         return model.Session.execute(select(func.count()).select_from(self.stmt.subquery())).scalar_one()
 
 
