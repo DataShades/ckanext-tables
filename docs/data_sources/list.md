@@ -1,6 +1,6 @@
 # ListDataSource
 
-The `ListDataSource` works with Python lists of dictionaries. It's useful for testing, demos, or when working with pre-loaded data.
+The `ListDataSource` works with Python lists of dictionaries. It is useful for small datasets, testing, demos, or when working with preloaded data.
 
 ## Basic Usage
 

@@ -2,121 +2,83 @@
 
 Here you can find complete usage instructions for the Tables extension. The process is fairly simple and involves only several steps:
 
-1. Defining a Table
-2. Registering a Table
-3. Creating a view to display the table
+1. Defining a table
+2. Creating a view to display the table
+
+We're going to use a **demo** table definition called `PeopleTable` for demonstration purposes.
+
+It's a working example located in a separate extension and can be enabled alongside the tables extension. Just add `tables_demo` to your `ckan.plugins` configuration.
+
+The demo table uses all the features of the tables extension, including data sources, formatters, all action types, and exporters. A minimal example could be much simpler, but this one demonstrates the full power of the extension.
 
 ## Defining a Table
 
 First, create a table definition by inheriting from `TableDefinition`.
 
-We will use the `ListDataSource` for demonstration purposes, but in a real-world scenario, you might want to use `DatabaseDataSource` or create a custom data source. Read more about data sources [here](data_sources/index.md).
+We will use the `ListDataSource` with a mock data for demonstration purposes, but in a real-world scenario, you might want to use `DatabaseDataSource` or create a custom data source. Read more about data sources [here](data_sources/index.md).
+
+In general, `ListDataSource` is suitable for small datasets or testing, while `DatabaseDataSource` is recommended for production use with larger datasets.
+
+If you're interested in how we're generating the mock data, check out the `generate_mock_data` function below:
+
+::: tables_demo.utils.generate_mock_data
+    options:
+      show_source: true
+
+---
+
+Below is the full code of the `PeopleTable` definition:
 
 ```python
-# table.py
-
-from ckanext.tables.shared import (
-    ColumnDefinition,
-    ListDataSource,
-    TableDefinition,
-    formatters,
-)
-
-
-class PeopleTable(TableDefinition):
-    """Demo table definition for the people table."""
-
-    def __init__(self):
-        super().__init__(
-            name="people",
-            data_source=ListDataSource(
-                data=[
-                    {"id": 1, "name": "Alice", "surname": "Green", "created": "2024-07-30T15:44:27.801949"},
-                    {"id": 2, "name": "Bob", "surname": "Brown", "created": "2024-01-11T08:44:27.801949"},
-                    {"id": 3, "name": "Charlie", "surname": "Black", "created": "2025-05-25T21:44:27.801949"},
-                    {"id": 4, "name": "Diana", "surname": "White", "created": "2025-03-17T12:44:27.801949"},
-                    {"id": 5, "name": "Eve", "surname": "Gray", "created": "2023-04-21T13:44:27.801949"},
-                ]
-            ),
-            columns=[
-                ColumnDefinition(field="id"),
-                ColumnDefinition(field="name"),
-                ColumnDefinition(field="surname", title="Last Name"),
-                ColumnDefinition(
-                    field="created",
-                    formatters=[(formatters.DateFormatter, {"date_format": "%d %B %Y"})],
-                ),
-            ],
-        )
+--8<-- "ckanext/tables_demo/table.py"
 ```
 
 ### Using Formatters
 
-The tables extension provides several built-in formatters to change the way data is rendered in the table cells. You can apply one or more formatters to a column by specifying them in the `formatters` attribute of `ColumnDefinition`.:
+The tables extension provides several built-in formatters to change the way data is rendered in the table cells. You can apply one or more formatters to a column by specifying them in the `formatters` attribute of `ColumnDefinition`.
 
 For example, from the above `PeopleTable`, we are using the `datetime` formatter to format the `created` field. So this `2024-02-25T11:10:00Z` value will be displayed as `2024-02-25`.
 
-```python
+```py
 ColumnDefinition(
     field="created",
-    formatters=[("datetime", {"format": "%Y-%m-%d"})],
+    formatters=[(formatters.DateFormatter, {"date_format": "%Y-%m-%d"})],
     sortable=True
 ),
 ```
 
-## Registering the Table
+### Using Exporters
 
-To make your table available in the system, register it using the `ISignal` interface in your plugin:
+The tables extension also provides several built-in exporters to export the table data in different formats. You can specify the exporters to be used in the `exporters` attribute of the `TableDefinition`.
 
-```python
-# plugin.py
+In the above `PeopleTable`, we are using all the available exporters by specifying `t.ALL_EXPORTERS`. You can also specify individual exporters if you want to limit the available export options.
 
-from typing import Any
-
-from ckan import plugins, types
-from ckan.plugins import toolkit as tk
-
-from ckanext.tables_demo.table import PeopleTable
-
-
-class MyPlugin(plugins.SingletonPlugin):
-    plugins.implements(plugins.ISignal)
-
-    # ISignal
-
-    def get_signal_subscriptions(self) -> types.SignalMapping:
-        return {
-            tk.signals.ckanext.signal("ckanext.tables.register_tables"): [
-                self.collect_tables
-            ],
-        }
-
-    def collect_tables(self, sender: None) -> dict[str, type[Any]]:
-        return {"people": PeopleTable}
+```py
+exporters=[
+    t.exporters.CSVExporter,
+    t.exporters.TSVExporter,
+],
 ```
+
+Obviously, you can write your own custom exporters as well. See the [exporters](exporters/index.md) documentation for more information.
+
+### Using Actions
+
+The tables extension allows you to define actions that can be performed on individual rows or on multiple selected rows. You can define these actions in the `row_actions`, `table_actions` and `bulk_actions` attributes of the `TableDefinition`.
+
+Basically, it's just a matter of defining the action and providing a **callback function** that will be called when the action is **triggered**.
+
+Read more about actions in the [actions](entities/actions.md) documentation.
 
 ## Creating a View
 
-Once your table is registered, you can create a view to display it using the `GenericTableView`:
+Once your table is defined, you can create a view to display it using the `GenericTableView`:
 
 ```python
-# views.py
-
-from flask import Blueprint
-
-from ckanext.tables.shared import GenericTableView
-
-
-bp = Blueprint("my_tables", __name__, url_prefix="/admin")
-
-bp.add_url_rule(
-    "/people",
-    view_func=GenericTableView.as_view(
-        "people_table",
-        table="people",  # Must match the registered table name
-    ),
-)
+--8<-- "ckanext/tables_demo/views.py"
 ```
+
+As you can see, this view does not require any custom code to render the table. The `GenericTableView` takes care of everything.
 
 ## Results
 
@@ -128,3 +90,5 @@ After completing the above steps, you can navigate to `/admin/people` in your CK
 
 - Learn about [Data Sources](data_sources/index.md) for different data backends
 - Explore [Built-In](formatters/built-in.md) and [Custom Formatters](formatters/custom.md) to enhance table presentation.
+- Explore [Actions](entities/actions.md) to add interactivity to your tables.
+- Explore [Exporters](exporters/index.md) to provide data export functionality.
