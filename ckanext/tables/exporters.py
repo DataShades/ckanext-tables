@@ -9,7 +9,7 @@ import yaml
 import ckan.plugins.toolkit as tk
 
 if TYPE_CHECKING:
-    from ckanext.tables.table import QueryParams, TableDefinition
+    from ckanext.tables.table import ColumnDefinition, QueryParams, TableDefinition
 
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,18 @@ class ExporterBase:
         """
         raise NotImplementedError
 
+    @classmethod
+    def get_table_columns(cls, table: "TableDefinition") -> list["ColumnDefinition"]:
+        """Get the list of table columns to be exported.
+
+        Returns:
+            A list of column field names.
+        """
+        # avoid circular import
+        from ckanext.tables.table import COLUMN_ACTIONS_FIELD  # noqa PLC0415
+
+        return [col for col in table.columns if col.field != COLUMN_ACTIONS_FIELD]
+
 
 class CSVExporter(ExporterBase):
     """CSV exporter for table data."""
@@ -47,16 +59,16 @@ class CSVExporter(ExporterBase):
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
         output = StringIO()
         writer = csv.writer(output)
+        columns = cls.get_table_columns(table)
 
-        # Write header
-        header = [col.title for col in table.columns]
+        header = [col.title for col in columns]
         writer.writerow(header)
 
         # Write data rows
         data = table.get_raw_data(params, paginate=False)
 
         for row in data:
-            writer.writerow([row.get(col.field, "") for col in table.columns])
+            writer.writerow([row.get(col.field, "") for col in columns])
 
         return output.getvalue().encode("utf-8")
 
@@ -85,7 +97,7 @@ class XLSXExporter(ExporterBase):
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
         try:
-            from openpyxl import Workbook
+            from openpyxl import Workbook  # noqa: PLC0415
         except ImportError:
             log.warning("openpyxl is required for XLSX export but is not installed.")
             return b""
@@ -94,14 +106,14 @@ class XLSXExporter(ExporterBase):
         ws = wb.active
         ws.title = "Data"  # type: ignore
 
-        # Write header
-        header = [col.title for col in table.columns]
+        columns = cls.get_table_columns(table)
+        header = [col.title for col in columns]
         ws.append(header)  # type: ignore
 
         # Write data rows
         data = table.get_raw_data(params, paginate=False)
         for row in data:
-            ws.append([row.get(col.field, "") for col in table.columns])  # type: ignore
+            ws.append([row.get(col.field, "") for col in columns])  # type: ignore
 
         output = BytesIO()
         wb.save(output)
@@ -120,14 +132,14 @@ class TSVExporter(ExporterBase):
         output = StringIO()
         writer = csv.writer(output, delimiter="\t")
 
-        # Header
-        header = [col.title for col in table.columns]
+        columns = cls.get_table_columns(table)
+        header = [col.title for col in columns]
         writer.writerow(header)
 
         # Rows
         data = table.get_raw_data(params, paginate=False)
         for row in data:
-            writer.writerow([row.get(col.field, "") for col in table.columns])
+            writer.writerow([row.get(col.field, "") for col in columns])
 
         return output.getvalue().encode("utf-8")
 
@@ -169,16 +181,11 @@ class HTMLExporter(ExporterBase):
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
         data = table.get_raw_data(params, paginate=False)
-        headers = [col.title for col in table.columns if col.field != "table_actions" and col.visible]
+        columns = cls.get_table_columns(table)
+        headers = [col.title for col in columns]
 
         rows_html = "\n".join(
-            "<tr>{}</tr>".format(
-                "".join(
-                    "<td>{}</td>".format(row.get(col.field, ""))
-                    for col in table.columns
-                    if col.field != "table_actions" and col.visible
-                )
-            )
+            "<tr>{}</tr>".format("".join("<td>{}</td>".format(row.get(col.field, "")) for col in columns))
             for row in data
         )
         thead = "<tr>{}</tr>".format("".join(f"<th>{h}</th>" for h in headers))
