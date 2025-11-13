@@ -1,4 +1,4 @@
-[![Tests](https://github.com/DataShades/ckanext-tables/actions/workflows/test.yml/badge.svg)](https://github.com/DataShades/ckanext-tables/actions/workflows/test.yml)
+<!-- [![Tests](https://github.com/DataShades/ckanext-tables/actions/workflows/test.yml/badge.svg)](https://github.com/DataShades/ckanext-tables/actions/workflows/test.yml) -->
 
 # ckanext-tables
 
