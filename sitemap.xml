@@ -2,50 +2,66 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://github.io/ckanext-tables/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/generics/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/helpers/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/install/</loc>
-         <lastmod>2025-09-25</lastmod>
-    </url>
-    <url>
-         <loc>https://github.io/ckanext-tables/table/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/usage/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/data_sources/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/data_sources/database/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/data_sources/list/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.io/ckanext-tables/entities/</loc>
+         <lastmod>2025-11-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.io/ckanext-tables/entities/actions/</loc>
+         <lastmod>2025-11-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.io/ckanext-tables/entities/column/</loc>
+         <lastmod>2025-11-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.io/ckanext-tables/entities/table/</loc>
+         <lastmod>2025-11-13</lastmod>
+    </url>
+    <url>
+         <loc>https://github.io/ckanext-tables/exporters/</loc>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/formatters/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/formatters/built-in/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
     <url>
          <loc>https://github.io/ckanext-tables/formatters/custom/</loc>
-         <lastmod>2025-09-25</lastmod>
+         <lastmod>2025-11-13</lastmod>
     </url>
 </urlset>
