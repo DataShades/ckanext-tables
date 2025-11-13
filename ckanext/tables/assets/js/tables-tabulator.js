@@ -106,6 +106,8 @@ ckan.module("tables-tabulator", function ($) {
                     }
                 }
                 else {
+                    console.log(resp);
+
                     if (resp.redirect) {
                         window.location.href = resp.redirect;
                         return;

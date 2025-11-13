@@ -12,7 +12,6 @@ from .table import (
 from .types import (
     ActionHandlerResult,
     BulkActionHandler,
-    BulkActionHandlerResult,
     FormatterResult,
     Options,
     Row,

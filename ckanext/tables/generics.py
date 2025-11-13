@@ -10,6 +10,7 @@ from flask.views import MethodView
 
 import ckan.plugins.toolkit as tk
 
+from ckanext.tables import exporters
 from ckanext.tables.table import TableDefinition
 from ckanext.tables.types import ActionHandlerResult
 from ckanext.tables.utils import tables_build_params
@@ -29,7 +30,12 @@ class AjaxTableMixin:
     def _apply_table_action(self, table: TableDefinition, action: str) -> Response:
         table_action = table.get_table_action(action)
         if not table_action:
-            return jsonify({"success": False, "errors": tk._("The table action is not implemented")})
+            return jsonify(
+                {
+                    "success": False,
+                    "errors": tk._("The table action is not implemented"),
+                }
+            )
 
         try:
             result = table_action()
@@ -53,18 +59,24 @@ class AjaxTableMixin:
 
     def _apply_bulk_action(self, table: TableDefinition, action: str, rows: str | None) -> Response:
         bulk_action_func = table.get_bulk_action(action) if action else None
+
         if not bulk_action_func or not rows:
-            return jsonify({"success": False, "errors": [tk._("The bulk action is not implemented")]})
+            return jsonify(
+                {
+                    "success": False,
+                    "errors": [tk._("The bulk action is not implemented")],
+                }
+            )
 
-        errors = []
+        rows_list = json.loads(rows)
 
-        for row in json.loads(rows):
-            result = bulk_action_func(row)
-            if not result["success"] and "error" in result:
-                log.debug("Error during bulk action %s: %s", action, result["error"])
-                errors.append(result["error"])
+        try:
+            result = bulk_action_func(rows_list)
+        except Exception as e:
+            log.exception("Error during bulk action %s", action)
+            return jsonify({"success": False, "error": str(e)})
 
-        return jsonify({"success": not errors, "errors": errors})
+        return jsonify(ActionHandlerResult(**result))
 
 
 class ExportTableMixin:
@@ -74,15 +86,18 @@ class ExportTableMixin:
         if not exporter:
             return tk.abort(404, tk._(f"Exporter {exporter_name} not found"))
 
-        params = tables_build_params()
-        data = exporter.export(table, params)
-        timestamp = dt.now(tz.utc).strftime("%Y-%m-%d %H-%M-%S")
+        data = exporter.export(table, tables_build_params())
+        filename = self._prepare_export_filename(table, exporter)
 
         return Response(
             data,
             mimetype=exporter.mime_type,
-            headers={"Content-Disposition": f"attachment; filename={table.name}-{timestamp}.{exporter.name}"},
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
+
+    def _prepare_export_filename(self, table: TableDefinition, exporter: type[exporters.ExporterBase]) -> str:
+        timestamp = dt.now(tz.utc).strftime("%Y-%m-%d %H-%M-%S")
+        return f"{table.name}-{timestamp}.{exporter.name}"
 
 
 class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
@@ -115,11 +130,27 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
             page_title=self.page_title,
         )
 
+    def _dispatch_get(self, table_instance: TableDefinition) -> str | Response:
+        if exporter_name := request.args.get("exporter"):
+            return self._export(table_instance, exporter_name)
+
+        if tk.request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return self._ajax_data(table_instance)
+
+        return table_instance.render_table(
+            breadcrumb_label=self.breadcrumb_label,
+            page_title=self.page_title,
+        )
+
     def post(self) -> Response:
         if not self.check_access():
             return tk.abort(403, tk._("You are not authorized to perform this action."))
 
         table_instance = self.table()  # type: ignore
+
+        return self._dispatch_post(table_instance)
+
+    def _dispatch_post(self, table_instance: TableDefinition) -> Response:
         row_action = request.form.get("row_action")
         table_action = request.form.get("table_action")
         bulk_action = request.form.get("bulk_action")

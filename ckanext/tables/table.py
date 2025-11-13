@@ -14,6 +14,8 @@ from ckanext.tables import formatters, types
 from ckanext.tables.data_sources import BaseDataSource
 from ckanext.tables.exporters import ExporterBase
 
+COLUMN_ACTIONS_FIELD = "__table_actions"
+
 
 @dataclass
 class QueryParams:
@@ -69,7 +71,7 @@ class TableDefinition:
         if self.row_actions:
             self.columns.append(
                 ColumnDefinition(
-                    field="table_actions",
+                    field=COLUMN_ACTIONS_FIELD,
                     title=tk._(""),
                     formatters=[(formatters.ActionsFormatter, {})],
                     filterable=False,
@@ -206,6 +208,9 @@ class ColumnDefinition:
         sorter: The default sorter for the column (e.g., "string", "number").
         filterable: Whether the column can be filtered by the user.
         resizable: Whether the column is resizable by the user.
+        tooltip: Whether to show a tooltip with the full content on hover.
+        vertical_align: Vertical alignment of the column content. Defaults to "middle".
+        horizontal_align: Horizontal alignment of the column content. Defaults to "".
     """
 
     field: str
@@ -219,6 +224,9 @@ class ColumnDefinition:
     sortable: bool = True
     filterable: bool = True
     resizable: bool = True
+    tooltip: bool = False
+    vertical_align: str = "middle"
+    horizontal_align: str = ""
 
     def __post_init__(self):
         if self.title is None:
@@ -231,6 +239,9 @@ class ColumnDefinition:
             "title": self.title,
             "visible": self.visible,
             "resizable": self.resizable,
+            "tooltip": self.tooltip,
+            "vertAlign": self.vertical_align,
+            "hozAlign": self.horizontal_align,
         }
 
         mappings = {
@@ -254,20 +265,34 @@ class ColumnDefinition:
 
 @dataclass(frozen=True)
 class BulkActionDefinition:
-    """Defines an action that can be performed on multiple rows."""
+    """Defines an action that can be performed on multiple rows.
+
+    Attributes:
+        action: Unique identifier for the action.
+        label: Display label for the action.
+        callback: Function to be called when the action is triggered.
+        icon: (Optional) Icon class for the action.
+    """
 
     action: str
     label: str
-    callback: Callable[[types.Row], types.BulkActionHandlerResult]
+    callback: Callable[[list[types.Row]], types.ActionHandlerResult]
     icon: str | None = None
 
-    def __call__(self, row: types.Row) -> types.BulkActionHandlerResult:
-        return self.callback(row)
+    def __call__(self, rows: list[types.Row]) -> types.ActionHandlerResult:
+        return self.callback(rows)
 
 
 @dataclass(frozen=True)
 class TableActionDefinition:
-    """Defines an action that can be performed on the table itself."""
+    """Defines an action that can be performed on the table itself.
+
+    Attributes:
+        action: Unique identifier for the action.
+        label: Display label for the action.
+        callback: Function to be called when the action is triggered.
+        icon: (Optional) Icon class for the action.
+    """
 
     action: str
     label: str
@@ -280,7 +305,15 @@ class TableActionDefinition:
 
 @dataclass(frozen=True)
 class RowActionDefinition:
-    """Defines an action that can be performed on a row."""
+    """Defines an action that can be performed on a row.
+
+    Attributes:
+        action: Unique identifier for the action.
+        label: Display label for the action.
+        callback: Function to be called when the action is triggered.
+        icon: (Optional) Icon class for the action.
+        with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
+    """
 
     action: str
     label: str
