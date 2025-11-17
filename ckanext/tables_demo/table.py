@@ -18,9 +18,7 @@ class PeopleTable(t.TableDefinition):
                 t.ColumnDefinition(field="email"),
                 t.ColumnDefinition(
                     field="created",
-                    formatters=[
-                        (t.formatters.DateFormatter, {"date_format": "%d %B %Y"})
-                    ],
+                    formatters=[(t.formatters.DateFormatter, {"date_format": "%d %B %Y"})],
                 ),
             ],
             row_actions=[

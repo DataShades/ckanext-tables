@@ -24,6 +24,7 @@ class ActionHandlerResult(TypedDict):
         redirect: (Optional) URL to redirect to after the action.
         message: (Optional) Informational message about the action result.
     """
+
     success: bool
     error: NotRequired[str | None]
     redirect: NotRequired[str | None]

@@ -32,16 +32,15 @@ class DatabaseDataSource(BaseDataSource):
         model: The model class to use for filtering and sorting, e.g. `model.User`
     """
 
-    def __init__(self, stmt: Select, model: type[Any]):
+    def __init__(self, stmt: Select):
         self.base_stmt = stmt
         self.stmt = stmt
-        self.model = model
 
     def filter(self, filters: list[FilterItem]) -> Self:
         self.stmt = self.base_stmt
 
         for filter_item in filters:
-            col = getattr(self.model, filter_item.field)
+            col = getattr(self.stmt.selected_columns, filter_item.field)
             expr = self.build_filter(col, filter_item.operator, filter_item.value)
 
             if expr is not None:
@@ -79,10 +78,10 @@ class DatabaseDataSource(BaseDataSource):
         return func(column, casted_value) if func else None
 
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
-        if not sort_by or not hasattr(self.model, sort_by):
+        if not sort_by or not hasattr(self.stmt.selected_columns, sort_by):
             return self
 
-        col = getattr(self.model, sort_by)
+        col = getattr(self.stmt.selected_columns, sort_by)
 
         # Clear existing order_by clauses
         self.stmt = self.stmt.order_by(None)
