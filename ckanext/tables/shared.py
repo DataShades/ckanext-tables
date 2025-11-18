@@ -29,6 +29,7 @@ ALL_EXPORTERS = [
     exporters.YAMLExporter,
     exporters.NDJSONExporter,
     exporters.HTMLExporter,
+    exporters.PDFExporter,
 ]
 __all__ = [
     "RowActionDefinition",

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>{{ table.title or table.name }}</title>
+
+    <style>
+        @page {
+            margin: 5mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            padding: 0;
+            margin: 10px;
+            color: #333;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        thead tr {
+            background-color: #f0f0f0;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 6px 8px;
+            word-wrap: break-word;
+            font-size: 12px;
+
+            word-break: break-all;
+            overflow-wrap: anywhere;
+        }
+
+        th {
+            font-weight: bold;
+            text-align: left;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        .timestamp {
+            font-family: monospace;
+            font-size: 11px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Export for table "{{ table.name }}" ({{ timestamp }})</h1>
+
+    <table>
+        <thead>
+            <tr>
+                {% for header in headers %}
+                    <th>{{ header }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in data %}
+                <tr>
+                    {% for col in columns %}
+                        {% set value = row.get(col.field) %}
+                        <td>
+                            {{ value if value not in (None, '') else '-' }}
+                        </td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+
+</html>

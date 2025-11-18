@@ -1,6 +1,7 @@
 import csv
 import json
 import logging
+from datetime import datetime, timezone
 from io import BytesIO, StringIO
 from typing import TYPE_CHECKING
 
@@ -9,7 +10,8 @@ import yaml
 import ckan.plugins.toolkit as tk
 
 if TYPE_CHECKING:
-    from ckanext.tables.table import ColumnDefinition, QueryParams, TableDefinition
+    from ckanext.tables.table import ColumnDefinition, TableDefinition
+    from ckanext.tables.types import QueryParams
 
 
 log = logging.getLogger(__name__)
@@ -183,21 +185,35 @@ class HTMLExporter(ExporterBase):
         data = table.get_raw_data(params, paginate=False)
         columns = cls.get_table_columns(table)
         headers = [col.title for col in columns]
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-        rows_html = "\n".join(
-            "<tr>{}</tr>".format("".join("<td>{}</td>".format(row.get(col.field, "")) for col in columns))
-            for row in data
-        )
-        thead = "<tr>{}</tr>".format("".join(f"<th>{h}</th>" for h in headers))
-        html = f"""
-        <html>
-            <head><meta charset="utf-8"><title>{table.name}</title></head>
-            <body>
-                <table border="1">
-                    <thead>{thead}</thead>
-                    <tbody>{rows_html}</tbody>
-                </table>
-            </body>
-        </html>
-        """
-        return html.encode("utf-8")
+        return tk.render(
+            "tables/exporters/html_export.html",
+            {
+                "data": data,
+                "headers": headers,
+                "table": table,
+                "timestamp": timestamp,
+                "columns": columns,
+            },
+        ).encode("utf-8")
+
+
+class PDFExporter(ExporterBase):
+    """PDF exporter for table data."""
+
+    name = "pdf"
+    label = tk._("PDF")
+    mime_type = "application/pdf"
+
+    @classmethod
+    def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
+        try:
+            from weasyprint import HTML  # noqa: PLC0415
+        except ImportError:
+            log.warning("WeasyPrint is required for PDF export but is not installed.")
+            return b""
+
+        # reuse HTML exporter template for PDF generation
+        html_content = HTMLExporter.export(table, params).decode("utf-8")
+        return HTML(string=html_content).write_pdf() or b""

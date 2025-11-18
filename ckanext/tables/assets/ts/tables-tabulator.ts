@@ -14,7 +14,7 @@ namespace ckan {
     export var i18n: {
         _: (msgid: string) => string;
     };
-    export var tablesToast: (options: { message: string; type?: string; title?: string }) => void;
+    export var tablesToast: (options: { message: string; type?: string; title?: string, stacking?: boolean }) => void;
     export var tablesConfirm: (options: { message: string; onConfirm: () => void }) => void;
 }
 
@@ -114,11 +114,12 @@ ckan.module("tables-tabulator", function ($) {
             });
         },
 
-        _showToast: function (message: string, type: string = "default"): void {
+        _showToast: function (message: string, type: string = "default", stacking: boolean = true): void {
             ckan.tablesToast({
                 message,
                 type,
                 title: ckan.i18n._("Tables"),
+                stacking,
             });
         },
 
@@ -371,23 +372,45 @@ ckan.module("tables-tabulator", function ($) {
             this._sendActionRequest(form, ckan.i18n._(`Table action completed: <b>${label}</b>`));
         },
 
-        _onTableExportClick: function (e: Event): void {
-            const exporter = (e.target as HTMLElement).dataset.exporter;
+        _onTableExportClick: async function (e: Event): Promise<void> {
+            const target = e.target as HTMLElement;
+            const exporter = target.dataset.exporter;
             if (!exporter) return;
 
-            const a = document.createElement("a");
-            const url = new URL(window.location.href);
-            url.searchParams.set("exporter", exporter);
-            url.searchParams.set("filters", JSON.stringify(this.tableFilters));
-            this.table.getSorters().forEach((s: { field: string; dir: string }) => {
-                url.searchParams.set(`sort[0][field]`, s.field);
-                url.searchParams.set(`sort[0][dir]`, s.dir);
-            });
-            a.href = this.sandbox.client.url(this.options.config.ajaxURL) + url.search;
-            a.download = `${this.options.config.tableId || "table"}.${exporter}`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            this.tableExportersMenu.previousElementSibling?.setAttribute("disabled", "true");
+
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set("exporter", exporter);
+                url.searchParams.set("filters", JSON.stringify(this.tableFilters));
+                this.table.getSorters().forEach((s: { field: string; dir: string }) => {
+                    url.searchParams.set(`sort[0][field]`, s.field);
+                    url.searchParams.set(`sort[0][dir]`, s.dir);
+                });
+
+                this._showToast(ckan.i18n._(`${target.innerText} export started.`));
+
+                const fullUrl = this.sandbox.client.url(this.options.config.ajaxURL) + url.search;
+                const response = await fetch(fullUrl);
+
+                if (!response.ok) throw new Error(`${target.innerText} export failed`);
+
+                const blob = await response.blob();
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `${this.options.config.tableId || "table"}.${exporter}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+
+                this._showToast(ckan.i18n._(`${target.innerText} export completed.`), "default", false);
+            } catch (error) {
+                this._showToast(ckan.i18n._(`${target.innerText} export failed. Please try again.`), "danger", false);
+                console.error('Export error:', error);
+            } finally {
+                this.tableExportersMenu.previousElementSibling?.removeAttribute("disabled");
+            }
         },
 
         _onRefreshTable: function (): void {
