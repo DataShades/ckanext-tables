@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Integer
 from sqlalchemy.engine import RowMapping
@@ -12,8 +12,7 @@ from typing_extensions import Self
 
 from ckan import model
 
-if TYPE_CHECKING:
-    from ckanext.tables.table import FilterItem
+from ckanext.tables.types import FilterItem
 
 
 class BaseDataSource:

@@ -80,6 +80,10 @@ $color-active: #206b82;
                     .tabulator-page {
                         border-radius: 0.25rem;
                         padding: 6px 12px;
+                        border: #dee2e6 solid 1px;
+                        color: #000;
+                        background-color: #fff;
+                        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 1px 1px rgba(0, 0, 0, 0.075);
 
                         &.active,
                         &:hover,

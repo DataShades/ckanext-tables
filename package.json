@@ -1,5 +1,11 @@
 {
     "dependencies": {
+        "gulp": "^5.0.1",
+        "gulp-if": "^3.0.0",
+        "gulp-sass": "^6.0.1",
+        "gulp-sourcemaps": "^3.0.0",
+        "gulp-touch-fd": "^2.0.0",
+        "sass": "^1.94.1",
         "tabulator-tables": "^6.3.1",
         "typescript": "^5.9.3"
     },
@@ -8,7 +14,9 @@
         "terser": "^5.44.0"
     },
     "scripts": {
-        "build": "tsc",
-        "watch": "tsc -w"
+        "dev": "DEBUG=1 gulp watch",
+        "build": "gulp build",
+        "ts-build": "tsc",
+        "ts-watch": "tsc -w"
     }
 }

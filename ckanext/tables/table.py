@@ -13,24 +13,9 @@ from ckan.types import Context
 from ckanext.tables import formatters, types
 from ckanext.tables.data_sources import BaseDataSource
 from ckanext.tables.exporters import ExporterBase
+from ckanext.tables.utils import CacheManager
 
 COLUMN_ACTIONS_FIELD = "__table_actions"
-
-
-@dataclass
-class QueryParams:
-    page: int = 1
-    size: int = 10
-    filters: list[FilterItem] = dataclass_field(default_factory=list)
-    sort_by: str | None = None
-    sort_order: str | None = None
-
-
-@dataclass(frozen=True)
-class FilterItem:
-    field: str
-    operator: str
-    value: Any
 
 
 @dataclass
@@ -49,6 +34,7 @@ class TableDefinition:
         placeholder: (Optional) Placeholder text for an empty table.
         page_size: (Optional) Number of rows per page. Defaults to 10.
         table_template: (Optional) Template to render the table. Defaults to `tables/base.html`.
+        cache_ttl: (Optional) Time-to-live for cached table data in seconds. Defaults to 300 seconds.
     """
 
     name: str
@@ -61,8 +47,12 @@ class TableDefinition:
     placeholder: str | None = None
     page_size: int = 10
     table_template: str = "tables/base.html"
+    cache_ttl: int = 300  # seconds
 
     def __post_init__(self):
+        self._cache_manager = CacheManager(cache_ttl=self.cache_ttl)
+        self._table_data = self._cache_manager.get(self.name)
+
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
 
         if self.placeholder is None:
@@ -129,10 +119,10 @@ class TableDefinition:
     def render_table(self, **kwargs: Any) -> str:
         return tk.render(self.table_template, extra_vars={"table": self, **kwargs})
 
-    def get_data(self, params: QueryParams) -> list[Any]:
+    def get_data(self, params: types.QueryParams) -> list[Any]:
         return [self._apply_formatters(dict(row)) for row in self.get_raw_data(params)]
 
-    def get_raw_data(self, params: QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
+    def get_raw_data(self, params: types.QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
         if not paginate:
             return self.data_source.filter(params.filters).sort(params.sort_by, params.sort_order).all()
 
@@ -143,9 +133,32 @@ class TableDefinition:
             .all()
         )
 
-    def get_total_count(self, params: QueryParams) -> int:
+    def get_total_count(self, params: types.QueryParams) -> int:
+        cached_count = self.get_cached_total_count(params)
+
+        if cached_count:
+            return cached_count
+
         # for total count we only apply filter, without sort and pagination
-        return self.data_source.filter(params.filters).count()
+        count = self.data_source.filter(params.filters).count()
+
+        self.set_cached_total_count(params, count)
+
+        return count
+
+    def get_cached_total_count(self, params: types.QueryParams) -> int | None:
+        result = self._table_data.get(str(params)) if params.filters else self._table_data.get("total_count")
+
+        if result is not None:
+            return int(result)
+
+    def set_cached_total_count(self, params: types.QueryParams, count: int) -> None:
+        if params.filters:
+            self._table_data[str(params)] = count
+        else:
+            self._table_data["total_count"] = count
+
+        self._cache_manager.save(self.name, self._table_data)
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
@@ -190,6 +203,9 @@ class TableDefinition:
 
     def get_exporter(self, name: str) -> type[ExporterBase] | None:
         return next((e for e in self.exporters if e.name == name), None)
+
+    def refresh_data(self) -> None:
+        self._cache_manager.delete(self.name)
 
 
 @dataclass(frozen=True)

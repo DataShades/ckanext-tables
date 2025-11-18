@@ -83,6 +83,7 @@ ckan.module("tables-tabulator", function ($) {
             this.tableActionsMenu = document.getElementById("table-actions-menu");
             this.tableExportersMenu = document.getElementById("table-exporters-menu");
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
+            this.tableRefreshBtn = document.getElementById("refresh-table");
             this.tableFilters = this._updateTableFilters();
         },
 
@@ -197,6 +198,10 @@ ckan.module("tables-tabulator", function ($) {
             bindMenuButtons(this.bulkActionsMenu, this._onApplyBulkAction);
             bindMenuButtons(this.tableActionsMenu, this._onApplyTableAction);
             bindMenuButtons(this.tableExportersMenu, this._onTableExportClick);
+
+            if (this.tableRefreshBtn) {
+                this.tableRefreshBtn.addEventListener("click", this._onRefreshTable);
+            }
 
             document.addEventListener("click", (e: Event) => {
                 const rowActionsBtn = (e.target as HTMLElement).closest(".btn-row-actions");
@@ -383,6 +388,22 @@ ckan.module("tables-tabulator", function ($) {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+        },
+
+        _onRefreshTable: function (): void {
+            const form = new FormData();
+            form.append("refresh", "true");
+
+            fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
+                method: "POST",
+                body: form,
+                headers: { "X-CSRFToken": this._getCSRFToken() },
+            })
+                .then((resp) => {
+                    this._refreshData();
+                    this._showToast(ckan.i18n._("Table data refreshed successfully."));
+                })
+                .catch((error) => this._showToast(error.message, "danger"));
         },
 
         _refreshData: function (): void {

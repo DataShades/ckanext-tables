@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any, TypeAlias, TypedDict
 
 from typing_extensions import NotRequired
@@ -29,3 +31,19 @@ class ActionHandlerResult(TypedDict):
     error: NotRequired[str | None]
     redirect: NotRequired[str | None]
     message: NotRequired[str | None]
+
+
+@dataclass
+class QueryParams:
+    page: int = 1
+    size: int = 10
+    filters: list[FilterItem] = dataclass_field(default_factory=list)
+    sort_by: str | None = None
+    sort_order: str | None = None
+
+
+@dataclass(frozen=True)
+class FilterItem:
+    field: str
+    operator: str
+    value: Any

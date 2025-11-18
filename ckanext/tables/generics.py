@@ -78,6 +78,12 @@ class AjaxTableMixin:
 
         return jsonify(ActionHandlerResult(**result))
 
+    def _refresh_data(self, table: TableDefinition) -> Response:
+        """Refresh the table data cache."""
+        table.refresh_data()
+
+        return jsonify({"success": True, "error": None})
+
 
 class ExportTableMixin:
     def _export(self, table: TableDefinition, exporter_name: str) -> Response:
@@ -156,6 +162,7 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
         bulk_action = request.form.get("bulk_action")
         row = request.form.get("row")
         rows = request.form.get("rows")
+        refresh = request.form.get("refresh")
 
         if table_action:
             return self._apply_table_action(table_instance, table_action)
@@ -163,6 +170,8 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
             return self._apply_row_action(table_instance, row_action, row)
         if bulk_action:
             return self._apply_bulk_action(table_instance, bulk_action, rows)
+        if refresh:
+            return self._refresh_data(table_instance)
 
         return jsonify({"success": False, "error": "No action specified"})
 

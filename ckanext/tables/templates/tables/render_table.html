@@ -11,7 +11,7 @@
             {% snippet "tables/snippets/table_filters_modal.html", table=table %}
 
             <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
-                <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#filters-modal">
+                <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#filters-modal" title="{{ _('Manage Filters') }}">
                     <i class="fa fa-filter"></i> {{ _("Filters") }} <span class="badge bg-primary d-none" id="filters-counter">0</span>
                 </button>
                 <button class="btn btn-light" id="clear-all-filters" title="{{ _('Clear all filters') }}">
@@ -23,7 +23,8 @@
         {% block table_global_filters %}
             {% if table.bulk_actions %}
                 <div class="dropdown d-inline-block">
-                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                    title="{{ _('Row Actions') }}">
                         <i class="fa fa-list-check"></i> {{ _("Row Actions") }}
                     </button>
                     <ul class="dropdown-menu" id="bulk-actions-menu">
@@ -45,7 +46,8 @@
         {% block table_actions %}
             {% if table.table_actions %}
                 <div class="dropdown d-inline-block">
-                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                    title="{{ _('Table Actions') }}">
                         <i class="fa fa-table"></i> {{ _("Table Actions") }}
                     </button>
                     <ul class="dropdown-menu" id="table-actions-menu">
@@ -67,7 +69,8 @@
         {% block table_exporters %}
             {% if table.exporters %}
                 <div class="dropdown d-inline-block">
-                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                    title="{{ _('Export Table Data') }}">
                         <i class="fa fa-file-export"></i> {{ _("Export") }}
                     </button>
                     <ul class="dropdown-menu" id="table-exporters-menu">
@@ -84,6 +87,12 @@
                     </ul>
                 </div>
             {% endif %}
+        {% endblock %}
+
+        {% block table_refresh %}
+            <button class="btn btn-light" id="refresh-table" title="{{ _('Refresh Table') }}">
+                <i class="fa fa-arrows-rotate"></i>
+            </button>
         {% endblock %}
     </div>
 {% endblock table_control %}

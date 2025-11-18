@@ -4,7 +4,6 @@ from .generics import GenericTableView
 from .table import (
     BulkActionDefinition,
     ColumnDefinition,
-    QueryParams,
     RowActionDefinition,
     TableActionDefinition,
     TableDefinition,
@@ -12,8 +11,10 @@ from .table import (
 from .types import (
     ActionHandlerResult,
     BulkActionHandler,
+    FilterItem,
     FormatterResult,
     Options,
+    QueryParams,
     Row,
     TableActionHandler,
     Value,
@@ -44,6 +45,7 @@ __all__ = [
     "ListDataSource",
     "Options",
     "QueryParams",
+    "FilterItem",
     "TableActionDefinition",
     "Row",
     "TableDefinition",

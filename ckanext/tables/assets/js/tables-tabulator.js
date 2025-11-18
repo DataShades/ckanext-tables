@@ -39,6 +39,7 @@ ckan.module("tables-tabulator", function ($) {
             this.tableActionsMenu = document.getElementById("table-actions-menu");
             this.tableExportersMenu = document.getElementById("table-exporters-menu");
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
+            this.tableRefreshBtn = document.getElementById("refresh-table");
             this.tableFilters = this._updateTableFilters();
         },
         _initTabulatorInstance: function () {
@@ -106,8 +107,6 @@ ckan.module("tables-tabulator", function ($) {
                     }
                 }
                 else {
-                    console.log(resp);
-
                     if (resp.redirect) {
                         window.location.href = resp.redirect;
                         return;
@@ -140,6 +139,9 @@ ckan.module("tables-tabulator", function ($) {
             bindMenuButtons(this.bulkActionsMenu, this._onApplyBulkAction);
             bindMenuButtons(this.tableActionsMenu, this._onApplyTableAction);
             bindMenuButtons(this.tableExportersMenu, this._onTableExportClick);
+            if (this.tableRefreshBtn) {
+                this.tableRefreshBtn.addEventListener("click", this._onRefreshTable);
+            }
             document.addEventListener("click", (e) => {
                 const rowActionsBtn = e.target.closest(".btn-row-actions");
                 if (rowActionsBtn && this.el[0].contains(rowActionsBtn)) {
@@ -312,6 +314,20 @@ ckan.module("tables-tabulator", function ($) {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+        },
+        _onRefreshTable: function () {
+            const form = new FormData();
+            form.append("refresh", "true");
+            fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
+                method: "POST",
+                body: form,
+                headers: { "X-CSRFToken": this._getCSRFToken() },
+            })
+                .then((resp) => {
+                this._refreshData();
+                this._showToast(ckan.i18n._("Table data refreshed successfully."));
+            })
+                .catch((error) => this._showToast(error.message, "danger"));
         },
         _refreshData: function () {
             this.table.replaceData();
