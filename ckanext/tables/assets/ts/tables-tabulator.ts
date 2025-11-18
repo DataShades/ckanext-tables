@@ -5,7 +5,7 @@
  *  Replace the `ckan.tablesConfirm` and `ckan.tablesToast` functions with the `ckan.confirm` and `ckan.toast` from CKAN core
  *  when CKAN 2.12 is the minimum supported version.
  *
-*/
+ */
 
 namespace ckan {
     export var sandbox: any;
@@ -93,8 +93,8 @@ ckan.module("tables-tabulator", function ($) {
             if (this.options.rowActions) {
                 const rowActions = this.options.rowActions as Record<string, TabulatorAction>;
                 this.options.config.rowContextMenu = Object.values(rowActions).map((action: TabulatorAction) => ({
-                    label: `${action.icon ? `<i class='${action.icon} me-1'></i> ` : ''}${action.label}`,
-                    action: this._rowActionCallback.bind(this, action)
+                    label: `${action.icon ? `<i class='${action.icon} me-1'></i> ` : ""}${action.label}`,
+                    action: this._rowActionCallback.bind(this, action),
                 }));
             }
 
@@ -110,7 +110,7 @@ ckan.module("tables-tabulator", function ($) {
                 ...this.options.config,
                 paginationInitialPage: parseInt(initialPage || "1"),
                 footerElement: this.templates.footerElement,
-                ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) })
+                ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
             });
         },
 
@@ -125,7 +125,7 @@ ckan.module("tables-tabulator", function ($) {
         _confirmAction: function (label: string, callback: () => void): void {
             ckan.tablesConfirm({
                 message: ckan.i18n._(`Are you sure you want to perform this action: <b>${label}</b>?`),
-                onConfirm: callback
+                onConfirm: callback,
             });
         },
 
@@ -148,29 +148,27 @@ ckan.module("tables-tabulator", function ($) {
             return fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
                 method: "POST",
                 body: form,
-                headers: { 'X-CSRFToken': this._getCSRFToken() }
+                headers: { "X-CSRFToken": this._getCSRFToken() },
             })
-                .then(resp => resp.json())
-                .then(resp => {
+                .then((resp) => resp.json())
+                .then((resp) => {
                     if (!resp.success) {
                         const err = resp.error || resp.errors?.[0] || "Unknown error";
                         this._showToast(err, "danger");
                         if (resp.errors?.length > 1) {
-                            this._showToast(
-                                ckan.i18n._("Multiple errors occurred and were suppressed"),
-                                "error"
-                            );
+                            this._showToast(ckan.i18n._("Multiple errors occurred and were suppressed"), "error");
                         }
                     } else {
                         if (resp.redirect) {
                             window.location.href = resp.redirect;
                             return;
                         }
-                        this._refreshData();
-                        this._showToast(resp.message || successMessage);
+                        this._refreshData().then(() => {
+                            this._showToast(resp.message || successMessage);
+                        });
                     }
                 })
-                .catch(error => this._showToast(error.message, "danger"));
+                .catch((error) => this._showToast(error.message, "danger"));
         },
 
         _initAddTableEvents: function (): void {
@@ -237,14 +235,16 @@ ckan.module("tables-tabulator", function ($) {
             if (!rowEl) return;
 
             const rect = targetEl.getBoundingClientRect();
-            rowEl.dispatchEvent(new MouseEvent("contextmenu", {
-                bubbles: true,
-                cancelable: true,
-                view: window,
-                clientX: rect.left + rect.width / 2,
-                clientY: rect.bottom,
-                button: 2
-            }));
+            rowEl.dispatchEvent(
+                new MouseEvent("contextmenu", {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: rect.left + rect.width / 2,
+                    clientY: rect.bottom,
+                    button: 2,
+                })
+            );
         },
 
         _collectValidFilters: function (): TableFilter[] {
@@ -326,15 +326,15 @@ ckan.module("tables-tabulator", function ($) {
 
         _updateUrl: function (): void {
             const url = new URL(window.location.href);
-            Array.from(url.searchParams.keys()).forEach(key => {
-                if (key.startsWith('field') || key.startsWith('operator') || key.startsWith('value')) {
+            Array.from(url.searchParams.keys()).forEach((key) => {
+                if (key.startsWith("field") || key.startsWith("operator") || key.startsWith("value")) {
                     url.searchParams.delete(key);
                 }
             });
             this.tableFilters.forEach((filter: TableFilter) => {
-                url.searchParams.append('field', filter.field);
-                url.searchParams.append('operator', filter.operator);
-                url.searchParams.append('value', filter.value);
+                url.searchParams.append("field", filter.field);
+                url.searchParams.append("operator", filter.operator);
+                url.searchParams.append("value", filter.value);
             });
             window.history.replaceState({}, "", url);
         },
@@ -375,7 +375,7 @@ ckan.module("tables-tabulator", function ($) {
             const exporter = (e.target as HTMLElement).dataset.exporter;
             if (!exporter) return;
 
-            const a = document.createElement('a');
+            const a = document.createElement("a");
             const url = new URL(window.location.href);
             url.searchParams.set("exporter", exporter);
             url.searchParams.set("filters", JSON.stringify(this.tableFilters));
@@ -384,7 +384,7 @@ ckan.module("tables-tabulator", function ($) {
                 url.searchParams.set(`sort[0][dir]`, s.dir);
             });
             a.href = this.sandbox.client.url(this.options.config.ajaxURL) + url.search;
-            a.download = `${this.options.config.tableId || 'table'}.${exporter}`;
+            a.download = `${this.options.config.tableId || "table"}.${exporter}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -394,20 +394,23 @@ ckan.module("tables-tabulator", function ($) {
             const form = new FormData();
             form.append("refresh", "true");
 
+            this.tableRefreshBtn.setAttribute("disabled", "true");
+
             fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
                 method: "POST",
                 body: form,
-                headers: { "X-CSRFToken": this._getCSRFToken() },
             })
-                .then((resp) => {
-                    this._refreshData();
-                    this._showToast(ckan.i18n._("Table data refreshed successfully."));
+                .then((_) => {
+                    this._refreshData().then(() => {
+                        this._showToast(ckan.i18n._("Table data refreshed successfully."));
+                        this.tableRefreshBtn.removeAttribute("disabled");
+                    });
                 })
                 .catch((error) => this._showToast(error.message, "danger"));
         },
 
-        _refreshData: function (): void {
-            this.table.replaceData();
+        _refreshData: function (): Promise<void> {
+            return this.table.replaceData();
         },
 
         _onFullscreen: function (): void {
@@ -415,8 +418,8 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _getCSRFToken: function (): string | null {
-            const csrf_field = document.querySelector('meta[name="csrf_field_name"]')?.getAttribute('content');
-            return document.querySelector(`meta[name="${csrf_field}"]`)?.getAttribute('content') || null;
-        }
+            const csrf_field = document.querySelector('meta[name="csrf_field_name"]')?.getAttribute("content");
+            return document.querySelector(`meta[name="${csrf_field}"]`)?.getAttribute("content") || null;
+        },
     };
 });

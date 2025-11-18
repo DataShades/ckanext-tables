@@ -111,8 +111,9 @@ ckan.module("tables-tabulator", function ($) {
                         window.location.href = resp.redirect;
                         return;
                     }
-                    this._refreshData();
-                    this._showToast(resp.message || successMessage);
+                    this._refreshData().then(() => {
+                        this._showToast(resp.message || successMessage);
+                    });
                 }
             })
                 .catch(error => this._showToast(error.message, "danger"));
@@ -318,19 +319,21 @@ ckan.module("tables-tabulator", function ($) {
         _onRefreshTable: function () {
             const form = new FormData();
             form.append("refresh", "true");
+            this.tableRefreshBtn.setAttribute("disabled", "true");
             fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
                 method: "POST",
                 body: form,
-                headers: { "X-CSRFToken": this._getCSRFToken() },
             })
-                .then((resp) => {
-                this._refreshData();
-                this._showToast(ckan.i18n._("Table data refreshed successfully."));
+                .then((_) => {
+                this._refreshData().then(() => {
+                    this._showToast(ckan.i18n._("Table data refreshed successfully."));
+                    this.tableRefreshBtn.removeAttribute("disabled");
+                });
             })
                 .catch((error) => this._showToast(error.message, "danger"));
         },
         _refreshData: function () {
-            this.table.replaceData();
+            return this.table.replaceData();
         },
         _onFullscreen: function () {
             this.tableWrapper.classList.toggle("fullscreen");
