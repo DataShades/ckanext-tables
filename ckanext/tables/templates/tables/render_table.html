@@ -105,9 +105,7 @@
             data-module-config="{{ h.tables_json_dumps(table.get_tabulator_config()) }}"
             data-module-row-actions="{{ h.tables_json_dumps(table.get_row_actions()) }}"
         >
-            <span class="ap-loading-indicator">
-                {% snippet "tables/snippets/table_skeleton.html" %}
-            </span>
+            {% snippet "tables/snippets/table_skeleton.html" %}
         </div>
     </div>
 {% endblock %}
