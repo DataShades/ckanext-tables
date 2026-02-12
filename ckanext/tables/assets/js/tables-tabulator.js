@@ -43,7 +43,9 @@ ckan.module("tables-tabulator", function ($) {
             this.tableFilters = this._updateTableFilters();
         },
         _initTabulatorInstance: function () {
-            this.options.config.ajaxURL = window.location.pathname;
+            if (!this.options.config.ajaxURL) {
+                this.options.config.ajaxURL = window.location.pathname;
+            }
             if (this.options.rowActions) {
                 const rowActions = this.options.rowActions;
                 this.options.config.rowContextMenu = Object.values(rowActions).map((action) => ({

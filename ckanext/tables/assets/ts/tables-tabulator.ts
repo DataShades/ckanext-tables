@@ -88,7 +88,10 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _initTabulatorInstance: function (): void {
-            this.options.config.ajaxURL = window.location.pathname;
+            // Use custom ajax URL if provided, otherwise use current pathname
+            if (!this.options.config.ajaxURL) {
+                this.options.config.ajaxURL = window.location.pathname;
+            }
 
             if (this.options.rowActions) {
                 const rowActions = this.options.rowActions as Record<string, TabulatorAction>;

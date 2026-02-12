@@ -39,6 +39,7 @@ class TableDefinition:
 
     name: str
     data_source: BaseDataSource
+    ajax_url: str | None = None
     columns: list[ColumnDefinition] = dataclass_field(default_factory=list)
     row_actions: list[RowActionDefinition] = dataclass_field(default_factory=list)
     bulk_actions: list[BulkActionDefinition] = dataclass_field(default_factory=list)
@@ -86,6 +87,9 @@ class TableDefinition:
             "paginationSizeSelector": [5, 10, 25, 50, 100],
             "minHeight": 300,
         }
+
+        if self.ajax_url:
+            options["ajaxURL"] = self.ajax_url
 
         if bool(self.bulk_actions):
             options.update(

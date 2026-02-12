@@ -1,0 +1,11 @@
+{% import 'macros/form.html' as form %}
+
+{% call form.input(
+    'file_url',
+    id='field-file_url',
+    label=_('File URL'),
+    placeholder=_('eg. http://example.com/test.sql  (if blank uses resource url)'),
+    value=data.file_url,
+    error=errors.file_url) %}
+    {{ form.info(_('If you wish to retrieve remote data for this view, you may specify the URL.', classes=['info-help-tight'])) }}
+{% endcall %}
