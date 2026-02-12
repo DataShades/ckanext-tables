@@ -126,3 +126,9 @@ $color-active: #206b82;
         }
     }
 }
+
+#columns-modal {
+    .list-group-item:after {
+        display: none;
+    }
+}

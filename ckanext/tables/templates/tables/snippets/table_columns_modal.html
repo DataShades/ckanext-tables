@@ -1,0 +1,58 @@
+{% set columns_visibility = h.tables_get_columns_visibility_from_request() %}
+
+<div class="modal fade columns-modal" id="columns-modal" tabindex="-1" role="dialog"
+    aria-labelledby="columns-modal-label" data-bs-backdrop="false">
+    <div class="modal-dialog modal-md" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ _("Column Visibility") }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="text-muted">{{ _("Select which columns to display in the table") }}</p>
+                </div>
+
+                <div id="columns-container" class="list-group">
+                    {% for column in table.columns %}
+                        {% if column.field != '__table_actions' %}
+                            <label class="list-group-item d-flex align-items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    class="form-check-input column-toggle"
+                                    data-field="{{ column.field }}"
+                                    {% if columns_visibility.get(column.field, column.visible) %}checked{% endif %}
+                                >
+                                <span class="flex-grow-1">{{ column.title }}</span>
+                            </label>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-sm btn-light" id="select-all-columns" type="button">
+                        <i class="fa fa-check-square"></i> {{ _("Select All") }}
+                    </button>
+                    <button class="btn btn-sm btn-light" id="deselect-all-columns" type="button">
+                        <i class="fa fa-square"></i> {{ _("Deselect All") }}
+                    </button>
+                </div>
+
+                <div id="column-actions" class="d-flex gap-2 justify-content-end mt-3">
+                    <button class="btn btn-primary" id="apply-columns" type="button" data-bs-dismiss="modal">
+                        {{ _("Apply") }}
+                    </button>
+
+                    <button class="btn btn-danger" id="reset-columns" type="button" data-bs-dismiss="modal">
+                        {{ _("Reset") }}
+                    </button>
+
+                    <button class="btn btn-light" id="close-columns" type="button" data-bs-dismiss="modal">
+                        {{ _("Close") }}
+                    </button>
+                </div>
+            </div> <!-- modal-body -->
+        </div>
+    </div>
+</div>

@@ -89,6 +89,10 @@
   background-color: #e9ecef;
 }
 
+#columns-modal .list-group-item:after {
+  display: none;
+}
+
 @keyframes reverseProgress {
   from {
     width: 100%;

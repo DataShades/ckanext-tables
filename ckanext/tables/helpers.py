@@ -38,6 +38,16 @@ def tables_get_filters_from_request() -> list[t.FilterItem]:
     ]
 
 
+def tables_get_columns_visibility_from_request() -> dict[str, bool]:
+    """Get the column visibility settings from the request arguments.
+
+    Returns:
+        A dictionary mapping column field names to their visibility state (True/False).
+        Only hidden columns are included in the dictionary with False value.
+    """
+    return dict.fromkeys(tk.request.args.getlist("hidden_column"), False)
+
+
 def tables_generate_unique_id() -> str:
     return str(uuid.uuid4())
 

@@ -41,6 +41,15 @@ ckan.module("tables-tabulator", function ($) {
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
             this.tableRefreshBtn = document.getElementById("refresh-table");
             this.tableFilters = this._updateTableFilters();
+            this.columnsContainer = document.getElementById("columns-container");
+            this.applyColumnsBtn = document.getElementById("apply-columns");
+            this.resetColumnsBtn = document.getElementById("reset-columns");
+            this.closeColumnsBtn = document.getElementById("close-columns");
+            this.selectAllColumnsBtn = document.getElementById("select-all-columns");
+            this.deselectAllColumnsBtn = document.getElementById("deselect-all-columns");
+            this.columnToggles = document.querySelectorAll(".column-toggle");
+            this.hiddenColumnsCounter = document.getElementById("hidden-columns-counter");
+            this.hiddenColumnsBadge = document.getElementById("hidden-columns-badge");
         },
         _initTabulatorInstance: function () {
             if (!this.options.config.ajaxURL) {
@@ -133,6 +142,21 @@ ckan.module("tables-tabulator", function ($) {
                     this._onFilterItemRemove(removeBtn);
                 }
             });
+            if (this.applyColumnsBtn) {
+                this.applyColumnsBtn.addEventListener("click", this._onApplyColumns);
+            }
+            if (this.resetColumnsBtn) {
+                this.resetColumnsBtn.addEventListener("click", this._onResetColumns);
+            }
+            if (this.closeColumnsBtn) {
+                this.closeColumnsBtn.addEventListener("click", this._onCloseColumns);
+            }
+            if (this.selectAllColumnsBtn) {
+                this.selectAllColumnsBtn.addEventListener("click", this._onSelectAllColumns);
+            }
+            if (this.deselectAllColumnsBtn) {
+                this.deselectAllColumnsBtn.addEventListener("click", this._onDeselectAllColumns);
+            }
             const bindMenuButtons = (menu, handler) => {
                 if (menu) {
                     menu.querySelectorAll("button").forEach((btn) => {
@@ -157,6 +181,7 @@ ckan.module("tables-tabulator", function ($) {
                     this.btnFullscreen = document.getElementById("btn-fullscreen");
                     this.btnFullscreen.addEventListener("click", this._onFullscreen);
                 }
+                this._applyColumnVisibilityFromUrl();
             });
             this.table.on("renderComplete", function () {
                 htmx.process(this.element);
@@ -359,6 +384,83 @@ ckan.module("tables-tabulator", function ($) {
         },
         _onFullscreen: function () {
             this.tableWrapper.classList.toggle("fullscreen");
+        },
+        _onApplyColumns: function () {
+            const hiddenColumns = [];
+            this.columnToggles.forEach((toggle) => {
+                const field = toggle.dataset.field;
+                if (!field)
+                    return;
+                if (toggle.checked) {
+                    this.table.showColumn(field);
+                }
+                else {
+                    hiddenColumns.push(field);
+                    this.table.hideColumn(field);
+                }
+            });
+            this._updateColumnsUrl(hiddenColumns);
+            this._updateHiddenColumnsCounter();
+            this.table.redraw(true);
+        },
+        _onResetColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                toggle.checked = true;
+                const field = toggle.dataset.field;
+                if (field) {
+                    this.table.showColumn(field);
+                }
+            });
+            this._updateColumnsUrl([]);
+            this._updateHiddenColumnsCounter();
+            this.table.redraw(true);
+        },
+        _onCloseColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                const field = toggle.dataset.field;
+                if (field) {
+                    const column = this.table.getColumn(field);
+                    if (column) {
+                        toggle.checked = column.isVisible();
+                    }
+                }
+            });
+        },
+        _onSelectAllColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                toggle.checked = true;
+            });
+        },
+        _onDeselectAllColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                toggle.checked = false;
+            });
+        },
+        _applyColumnVisibilityFromUrl: function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hiddenColumns = urlParams.getAll("hidden_column");
+            hiddenColumns.forEach((field) => {
+                try {
+                    this.table.hideColumn(field);
+                }
+                catch (e) {
+                }
+            });
+            this._updateHiddenColumnsCounter();
+        },
+        _updateHiddenColumnsCounter: function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hiddenCount = urlParams.getAll("hidden_column").length;
+            this.hiddenColumnsCounter.textContent = hiddenCount.toString();
+            this.hiddenColumnsBadge.classList.toggle("d-none", hiddenCount === 0);
+        },
+        _updateColumnsUrl: function (hiddenColumns) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("hidden_column");
+            hiddenColumns.forEach((field) => {
+                url.searchParams.append("hidden_column", field);
+            });
+            window.history.replaceState({}, "", url);
         },
         _getCSRFToken: function () {
             const csrf_field = document.querySelector('meta[name="csrf_field_name"]')?.getAttribute("content");

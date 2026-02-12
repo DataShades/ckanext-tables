@@ -85,6 +85,17 @@ ckan.module("tables-tabulator", function ($) {
             this.tableWrapper = document.querySelector(".tabulator-wrapper");
             this.tableRefreshBtn = document.getElementById("refresh-table");
             this.tableFilters = this._updateTableFilters();
+
+            // Column visibility controls
+            this.columnsContainer = document.getElementById("columns-container");
+            this.applyColumnsBtn = document.getElementById("apply-columns");
+            this.resetColumnsBtn = document.getElementById("reset-columns");
+            this.closeColumnsBtn = document.getElementById("close-columns");
+            this.selectAllColumnsBtn = document.getElementById("select-all-columns");
+            this.deselectAllColumnsBtn = document.getElementById("deselect-all-columns");
+            this.columnToggles = document.querySelectorAll(".column-toggle");
+            this.hiddenColumnsCounter = document.getElementById("hidden-columns-counter");
+            this.hiddenColumnsBadge = document.getElementById("hidden-columns-badge");
         },
 
         _initTabulatorInstance: function (): void {
@@ -189,6 +200,23 @@ ckan.module("tables-tabulator", function ($) {
                 }
             });
 
+            // Column visibility event listeners
+            if (this.applyColumnsBtn) {
+                this.applyColumnsBtn.addEventListener("click", this._onApplyColumns);
+            }
+            if (this.resetColumnsBtn) {
+                this.resetColumnsBtn.addEventListener("click", this._onResetColumns);
+            }
+            if (this.closeColumnsBtn) {
+                this.closeColumnsBtn.addEventListener("click", this._onCloseColumns);
+            }
+            if (this.selectAllColumnsBtn) {
+                this.selectAllColumnsBtn.addEventListener("click", this._onSelectAllColumns);
+            }
+            if (this.deselectAllColumnsBtn) {
+                this.deselectAllColumnsBtn.addEventListener("click", this._onDeselectAllColumns);
+            }
+
             const bindMenuButtons = (menu: HTMLElement, handler: (e: Event) => void) => {
                 if (menu) {
                     menu.querySelectorAll("button").forEach((btn: HTMLButtonElement) => {
@@ -217,6 +245,8 @@ ckan.module("tables-tabulator", function ($) {
                     this.btnFullscreen = document.getElementById("btn-fullscreen");
                     this.btnFullscreen.addEventListener("click", this._onFullscreen);
                 }
+
+                this._applyColumnVisibilityFromUrl();
             });
 
             this.table.on("renderComplete", function (this: any) {
@@ -441,6 +471,108 @@ ckan.module("tables-tabulator", function ($) {
 
         _onFullscreen: function (): void {
             this.tableWrapper.classList.toggle("fullscreen");
+        },
+
+        _onApplyColumns: function (): void {
+            const hiddenColumns: string[] = [];
+
+            this.columnToggles.forEach((toggle: HTMLInputElement) => {
+                const field = toggle.dataset.field;
+                if (!field) return;
+
+                if (toggle.checked) {
+                    this.table.showColumn(field);
+                } else {
+                    hiddenColumns.push(field);
+                    this.table.hideColumn(field);
+                }
+            });
+
+            this._updateColumnsUrl(hiddenColumns);
+            this._updateHiddenColumnsCounter();
+
+            // Redraw table to recalculate column widths
+            this.table.redraw(true);
+        },
+
+        _onResetColumns: function (): void {
+            this.columnToggles.forEach((toggle: HTMLInputElement) => {
+                toggle.checked = true;
+                const field = toggle.dataset.field;
+                if (field) {
+                    this.table.showColumn(field);
+                }
+            });
+
+            this._updateColumnsUrl([]);
+            this._updateHiddenColumnsCounter();
+
+            // Redraw table to recalculate column widths
+            this.table.redraw(true);
+        },
+
+        _onCloseColumns: function (): void {
+            // Restore checkboxes to match current column visibility
+            this.columnToggles.forEach((toggle: HTMLInputElement) => {
+                const field = toggle.dataset.field;
+                if (field) {
+                    const column = this.table.getColumn(field);
+                    if (column) {
+                        toggle.checked = column.isVisible();
+                    }
+                }
+            });
+        },
+
+        _onSelectAllColumns: function (): void {
+            this.columnToggles.forEach((toggle: HTMLInputElement) => {
+                toggle.checked = true;
+            });
+        },
+
+        _onDeselectAllColumns: function (): void {
+            this.columnToggles.forEach((toggle: HTMLInputElement) => {
+                toggle.checked = false;
+            });
+        },
+
+        _applyColumnVisibilityFromUrl: function (): void {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hiddenColumns = urlParams.getAll("hidden_column");
+
+            // Hide columns that are marked as hidden in URL
+            hiddenColumns.forEach((field: string) => {
+                try {
+                    this.table.hideColumn(field);
+                } catch (e) {
+                    // Column might not exist, ignore error
+                }
+            });
+
+            // Update counter after applying visibility from URL
+            this._updateHiddenColumnsCounter();
+        },
+
+        _updateHiddenColumnsCounter: function (): void {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hiddenCount = urlParams.getAll("hidden_column").length;
+
+            this.hiddenColumnsCounter.textContent = hiddenCount.toString();
+            this.hiddenColumnsBadge.classList.toggle("d-none", hiddenCount === 0);
+        },
+
+        _updateColumnsUrl: function (hiddenColumns: string[]): void {
+            const url = new URL(window.location.href);
+
+            // Remove existing column visibility parameters
+            url.searchParams.delete("hidden_column");
+
+            // Add hidden columns
+            hiddenColumns.forEach((field) => {
+                url.searchParams.append("hidden_column", field);
+            });
+
+            window.history.replaceState({}, "", url);
         },
 
         _getCSRFToken: function (): string | null {
