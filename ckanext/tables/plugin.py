@@ -10,6 +10,7 @@ from ckanext.tables.logic.schema import get_preview_schema
 
 @tk.blanket.helpers
 @tk.blanket.blueprints
+@tk.blanket.config_declarations
 class TablesPlugin(p.SingletonPlugin):
     p.implements(p.IConfigurer)
     p.implements(p.IResourceView, inherit=True)
@@ -35,7 +36,7 @@ class TablesPlugin(p.SingletonPlugin):
 
     def can_view(self, data_dict: types.DataDict) -> bool:
         fmt = data_dict["resource"].get("format", "").lower()
-        return fmt in ["csv"]
+        return fmt in ["csv", "xlsx", "orc", "parquet", "feather"]
 
     def view_template(self, context: types.Context, data_dict: types.DataDict) -> str:
         return "tables/view/table_preview.html"

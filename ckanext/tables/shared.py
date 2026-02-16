@@ -1,5 +1,14 @@
 from . import exporters, formatters
-from .data_sources import DatabaseDataSource, ListDataSource
+from .data_sources import (
+    BaseDataSource,
+    CsvUrlDataSource,
+    DatabaseDataSource,
+    FeatherUrlDataSource,
+    ListDataSource,
+    OrcUrlDataSource,
+    ParquetUrlDataSource,
+    XlsxUrlDataSource,
+)
 from .generics import GenericTableView
 from .table import (
     BulkActionDefinition,
@@ -36,6 +45,11 @@ __all__ = [
     "ActionHandlerResult",
     "ColumnDefinition",
     "DatabaseDataSource",
+    "BaseDataSource",
+    "XlsxUrlDataSource",
+    "OrcUrlDataSource",
+    "ParquetUrlDataSource",
+    "FeatherUrlDataSource",
     "FormatterResult",
     "formatters",
     "exporters",
@@ -44,6 +58,7 @@ __all__ = [
     "BulkActionHandler",
     "TableActionHandler",
     "ListDataSource",
+    "CsvUrlDataSource",
     "Options",
     "QueryParams",
     "FilterItem",

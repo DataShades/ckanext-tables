@@ -1,6 +1,6 @@
 [project]
 name = "ckanext-tables"
-version = "1.10.1"
+version = "1.11.0"
 description = "An extension to render dynamic tables"
 readme = "README.md"
 authors = [
@@ -16,11 +16,14 @@ classifiers = [
 ]
 
 keywords = [ "CKAN", ]
-dependencies = []
+dependencies = [
+    "pandas",
+]
 
 [project.optional-dependencies]
-xlsx = ["openpyxl>=3.1.2,<4.0.0",]
+xlsx = ["openpyxl>=3.1.2,<4.0.0"]
 pdf = ["weasyprint>=66.0.0,<70.0.0"]
+orc = ["pyarrow[orc]"]
 test = ["pytest-ckan"]
 docs = ["mkdocs", "mkdocs-material", "mkdocstrings", "mkdocstrings-python"]
 

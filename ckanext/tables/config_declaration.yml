@@ -1,0 +1,8 @@
+version: 1
+groups:
+  - annotation: General settings
+    options:
+      - key: ckanext.tables.cache_dir
+        default: "/tmp/ckanext-tables-cache"
+        description: Directory to use for caching downloaded table data.
+        example: "/tmp/ckanext-tables-cache"

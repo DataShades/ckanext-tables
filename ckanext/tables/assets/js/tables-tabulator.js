@@ -21,6 +21,7 @@ ckan.module("tables-tabulator", function ($) {
                 return;
             }
             this._initAssignVariables();
+            this._initFiltersFromUrl();
             this._initTabulatorInstance();
             this._initAddTableEvents();
             this._updateClearButtonsState();
@@ -50,6 +51,22 @@ ckan.module("tables-tabulator", function ($) {
             this.columnToggles = document.querySelectorAll(".column-toggle");
             this.hiddenColumnsCounter = document.getElementById("hidden-columns-counter");
             this.hiddenColumnsBadge = document.getElementById("hidden-columns-badge");
+        },
+        _initFiltersFromUrl: function () {
+            const url = new URL(window.location.href);
+            const fields = url.searchParams.getAll("field");
+            const operators = url.searchParams.getAll("operator");
+            const values = url.searchParams.getAll("value");
+            if (fields.length && fields.length === operators.length && fields.length === values.length) {
+                this.tableFilters = fields.map((field, i) => ({
+                    field,
+                    operator: operators[i],
+                    value: values[i],
+                }));
+                this.filtersCounter.textContent = this.tableFilters.length.toString();
+                this.filtersCounter.classList.toggle("d-none", this.tableFilters.length === 0);
+                this._updateClearButtonsState();
+            }
         },
         _initTabulatorInstance: function () {
             if (!this.options.config.ajaxURL) {

@@ -63,6 +63,7 @@ ckan.module("tables-tabulator", function ($) {
             }
 
             this._initAssignVariables();
+            this._initFiltersFromUrl();
             this._initTabulatorInstance();
             this._initAddTableEvents();
             this._updateClearButtonsState();
@@ -96,6 +97,24 @@ ckan.module("tables-tabulator", function ($) {
             this.columnToggles = document.querySelectorAll(".column-toggle");
             this.hiddenColumnsCounter = document.getElementById("hidden-columns-counter");
             this.hiddenColumnsBadge = document.getElementById("hidden-columns-badge");
+        },
+
+        _initFiltersFromUrl: function (): void {
+            const url = new URL(window.location.href);
+            const fields = url.searchParams.getAll("field");
+            const operators = url.searchParams.getAll("operator");
+            const values = url.searchParams.getAll("value");
+
+            if (fields.length && fields.length === operators.length && fields.length === values.length) {
+                this.tableFilters = fields.map((field: string, i: number) => ({
+                    field,
+                    operator: operators[i],
+                    value: values[i],
+                }));
+                this.filtersCounter.textContent = this.tableFilters.length.toString();
+                this.filtersCounter.classList.toggle("d-none", this.tableFilters.length === 0);
+                this._updateClearButtonsState();
+            }
         },
 
         _initTabulatorInstance: function (): void {
@@ -564,10 +583,8 @@ ckan.module("tables-tabulator", function ($) {
         _updateColumnsUrl: function (hiddenColumns: string[]): void {
             const url = new URL(window.location.href);
 
-            // Remove existing column visibility parameters
             url.searchParams.delete("hidden_column");
 
-            // Add hidden columns
             hiddenColumns.forEach((field) => {
                 url.searchParams.append("hidden_column", field);
             });

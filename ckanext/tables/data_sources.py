@@ -1,18 +1,32 @@
 from __future__ import annotations
 
+import contextlib
+import decimal
+import hashlib
+import logging
+import os
+import pickle
+import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+import numpy as np
+import pandas as pd
 from sqlalchemy import Boolean, DateTime, Integer
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.sql import Select, func, select
 from sqlalchemy.sql.elements import BinaryExpression, ClauseElement, ColumnElement
 from typing_extensions import Self
 
+import ckan.plugins.toolkit as tk
 from ckan import model
+from ckan.lib import uploader
 
+from ckanext.tables import config
 from ckanext.tables.types import FilterItem
+
+log = logging.getLogger(__name__)
 
 
 class BaseDataSource:
@@ -21,6 +35,7 @@ class BaseDataSource:
     def paginate(self, page: int, size: int) -> Self: ...
     def all(self) -> list[dict[str, Any]]: ...
     def count(self) -> int: ...
+    def get_columns(self) -> list[str]: ...
 
 
 class DatabaseDataSource(BaseDataSource):
@@ -107,6 +122,9 @@ class DatabaseDataSource(BaseDataSource):
     def count(self) -> int:
         return model.Session.execute(select(func.count()).select_from(self.stmt.subquery())).scalar_one()
 
+    def get_columns(self) -> list[str]:
+        return [c.name for c in self.stmt.selected_columns]
+
 
 class ListDataSource(BaseDataSource):
     """A data source that uses a list of dictionaries as the data source.
@@ -174,3 +192,254 @@ class ListDataSource(BaseDataSource):
 
     def count(self):
         return len(self.filtered)
+
+    def get_columns(self) -> list[str]:
+        return list(self.data[0].keys()) if self.data else []
+
+
+class PandasDataSource(BaseDataSource):
+    """Base class for data sources that use pandas DataFrame with caching."""
+
+    CACHE_TTL = 30  # 5 minutes
+
+    def __init__(self):
+        self._df: pd.DataFrame | None = None
+        self._filtered_df: pd.DataFrame | None = None
+
+    def get_cache_key(self) -> str:
+        """Return a unique key for the data source to be used for caching."""
+        raise NotImplementedError
+
+    def fetch_dataframe(self) -> pd.DataFrame:
+        """Fetch the data and return it as a pandas DataFrame."""
+        raise NotImplementedError
+
+    def _get_cache_path(self) -> str:
+        """Generate a cache file path based on the cache key."""
+        key = self.get_cache_key()
+        url_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return os.path.join(config.get_cache_dir(), f"{url_hash}.pkl")
+
+    def _ensure_loaded(self) -> None:
+        """Load the dataframe. Use cache if available."""
+        if self._df is not None:
+            return
+
+        cache_path = self._get_cache_path()
+
+        if os.path.exists(cache_path) and time.time() - os.path.getmtime(cache_path) < self.CACHE_TTL:
+            try:
+                data = pd.read_pickle(cache_path)  # noqa: S301
+                if isinstance(data, pd.DataFrame):
+                    self._df = data
+            except (OSError, pickle.PickleError):
+                log.debug("Failed to read from cache %s", cache_path, exc_info=True)
+
+        if self._df is None:
+            self._df = self.fetch_dataframe()
+
+            try:
+                self._df.to_pickle(cache_path)
+            except OSError as e:
+                log.warning("Failed to write to cache %s: %s", cache_path, e)
+
+        self._filtered_df = self._df
+
+    def filter(self, filters: list[FilterItem]) -> Self:  # noqa: C901
+        self._ensure_loaded()
+        self._filtered_df = self._df  # Reset filtering
+
+        if self._filtered_df is None or self._filtered_df.empty:
+            return self
+
+        for filter_item in filters:
+            if filter_item.field not in self._filtered_df.columns:
+                continue
+
+            try:
+                series = self._filtered_df[filter_item.field]
+                val = filter_item.value
+                op = filter_item.operator
+
+                # Attempt to convert types if possible, otherwise use string comparison
+                if pd.api.types.is_numeric_dtype(series):
+                    with contextlib.suppress(ValueError):
+                        val = float(val)
+
+                if op == "=":
+                    self._filtered_df = self._filtered_df[series == val]
+                elif op == "!=":
+                    self._filtered_df = self._filtered_df[series != val]
+                elif op == "<":
+                    self._filtered_df = self._filtered_df[series < val]
+                elif op == "<=":
+                    self._filtered_df = self._filtered_df[series <= val]
+                elif op == ">":
+                    self._filtered_df = self._filtered_df[series > val]
+                elif op == ">=":
+                    self._filtered_df = self._filtered_df[series >= val]
+                elif op == "like":
+                    # naive string contains
+                    self._filtered_df = self._filtered_df[
+                        series.astype(str).str.contains(str(val), case=False, na=False)
+                    ]
+            except (ValueError, TypeError):
+                log.debug("Failed to apply filter %s", filter_item, exc_info=True)
+
+        return self
+
+    def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
+        if not sort_by or self._filtered_df is None or self._filtered_df.empty:
+            return self
+
+        if sort_by not in self._filtered_df.columns:
+            return self
+
+        ascending = (sort_order or "").lower() != "desc"
+        self._filtered_df = self._filtered_df.sort_values(by=sort_by, ascending=ascending)
+
+        return self
+
+    def paginate(self, page: int, size: int) -> Self:
+        if self._filtered_df is None or self._filtered_df.empty:
+            return self
+
+        start = (page - 1) * size
+        self._filtered_df = self._filtered_df.iloc[start : start + size]
+
+        return self
+
+    def all(self) -> list[dict[str, Any]]:  # noqa: C901
+        if self._filtered_df is None or self._filtered_df.empty:
+            return []
+
+        df = self._filtered_df.astype(object).where(self._filtered_df.notnull(), None)
+
+        records = df.to_dict(orient="records")
+        return [self.serialize_value(record) for record in records]  # type: ignore
+
+    def count(self) -> int:
+        return len(self._filtered_df) if self._filtered_df is not None else 0
+
+    def get_columns(self) -> list[str]:
+        self._ensure_loaded()
+        return list(self._df.columns) if self._df is not None else []
+
+    def serialize_value(self, val: Any) -> Any:  # noqa: PLR0911
+        if val is None:
+            return None
+        if isinstance(val, (bool, int, float, str)):
+            return val
+        if isinstance(val, bytes):
+            return val.decode("utf-8", errors="replace")
+        if isinstance(val, (datetime, pd.Timestamp)):
+            return val.isoformat()
+        if isinstance(val, decimal.Decimal):
+            return float(val)
+        if isinstance(val, (list, tuple, np.ndarray)):
+            return [self.serialize_value(x) for x in val]
+        if isinstance(val, dict):
+            return {k: self.serialize_value(v) for k, v in val.items()}
+        if hasattr(val, "item"):
+            return self.serialize_value(val.item())
+
+        return str(val)
+
+
+class BaseResourceDataSource(PandasDataSource):
+    """A data source that resource data from file or by a URL.
+
+    Args:
+        url: The URL to fetch the ORC data from
+        resource_id: The resource ID in CKAN
+    """
+
+    def __init__(self, url: str | None = None, resource_id: str | None = None):
+        super().__init__()
+
+        if not url and not resource_id:
+            raise ValueError(  # noqa: TRY003
+                "Either url or resource_id must be provided"
+            )
+
+        self.url = url
+        self.resource_id = resource_id
+        self._source_path: str = ""
+
+    def get_cache_key(self) -> str:
+        return f"resource-{self.resource_id}" if self.resource_id else f"url-{self.url}"
+
+    def get_source_path(self) -> str:
+        if self._source_path:
+            return self._source_path
+
+        if self.resource_id:
+            try:
+                resource = tk.get_action("resource_show")({"ignore_auth": True}, {"id": self.resource_id})
+
+                if resource.get("url_type") == "upload":
+                    upload = uploader.get_resource_uploader(resource)
+                    self._source_path = upload.get_path(resource["id"])
+                    return self._source_path
+
+                if resource.get("url"):
+                    self._source_path = resource["url"]
+                    return self._source_path
+
+            except (OSError, TypeError, tk.ValidationError):
+                log.warning(
+                    "Failed to resolve path for resource %s, falling back to provided url",
+                    self.resource_id,  # noqa: TRY003
+                    exc_info=True,
+                )
+
+        if self.url:
+            self._source_path = self.url
+            return self._source_path
+
+        raise ValueError("Could not resolve source path")  # noqa: TRY003
+
+
+class CsvUrlDataSource(BaseResourceDataSource):
+    def fetch_dataframe(self) -> pd.DataFrame:
+        try:
+            return pd.read_csv(self.get_source_path())
+        except Exception:
+            log.exception("Error fetching CSV from %s", self.get_source_path())
+            return pd.DataFrame()
+
+
+class XlsxUrlDataSource(BaseResourceDataSource):
+    def fetch_dataframe(self) -> pd.DataFrame:
+        try:
+            return pd.read_excel(self.get_source_path())
+        except Exception:
+            log.exception("Error fetching XLSX from %s", self.get_source_path())
+            return pd.DataFrame()
+
+
+class OrcUrlDataSource(BaseResourceDataSource):
+    def fetch_dataframe(self) -> pd.DataFrame:
+        try:
+            return pd.read_orc(self.get_source_path())
+        except Exception:
+            log.exception("Error fetching ORC from %s", self.get_source_path())
+            return pd.DataFrame()
+
+
+class ParquetUrlDataSource(BaseResourceDataSource):
+    def fetch_dataframe(self) -> pd.DataFrame:
+        try:
+            return pd.read_parquet(self.get_source_path())
+        except Exception:
+            log.exception("Error fetching Parquet from %s", self.get_source_path())
+            return pd.DataFrame()
+
+
+class FeatherUrlDataSource(BaseResourceDataSource):
+    def fetch_dataframe(self) -> pd.DataFrame:
+        try:
+            return pd.read_feather(self.get_source_path())
+        except Exception:
+            log.exception("Error fetching Feather from %s", self.get_source_path())
+            return pd.DataFrame()
