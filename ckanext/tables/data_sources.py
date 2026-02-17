@@ -351,42 +351,40 @@ class BaseResourceDataSource(PandasDataSource):
 
     Args:
         url: The URL to fetch the ORC data from
-        resource_id: The resource ID in CKAN
+        resource: The resource dictionary
     """
 
-    def __init__(self, url: str | None = None, resource_id: str | None = None):
+    def __init__(self, url: str | None = None, resource: dict[str, Any] | None = None):
         super().__init__()
 
-        if not url and not resource_id:
+        if not url and not resource:
             raise ValueError(  # noqa: TRY003
                 "Either url or resource_id must be provided"
             )
 
         self.url = url
-        self.resource_id = resource_id
+        self.resource = resource
         self._source_path: str = ""
 
     def get_cache_key(self) -> str:
-        return f"resource-{self.resource_id}" if self.resource_id else f"url-{self.url}"
+        return f"resource-{self.resource['id']}" if self.resource else f"url-{self.url}"
 
     def get_source_path(self) -> str:
         if self._source_path:
             return self._source_path
 
-        if self.resource_id:
+        if self.resource:
             try:
-                resource = tk.get_action("resource_show")({"ignore_auth": True}, {"id": self.resource_id})
-
-                if resource.get("url_type") == "upload":
-                    upload = uploader.get_resource_uploader(resource)
-                    self._source_path = upload.get_path(resource["id"])
+                if self.resource.get("url_type") == "upload":
+                    upload = uploader.get_resource_uploader(self.resource)
+                    self._source_path = upload.get_path(self.resource["id"])
                     return self._source_path
 
-                if resource.get("url"):
-                    self._source_path = resource["url"]
+                if self.resource.get("url"):
+                    self._source_path = self.resource["url"]
                     return self._source_path
 
-            except (OSError, TypeError, tk.ValidationError):
+            except (OSError, TypeError, tk.ValidationError, tk.ObjectNotFound):
                 log.warning(
                     "Failed to resolve path for resource %s, falling back to provided url",
                     self.resource_id,  # noqa: TRY003

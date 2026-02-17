@@ -17,7 +17,7 @@ classifiers = [
 
 keywords = [ "CKAN", ]
 dependencies = [
-    "pandas",
+    "pandas[parquet, feather]",
 ]
 
 [project.optional-dependencies]

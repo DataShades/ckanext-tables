@@ -74,17 +74,16 @@ def tables_init_temporary_preview_table(
 def guess_data_source(resource: dict[str, Any]) -> type[t.BaseDataSource]:
     fmt = resource.get("format", "").lower()
     url = resource.get("url")
-    resource_id = resource.get("id")
 
     if fmt == "csv":
-        return t.CsvUrlDataSource(url=url, resource_id=resource_id)
+        return t.CsvUrlDataSource(url=url, resource=resource)
     if fmt == "xlsx":
-        return t.XlsxUrlDataSource(url=url, resource_id=resource_id)
+        return t.XlsxUrlDataSource(url=url, resource=resource)
     if fmt == "orc":
-        return t.OrcUrlDataSource(url=url, resource_id=resource_id)
+        return t.OrcUrlDataSource(url=url, resource=resource)
     if fmt == "parquet":
-        return t.ParquetUrlDataSource(url=url, resource_id=resource_id)
+        return t.ParquetUrlDataSource(url=url, resource=resource)
     if fmt == "feather":
-        return t.FeatherUrlDataSource(url=url, resource_id=resource_id)
+        return t.FeatherUrlDataSource(url=url, resource=resource)
 
     raise ValueError(f"Unsupported format: {fmt}")  # noqa: TRY003
