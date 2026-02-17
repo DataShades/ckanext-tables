@@ -60,7 +60,7 @@ def tables_init_temporary_preview_table(
     Returns:
         A TableDefinition object representing the initialized temporary preview table.
     """
-    data_source = guess_data_source(resource)
+    data_source = tk.h.tables_guess_data_source(resource)
 
     return t.TableDefinition(
         name=f"preview resource {resource['id']}",
@@ -71,7 +71,7 @@ def tables_init_temporary_preview_table(
     )
 
 
-def guess_data_source(resource: dict[str, Any]) -> type[t.BaseDataSource]:
+def tables_guess_data_source(resource: dict[str, Any]) -> t.BaseDataSource:
     fmt = resource.get("format", "").lower()
     url = resource.get("url")
 

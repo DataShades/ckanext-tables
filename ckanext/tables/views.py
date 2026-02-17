@@ -1,6 +1,6 @@
 import logging
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify
 from flask.views import MethodView
 
 import ckan.plugins.toolkit as tk
@@ -44,14 +44,13 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         Returns:
             JSON response with table data or export file
         """
-        handler = ResourceViewHandler()
-        table = handler.get_table_for_resource(resource_id)
+        table = self.get_table_for_resource(resource_id)
 
-        if exporter_name := request.args.get("exporter"):
-            return handler._export(table, exporter_name)
+        if exporter_name := tk.request.args.get("exporter"):
+            return self._export(table, exporter_name)
 
-        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return handler._ajax_data(table)
+        if tk.request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return self._ajax_data(table)
 
         tk.abort(400, tk._("This endpoint only accepts AJAX requests"))
 
@@ -64,24 +63,23 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         Returns:
             JSON response with action result
         """
-        handler = ResourceViewHandler()
-        table = handler.get_table_for_resource(resource_id)
+        table = self.get_table_for_resource(resource_id)
 
-        row_action = request.form.get("row_action")
-        table_action = request.form.get("table_action")
-        bulk_action = request.form.get("bulk_action")
-        row = request.form.get("row")
-        rows = request.form.get("rows")
-        refresh = request.form.get("refresh")
+        row_action = tk.request.form.get("row_action")
+        table_action = tk.request.form.get("table_action")
+        bulk_action = tk.request.form.get("bulk_action")
+        row = tk.request.form.get("row")
+        rows = tk.request.form.get("rows")
+        refresh = tk.request.form.get("refresh")
 
         if table_action:
-            return handler._apply_table_action(table, table_action)
+            return self._apply_table_action(table, table_action)
         if row_action:
-            return handler._apply_row_action(table, row_action, row)
+            return self._apply_row_action(table, row_action, row)
         if bulk_action:
-            return handler._apply_bulk_action(table, bulk_action, rows)
+            return self._apply_bulk_action(table, bulk_action, rows)
         if refresh:
-            return handler._refresh_data(table)
+            return self._refresh_data(table)
 
         return jsonify({"success": False, "error": "No action specified"})
 

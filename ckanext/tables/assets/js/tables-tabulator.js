@@ -358,7 +358,11 @@ ckan.module("tables-tabulator", function ($) {
                     url.searchParams.set(`sort[0][dir]`, s.dir);
                 });
                 this._showToast(ckan.i18n._(`${target.innerText} export started.`));
-                const fullUrl = this.sandbox.client.url(this.options.config.ajaxURL) + url.search;
+                const targetUrl = new URL(this.sandbox.client.url(this.options.config.ajaxURL), window.location.origin);
+                url.searchParams.forEach((value, key) => {
+                    targetUrl.searchParams.append(key, value);
+                });
+                const fullUrl = targetUrl.toString();
                 const response = await fetch(fullUrl);
                 if (!response.ok)
                     throw new Error(`${target.innerText} export failed`);
