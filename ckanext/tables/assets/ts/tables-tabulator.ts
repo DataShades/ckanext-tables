@@ -144,6 +144,13 @@ ckan.module("tables-tabulator", function ($) {
                 paginationInitialPage: parseInt(initialPage || "1"),
                 footerElement: this.templates.footerElement,
                 ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
+                ajaxResponse: (_url: string, _params: any, response: any) => {
+                    const el: HTMLElement | null = document.getElementById("total-count-value");
+                    if (el && response.total !== undefined) {
+                        el.innerHTML = response.total;
+                    }
+                    return response;
+                },
             });
         },
 

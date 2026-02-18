@@ -107,6 +107,15 @@
                 <i class="fa fa-arrows-rotate"></i>
             </button>
         {% endblock %}
+
+        {% block table_total_count %}
+            <div class="d-flex align-items-center ms-auto">
+                <span id="total-count-value" class="me-1">
+                    0
+                </span>
+                <span>{{ _('row(s)') }}</span>
+            </div>
+        {% endblock %}
     </div>
 {% endblock table_control %}
 

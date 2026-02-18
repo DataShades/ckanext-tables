@@ -25,7 +25,7 @@ class AjaxTableMixin:
         params = tables_build_params()
         data = table.get_data(params)
         total = table.get_total_count(params)
-        return jsonify({"data": data, "last_page": (total + params.size - 1) // params.size})
+        return jsonify({"data": data, "last_page": (total + params.size - 1) // params.size, "total": total})
 
     def _apply_table_action(self, table: TableDefinition, action: str) -> Response:
         table_action = table.get_table_action(action)
