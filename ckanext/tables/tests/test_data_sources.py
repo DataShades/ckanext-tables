@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from ckanext.tables.cache import PickleCacheBackend
 from ckanext.tables.data_sources import BaseResourceDataSource, CsvUrlDataSource, PandasDataSource
 
 
@@ -39,14 +40,14 @@ class TestCsvUrlDataSource:
         # First fetch should create cache
         ds.filter([]).all()
 
-        cache_file_path = ds._get_cache_path()
-        assert os.path.exists(cache_file_path)
-        cached_df = pd.read_pickle(cache_file_path)
-        assert len(cached_df) == 1
-        assert cached_df.iloc[0]["name"] == "Alice"
+        backend = ds.cache_backend
+        assert isinstance(backend, PickleCacheBackend)
 
-        modified_df = pd.DataFrame([{"id": "99", "name": "Hacker", "age": "99"}])
-        modified_df.to_pickle(cache_file_path)
+        cache_file_path = backend.get_cache_path(ds.get_cache_key())
+        assert os.path.exists(cache_file_path)
+
+        # Overwrite the cache with different data via the backend
+        backend.set(ds.get_cache_key(), [{"id": "99", "name": "Hacker", "age": "99"}], ds.cache_ttl)
 
         ds2 = CsvUrlDataSource(url)
         data = ds2.filter([]).all()
@@ -101,9 +102,6 @@ class TestSerialization:
         """Test strict serialization of complex types (bytes, decimal, numpy, datetime)."""
 
         class MockPandasDataSource(PandasDataSource):
-            def get_cache_key(self):
-                return "mock"
-
             def fetch_dataframe(self):
                 return pd.DataFrame()
 

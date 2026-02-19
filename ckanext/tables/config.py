@@ -7,7 +7,7 @@ CONF_CACHE_DIR = "ckanext.tables.cache_dir"
 
 
 def get_cache_dir() -> str:
-    cache_dir = tk.config[CONF_CACHE_DIR]
+    cache_dir = tk.config.get(CONF_CACHE_DIR, "/tmp/ckanext-tables-cache")
 
     if not os.path.exists(cache_dir):
         try:

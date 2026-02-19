@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import decimal
-import hashlib
 import logging
-import os
-import pickle
-import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -23,7 +19,7 @@ import ckan.plugins.toolkit as tk
 from ckan import model
 from ckan.lib import uploader
 
-from ckanext.tables import config
+from ckanext.tables.cache import CachedDataSourceMixin, PickleCacheBackend, RedisCacheBackend
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -198,50 +194,47 @@ class ListDataSource(BaseDataSource):
 
 
 class PandasDataSource(BaseDataSource):
-    """Base class for data sources that use pandas DataFrame with caching."""
+    """Base class for data sources that use a pandas DataFrame.
 
-    CACHE_TTL = 30  # 5 minutes
+    Subclasses must implement :meth:`fetch_dataframe`. Caching is **not**
+    included here — mix in :class:`~ckanext.tables.cache.CachedDataSourceMixin`
+    and set ``cache_backend`` if you want it.
+    """
 
     def __init__(self):
         self._df: pd.DataFrame | None = None
         self._filtered_df: pd.DataFrame | None = None
 
-    def get_cache_key(self) -> str:
-        """Return a unique key for the data source to be used for caching."""
-        raise NotImplementedError
-
     def fetch_dataframe(self) -> pd.DataFrame:
         """Fetch the data and return it as a pandas DataFrame."""
         raise NotImplementedError
 
-    def _get_cache_path(self) -> str:
-        """Generate a cache file path based on the cache key."""
-        key = self.get_cache_key()
-        url_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        return os.path.join(config.get_cache_dir(), f"{url_hash}.pkl")
-
     def _ensure_loaded(self) -> None:
-        """Load the dataframe. Use cache if available."""
+        """Load the dataframe, using the cache backend when available."""
         if self._df is not None:
             return
 
-        cache_path = self._get_cache_path()
-
-        if os.path.exists(cache_path) and time.time() - os.path.getmtime(cache_path) < self.CACHE_TTL:
-            try:
-                data = pd.read_pickle(cache_path)  # noqa: S301
-                if isinstance(data, pd.DataFrame):
-                    self._df = data
-            except (OSError, pickle.PickleError):
-                log.debug("Failed to read from cache %s", cache_path, exc_info=True)
+        # Use CachedDataSourceMixin if the subclass opted in
+        if isinstance(self, CachedDataSourceMixin):
+            cached = self.cache_backend.get(self.get_cache_key())
+            if cached is not None:
+                try:
+                    self._df = pd.DataFrame(cached)
+                except (ValueError, TypeError):
+                    log.debug("Failed to restore DataFrame from cache", exc_info=True)
 
         if self._df is None:
             self._df = self.fetch_dataframe()
 
-            try:
-                self._df.to_pickle(cache_path)
-            except OSError as e:
-                log.warning("Failed to write to cache %s: %s", cache_path, e)
+            if isinstance(self, CachedDataSourceMixin):
+                try:
+                    self.cache_backend.set(
+                        self.get_cache_key(),
+                        self._df.to_dict(orient="records"),
+                        self.cache_ttl,
+                    )
+                except OSError:
+                    log.warning("Failed to write DataFrame to cache", exc_info=True)
 
         self._filtered_df = self._df
 
@@ -346,13 +339,22 @@ class PandasDataSource(BaseDataSource):
         return str(val)
 
 
-class BaseResourceDataSource(PandasDataSource):
-    """A data source that resource data from file or by a URL.
+class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
+    """A data source that loads resource data from a file or URL.
+
+    Uses :class:`~ckanext.tables.cache.PickleCacheBackend` by default so that
+    the fetched DataFrame is cached on disk.
+
+    Override ``cache_backend`` on a subclass to switch to a different backend,
+    or set ``cache_ttl`` to change the expiry.
 
     Args:
-        url: The URL to fetch the ORC data from
-        resource: The resource dictionary
+        url: Direct URL to fetch data from.
+        resource: The CKAN resource dictionary.
     """
+
+    cache_backend: PickleCacheBackend = RedisCacheBackend()
+    cache_ttl: int = 300
 
     def __init__(self, url: str | None = None, resource: dict[str, Any] | None = None):
         super().__init__()

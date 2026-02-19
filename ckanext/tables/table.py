@@ -11,9 +11,9 @@ import ckan.plugins.toolkit as tk
 from ckan.types import Context
 
 from ckanext.tables import formatters, types
+from ckanext.tables.cache import CachedDataSourceMixin
 from ckanext.tables.data_sources import BaseDataSource
 from ckanext.tables.exporters import ExporterBase
-from ckanext.tables.utils import CacheManager
 
 COLUMN_ACTIONS_FIELD = "__table_actions"
 
@@ -24,7 +24,9 @@ class TableDefinition:
 
     Attributes:
         name: Unique identifier for the table.
-        data_source: Data source for the table.
+        data_source: Data source for the table. Mix in
+            :class:`~ckanext.tables.cache.CachedDataSourceMixin` on the data
+            source to enable caching; the TTL and backend are configured there.
         ajax_url: (Optional) URL to fetch data from. Defaults to an auto-generated URL.
         columns: (Optional) List of ColumnDefinition objects.
         row_actions: (Optional) List of RowActionDefinition objects.
@@ -34,7 +36,6 @@ class TableDefinition:
         placeholder: (Optional) Placeholder text for an empty table.
         page_size: (Optional) Number of rows per page. Defaults to 10.
         table_template: (Optional) Template to render the table. Defaults to `tables/base.html`.
-        cache_ttl: (Optional) Time-to-live for cached table data in seconds. Defaults to 300 seconds.
     """
 
     name: str
@@ -48,11 +49,17 @@ class TableDefinition:
     placeholder: str | None = None
     page_size: int = 10
     table_template: str = "tables/base.html"
-    cache_ttl: int = 300  # seconds
 
     def __post_init__(self):
-        self._cache_manager = CacheManager(cache_ttl=self.cache_ttl)
-        self._table_data = self._cache_manager.get(self.name)
+        # Wire up caching through the data source's backend, if it has one.
+        if isinstance(self.data_source, CachedDataSourceMixin):
+            self._cache = self.data_source.cache_backend
+            self._cache_key = f"table:{self.name}"
+            self._cache_ttl = self.data_source.cache_ttl
+        else:
+            self._cache = None
+            self._cache_key = ""
+            self._cache_ttl = 0
 
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
 
@@ -138,31 +145,38 @@ class TableDefinition:
         )
 
     def get_total_count(self, params: types.QueryParams) -> int:
-        cached_count = self.get_cached_total_count(params)
+        cached = self._get_cached_count(params)
 
-        if cached_count:
-            return cached_count
+        if cached is not None:
+            return cached
 
         # for total count we only apply filter, without sort and pagination
         count = self.data_source.filter(params.filters).count()
 
-        self.set_cached_total_count(params, count)
+        self._set_cached_count(params, count)
 
         return count
 
-    def get_cached_total_count(self, params: types.QueryParams) -> int | None:
-        result = self._table_data.get(str(params)) if params.filters else self._table_data.get("total_count")
+    def _count_cache_key(self, params: types.QueryParams) -> str:
+        """Return the cache sub-key for a given set of query params."""
+        return f"{self._cache_key}:count:{params!s}" if params.filters else f"{self._cache_key}:count"
+
+    def _get_cached_count(self, params: types.QueryParams) -> int | None:
+        if self._cache is None:
+            return None
+
+        result = self._cache.get(self._count_cache_key(params))
 
         if result is not None:
             return int(result)
 
-    def set_cached_total_count(self, params: types.QueryParams, count: int) -> None:
-        if params.filters:
-            self._table_data[str(params)] = count
-        else:
-            self._table_data["total_count"] = count
+        return None
 
-        self._cache_manager.save(self.name, self._table_data)
+    def _set_cached_count(self, params: types.QueryParams, count: int) -> None:
+        if self._cache is None:
+            return
+
+        self._cache.set(self._count_cache_key(params), count, self._cache_ttl)
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row."""
@@ -209,7 +223,10 @@ class TableDefinition:
         return next((e for e in self.exporters if e.name == name), None)
 
     def refresh_data(self) -> None:
-        self._cache_manager.delete(self.name)
+        if self._cache is not None:
+            self._cache.delete(self._cache_key)
+            # Also clear any cached counts
+            self._cache.delete(f"{self._cache_key}:count")
 
 
 @dataclass(frozen=True)
