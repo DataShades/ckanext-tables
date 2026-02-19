@@ -261,8 +261,9 @@ class PandasDataSource(BaseDataSource):
                 val = filter_item.value
                 op = filter_item.operator
 
-                # Attempt to convert types if possible, otherwise use string comparison
-                if pd.api.types.is_numeric_dtype(series):
+                # Attempt to convert types if possible, otherwise use string comparison.
+                # Skip numeric cast for "like" — we need the raw string for str.contains().
+                if op != "like" and pd.api.types.is_numeric_dtype(series):
                     with contextlib.suppress(ValueError):
                         val = float(val)
 
@@ -279,9 +280,10 @@ class PandasDataSource(BaseDataSource):
                 elif op == ">=":
                     self._filtered_df = self._filtered_df[series >= val]
                 elif op == "like":
-                    # naive string contains
+                    # Cast series to str so LIKE works on numeric columns too.
+                    # Use filter_item.value (the original string) to avoid float repr like "157.0".
                     self._filtered_df = self._filtered_df[
-                        series.astype(str).str.contains(str(val), case=False, na=False)
+                        series.astype(str).str.contains(str(filter_item.value), case=False, na=False)
                     ]
             except (ValueError, TypeError):
                 log.debug("Failed to apply filter %s", filter_item, exc_info=True)

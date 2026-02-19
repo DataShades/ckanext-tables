@@ -273,6 +273,7 @@ ckan.module("tables-tabulator", function ($) {
                 }
 
                 this._applyColumnVisibilityFromUrl();
+                this._initHeaderFilterToggles();
             });
 
             this.table.on("renderComplete", function (this: any) {
@@ -498,6 +499,68 @@ ckan.module("tables-tabulator", function ($) {
 
         _refreshData: function (): Promise<void> {
             return this.table.replaceData();
+        },
+
+        _initHeaderFilterToggles: function (): void {
+            const tableEl = this.el[0] as HTMLElement;
+
+            tableEl.querySelectorAll<HTMLElement>(".tabulator-col[tabulator-field]").forEach((colEl) => {
+                const filterInput = colEl.querySelector<HTMLInputElement>(".tabulator-header-filter input");
+                if (!filterInput) return;
+
+                const sorterEl = colEl.querySelector(".tabulator-col-sorter");
+                if (!sorterEl) return;
+
+                filterInput.id = `header-filter-${colEl.getAttribute("tabulator-field") || ""}`;
+
+                const btn = this._buildFilterToggleButton(colEl, filterInput);
+
+                this._syncHeaderFilterState(colEl, filterInput, btn);
+
+                // Keep button state in sync as the user types
+                filterInput.addEventListener("input", () => {
+                    this._syncHeaderFilterState(colEl, filterInput, btn);
+                });
+
+                sorterEl.insertAdjacentElement("afterend", btn);
+            });
+        },
+
+        _buildFilterToggleButton: function(colEl: HTMLElement, filterInput: HTMLInputElement): HTMLButtonElement {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn-header-filter-toggle";
+            btn.title = ckan.i18n._("Toggle column filter");
+            btn.setAttribute("aria-controls", filterInput.id);
+            btn.innerHTML = '<i class="fa fa-search"></i>';
+
+            btn.addEventListener("click", (e: Event) => {
+                e.stopPropagation();
+
+                // Do not close if filter has value
+                if (filterInput.value.trim()) {
+                    colEl.classList.add("filter-visible");
+                    return;
+                }
+
+                colEl.classList.toggle("filter-visible");
+                this._syncHeaderFilterState(colEl, filterInput, btn);
+
+                // Force Tabulator to recalculate column header heights
+                this.table.redraw();
+
+                if (colEl.classList.contains("filter-visible")) {
+                    filterInput.focus();
+                }
+            });
+
+            return btn;
+        },
+
+        _syncHeaderFilterState: function (colEl: HTMLElement, filterInput: HTMLInputElement, btn: HTMLButtonElement): void {
+            const hasValue = Boolean(filterInput.value.trim());
+            colEl.classList.toggle("filter-active", hasValue);
+            btn.classList.toggle("active", hasValue || colEl.classList.contains("filter-visible"));
         },
 
         _onFullscreen: function (): void {

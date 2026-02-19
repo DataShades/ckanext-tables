@@ -86,6 +86,7 @@ class TableDefinition:
             "paginationSize": self.page_size,
             "paginationSizeSelector": [5, 10, 25, 50, 100],
             "minHeight": 300,
+            "filterMode": "remote"
         }
 
         if self.ajax_url:
@@ -279,6 +280,10 @@ class ColumnDefinition:
             result["sorter"] = "string"
         else:
             result["headerSort"] = False
+
+        if self.filterable:
+            result["headerFilter"] = True
+            result["headerFilterPlaceholder"] = tk._("Search")
 
         return result
 
