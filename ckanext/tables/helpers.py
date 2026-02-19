@@ -75,15 +75,18 @@ def tables_guess_data_source(resource: dict[str, Any]) -> t.BaseDataSource:
     fmt = resource.get("format", "").lower()
     url = resource.get("url")
 
-    if fmt == "csv":
-        return t.CsvUrlDataSource(url=url, resource=resource)
-    if fmt == "xlsx":
-        return t.XlsxUrlDataSource(url=url, resource=resource)
-    if fmt == "orc":
-        return t.OrcUrlDataSource(url=url, resource=resource)
-    if fmt == "parquet":
-        return t.ParquetUrlDataSource(url=url, resource=resource)
-    if fmt == "feather":
-        return t.FeatherUrlDataSource(url=url, resource=resource)
+    cache_backend = t.RedisCacheBackend()
+    data_sources = {
+        "csv": t.CsvUrlDataSource,
+        "xlsx": t.XlsxUrlDataSource,
+        "orc": t.OrcUrlDataSource,
+        "parquet": t.ParquetUrlDataSource,
+        "feather": t.FeatherUrlDataSource,
+    }
+
+    data_source_class = data_sources.get(fmt)
+
+    if data_source_class:
+        return data_source_class(url=url, resource=resource, cache_backend=cache_backend)
 
     raise ValueError(f"Unsupported format: {fmt}")  # noqa: TRY003

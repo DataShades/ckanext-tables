@@ -130,7 +130,9 @@ class PickleCacheBackend(CacheBackend):
                 return None
 
             with open(path, "rb") as f:
-                return pickle.load(f)  # noqa: S301
+                data = pickle.load(f)  # noqa: S301
+
+            return data["value"] if isinstance(data, dict) and "value" in data else data
         except (OSError, pickle.PickleError):
             log.debug("Failed to read pickle cache %s", path, exc_info=True)
             return None
@@ -192,9 +194,6 @@ class CachedDataSourceMixin:
         class BaseResourceDataSource(DatabaseDataSource):
             ...
     """
-
-    cache_ttl: int = 300
-    cache_backend: CacheBackend = RedisCacheBackend()
 
     def get_cache_key(self) -> str:
         """Return a unique string key for this data source instance."""

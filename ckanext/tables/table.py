@@ -93,7 +93,7 @@ class TableDefinition:
             "paginationSize": self.page_size,
             "paginationSizeSelector": [5, 10, 25, 50, 100],
             "minHeight": 300,
-            "filterMode": "remote"
+            "filterMode": "remote",
         }
 
         if self.ajax_url:

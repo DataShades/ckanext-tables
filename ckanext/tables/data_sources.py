@@ -19,7 +19,7 @@ import ckan.plugins.toolkit as tk
 from ckan import model
 from ckan.lib import uploader
 
-from ckanext.tables.cache import CachedDataSourceMixin, PickleCacheBackend, RedisCacheBackend
+from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin, RedisCacheBackend
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -214,14 +214,11 @@ class PandasDataSource(BaseDataSource):
         if self._df is not None:
             return
 
-        # Use CachedDataSourceMixin if the subclass opted in
-        if isinstance(self, CachedDataSourceMixin):
-            cached = self.cache_backend.get(self.get_cache_key())
-            if cached is not None:
-                try:
-                    self._df = pd.DataFrame(cached)
-                except (ValueError, TypeError):
-                    log.debug("Failed to restore DataFrame from cache", exc_info=True)
+        if isinstance(self, CachedDataSourceMixin) and (cached := self.cache_backend.get(self.get_cache_key())):
+            try:
+                self._df = pd.DataFrame(cached)
+            except (ValueError, TypeError):
+                log.debug("Failed to restore DataFrame from cache", exc_info=True)
 
         if self._df is None:
             self._df = self.fetch_dataframe()
@@ -355,10 +352,16 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         resource: The CKAN resource dictionary.
     """
 
-    cache_backend: PickleCacheBackend = RedisCacheBackend()
+    cache_backend: CacheBackend = RedisCacheBackend()
     cache_ttl: int = 300
 
-    def __init__(self, url: str | None = None, resource: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        url: str | None = None,
+        resource: dict[str, Any] | None = None,
+        cache_backend: CacheBackend | None = None,
+        cache_ttl: int | None = None,
+    ):
         super().__init__()
 
         if not url and not resource:
@@ -369,6 +372,12 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         self.url = url
         self.resource = resource
         self._source_path: str = ""
+
+        if cache_backend is not None:
+            self.cache_backend = cache_backend
+
+        if cache_ttl is not None:
+            self.cache_ttl = cache_ttl
 
     def get_cache_key(self) -> str:
         return f"resource-{self.resource['id']}" if self.resource else f"url-{self.url}"

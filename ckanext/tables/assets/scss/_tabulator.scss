@@ -37,7 +37,7 @@ $color-active: #206b82;
         }
     }
 
-    .tabulator-container {
+    &.tabulator-container {
         position: relative;
         min-height: 120px;
 
@@ -73,6 +73,7 @@ $color-active: #206b82;
         }
     }
 
+    // footer styles
     .tabulator-footer {
         border-top: unset;
 
@@ -109,7 +110,7 @@ $color-active: #206b82;
     }
 
     // Header filter toggle
-    .tabulator-col {
+    .tabulator-col:not(.tabulator-row-header) {
         .tabulator-col-title-holder {
             display: flex;
             align-items: center;

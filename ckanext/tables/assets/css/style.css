@@ -27,27 +27,27 @@
   border: 1px solid #ced4da;
   color: black;
 }
-.tabulator-wrapper .tabulator .tabulator-container {
+.tabulator-wrapper .tabulator.tabulator-container {
   position: relative;
   min-height: 120px;
 }
-.tabulator-wrapper .tabulator .tabulator-container .tabulator-table .tabulator-row.tabulator-selected {
+.tabulator-wrapper .tabulator.tabulator-container .tabulator-table .tabulator-row.tabulator-selected {
   background-color: rgba(0, 93, 122, 0.25) !important;
 }
-.tabulator-wrapper .tabulator .tabulator-container .tabulator-table .tabulator-row.tabulator-selected:hover {
+.tabulator-wrapper .tabulator.tabulator-container .tabulator-table .tabulator-row.tabulator-selected:hover {
   background-color: rgba(0, 93, 122, 0.35) !important;
 }
-.tabulator-wrapper .tabulator .tabulator-container .tabulator-table .tabulator-row .tabulator-cell.tabulator-row-header {
+.tabulator-wrapper .tabulator.tabulator-container .tabulator-table .tabulator-row .tabulator-cell.tabulator-row-header {
   border-right: unset;
   background: unset;
 }
-.tabulator-wrapper .tabulator .tabulator-container .tabulator-table .tabulator-row .tabulator-cell .dropdown-toggle::after {
+.tabulator-wrapper .tabulator.tabulator-container .tabulator-table .tabulator-row .tabulator-cell .dropdown-toggle::after {
   display: none;
 }
-.tabulator-wrapper .tabulator .tabulator-container .tabulator-table .tabulator-row:hover {
+.tabulator-wrapper .tabulator.tabulator-container .tabulator-table .tabulator-row:hover {
   background-color: #f9fafb !important;
 }
-.tabulator-wrapper .tabulator .tabulator-container .tabulator-table .tabulator-row:last-child {
+.tabulator-wrapper .tabulator.tabulator-container .tabulator-table .tabulator-row:last-child {
   border-bottom: unset;
 }
 .tabulator-wrapper .tabulator .tabulator-footer {
@@ -75,28 +75,28 @@
   border-color: #206b82;
   color: #fff;
 }
-.tabulator-wrapper .tabulator .tabulator-col .tabulator-col-title-holder {
+.tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-col-title-holder {
   display: flex;
   align-items: center;
 }
-.tabulator-wrapper .tabulator .tabulator-col .tabulator-col-title-holder .tabulator-col-title {
+.tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-col-title-holder .tabulator-col-title {
   width: fit-content;
   padding-right: 1rem;
 }
-.tabulator-wrapper .tabulator .tabulator-col .tabulator-col-title-holder .tabulator-col-sorter {
+.tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-col-title-holder .tabulator-col-sorter {
   position: initial !important;
 }
-.tabulator-wrapper .tabulator .tabulator-col .tabulator-header-filter input {
+.tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-header-filter input {
   border: 1px solid #DADEE2;
   border-radius: 4px;
   padding: 8px 12px !important;
   line-height: 1;
   margin-top: 8px;
 }
-.tabulator-wrapper .tabulator .tabulator-col .tabulator-header-filter input {
+.tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-header-filter input {
   display: none;
 }
-.tabulator-wrapper .tabulator .tabulator-col.filter-visible .tabulator-header-filter input, .tabulator-wrapper .tabulator .tabulator-col.filter-active .tabulator-header-filter input {
+.tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header).filter-visible .tabulator-header-filter input, .tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header).filter-active .tabulator-header-filter input {
   display: block;
 }
 .tabulator-wrapper .tabulator .btn-header-filter-toggle {
