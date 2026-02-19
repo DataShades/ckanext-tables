@@ -16,7 +16,7 @@
     "scripts": {
         "dev": "DEBUG=1 gulp watch",
         "build": "gulp build",
-        "ts-build": "tsc",
+        "ts-build": "tsc && npx terser ckanext/tables/assets/js/tables-tabulator.js --compress --mangle --output ckanext/tables/assets/js/tables-tabulator.js",
         "ts-watch": "tsc -w"
     }
 }
