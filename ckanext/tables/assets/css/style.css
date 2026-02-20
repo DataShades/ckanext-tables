@@ -22,10 +22,12 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
 .table-control {
   color: #596A73;
 }
-.table-control .btn.btn-light {
+.table-control .btn.btn-light,
+.table-control .btn.btn-default {
   color: #212529;
 }
-.table-control .btn.btn-light i {
+.table-control .btn.btn-light i,
+.table-control .btn.btn-default i {
   color: #596A73;
 }
 
@@ -139,6 +141,7 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
 .tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-col-title-holder {
   display: flex;
   align-items: center;
+  line-height: 1;
 }
 .tabulator-wrapper .tabulator .tabulator-col:not(.tabulator-row-header) .tabulator-col-title-holder .tabulator-col-title {
   width: fit-content;
