@@ -28,9 +28,12 @@ body.tables-fullscreen {
 }
 
 .table-control {
-    color: #212529;
+    color: #596A73;
 
-    .btn {
+    .btn.btn-light,
+    .btn.btn-default {
+        color: #212529;
+
         i {
             color: #596A73;
         }

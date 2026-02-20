@@ -20,9 +20,12 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
 }
 
 .table-control {
+  color: #596A73;
+}
+.table-control .btn.btn-light {
   color: #212529;
 }
-.table-control .btn i {
+.table-control .btn.btn-light i {
   color: #596A73;
 }
 
