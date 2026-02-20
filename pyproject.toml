@@ -1,6 +1,6 @@
 [project]
 name = "ckanext-tables"
-version = "1.15.0"
+version = "1.15.1"
 description = "An extension to render dynamic tables"
 readme = "README.md"
 authors = [
