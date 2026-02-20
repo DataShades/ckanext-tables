@@ -52,6 +52,7 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
   border-bottom: unset;
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
+  font-size: 1rem;
 }
 .tabulator-wrapper .tabulator .tabulator-header .tabulator-col {
   background-color: #F8F9FA;
@@ -94,7 +95,7 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
 .tabulator-wrapper .tabulator .tabulator-footer {
   border: unset;
   background: unset;
-  padding: 1rem 0 0 0;
+  padding: 1rem 0 0.5rem 0;
 }
 .tabulator-wrapper .tabulator .tabulator-footer .tabulator-page-counter {
   color: #596A73;

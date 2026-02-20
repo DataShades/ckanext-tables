@@ -12,7 +12,7 @@ class PeopleTable(t.TableDefinition):
             name="people",
             data_source=t.ListDataSource(data=DATA),
             columns=[
-                t.ColumnDefinition(field="id", width=70),
+                t.ColumnDefinition(field="id", title="ID", width=90),
                 t.ColumnDefinition(field="name"),
                 t.ColumnDefinition(field="surname", title="Last Name"),
                 t.ColumnDefinition(field="email"),
@@ -23,9 +23,17 @@ class PeopleTable(t.TableDefinition):
             ],
             row_actions=[
                 t.RowActionDefinition(
+                    action="make_sysadmin",
+                    label="Promote to Sysadmin",
+                    icon="fa fa-user-graduate",
+                    callback=self.pseudo_actions,
+                    with_confirmation=True,
+                ),
+                t.RowActionDefinition(
                     action="remove_user",
                     label="Remove User",
                     icon="fa fa-trash",
+                    attrs={"class": "text-danger"},
                     callback=self.remove_user,
                     with_confirmation=True,
                 ),
@@ -35,21 +43,23 @@ class PeopleTable(t.TableDefinition):
                     action="remove_user",
                     label="Remove Selected Users",
                     icon="fa fa-trash",
+                    attrs={"class": "text-danger"},
                     callback=self.remove_users,
                 ),
             ],
             table_actions=[
                 t.TableActionDefinition(
-                    action="remove_all_users",
-                    label="Remove All Users",
-                    icon="fa fa-trash",
-                    callback=self.remove_all_users,
-                ),
-                t.TableActionDefinition(
                     action="recreate_users",
                     label="Recreate Users",
                     icon="fa fa-refresh",
                     callback=self.recreate_users,
+                ),
+                t.TableActionDefinition(
+                    action="remove_all_users",
+                    label="Remove All Users",
+                    icon="fa fa-trash",
+                    attrs={"class": "text-danger"},
+                    callback=self.remove_all_users,
                 ),
             ],
             exporters=t.ALL_EXPORTERS,
@@ -59,6 +69,9 @@ class PeopleTable(t.TableDefinition):
         """Callback to remove a user from the data source."""
         DATA[:] = [r for r in DATA if r["id"] != row["id"]]
         return t.ActionHandlerResult(success=True, message="User removed.")
+
+    def pseudo_actions(self, row: t.Row) -> t.ActionHandlerResult:
+        return t.ActionHandlerResult(success=True, message="Action isn't implemented.")
 
     def remove_users(self, rows: list[t.Row]) -> t.ActionHandlerResult:
         """Callback to remove a user from the data source."""

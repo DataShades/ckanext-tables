@@ -123,6 +123,7 @@ class TableDefinition:
                 "name": action.action,
                 "label": action.label,
                 "icon": action.icon,
+                "attrs": action.attrs,
                 "with_confirmation": action.with_confirmation,
             }
             for action in self.row_actions
@@ -320,6 +321,7 @@ class BulkActionDefinition:
     label: str
     callback: Callable[[list[types.Row]], types.ActionHandlerResult]
     icon: str | None = None
+    attrs: dict[str, Any] = dataclass_field(default_factory=dict)
 
     def __call__(self, rows: list[types.Row]) -> types.ActionHandlerResult:
         return self.callback(rows)
@@ -340,6 +342,7 @@ class TableActionDefinition:
     label: str
     callback: Callable[..., types.ActionHandlerResult]
     icon: str | None = None
+    attrs: dict[str, Any] = dataclass_field(default_factory=dict)
 
     def __call__(self) -> types.ActionHandlerResult:
         return self.callback()
@@ -361,6 +364,7 @@ class RowActionDefinition:
     label: str
     callback: Callable[[types.Row], types.ActionHandlerResult]
     icon: str | None = None
+    attrs: dict[str, Any] = dataclass_field(default_factory=dict)
     with_confirmation: bool = False
 
     def __call__(self, row: types.Row) -> types.ActionHandlerResult:

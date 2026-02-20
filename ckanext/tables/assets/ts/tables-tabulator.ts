@@ -32,6 +32,7 @@ type TabulatorAction = {
     name: string;
     label: string;
     icon?: string;
+    attrs?: Record<string, string>;
     with_confirmation?: boolean;
 };
 
@@ -120,10 +121,17 @@ ckan.module("tables-tabulator", function ($) {
 
             if (this.options.rowActions) {
                 const rowActions = this.options.rowActions as Record<string, TabulatorAction>;
-                this.options.config.rowContextMenu = Object.values(rowActions).map((action: TabulatorAction) => ({
-                    label: `${action.icon ? `<i class='${action.icon} me-1'></i> ` : ""}${action.label}`,
-                    action: this._rowActionCallback.bind(this, action),
-                }));
+                this.options.config.rowContextMenu = Object.values(rowActions).map((action: TabulatorAction) => {
+                    const attrs = Object.entries(action.attrs || {})
+                        .map(([k, v]) => `${k}="${v}"`)
+                        .join(" ");
+                    const icon = action.icon ? `<i class='${action.icon} me-1'></i> ` : "";
+
+                    return {
+                        label: `<span ${attrs}>${icon}${action.label}</span>`,
+                        action: this._rowActionCallback.bind(this, action),
+                    };
+                });
             }
 
             if (this.options.config.rowHeader) {
