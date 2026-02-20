@@ -3,7 +3,7 @@
 {% from "macros/form/attributes.html" import attributes %}
 
 {% block table_control %}
-    <div class="table-control d-flex gap-2">
+    <div class="table-control d-flex flex-wrap">
         {% block table_filters %}
             <div id="filter-template" style="display:none;">
                 {{ filter_item(table, '', '=', '') }}

@@ -110,7 +110,8 @@ class TableDefinition:
                         "vertAlign": "middle",
                         "formatter": "rowSelection",
                         "titleFormatter": "rowSelection",
-                        "width": 50,
+                        "width": 48,
+                        "height": 48,
                     }
                 }
             )
