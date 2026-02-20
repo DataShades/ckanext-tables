@@ -414,7 +414,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
 class CsvUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
-            return pd.read_csv(self.get_source_path())
+            return pd.read_csv(self.get_source_path(), sep=None, engine="python")
         except Exception:
             log.exception("Error fetching CSV from %s", self.get_source_path())
             return pd.DataFrame()
