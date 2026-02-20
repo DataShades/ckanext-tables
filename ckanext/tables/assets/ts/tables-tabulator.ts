@@ -43,11 +43,6 @@ declare var htmx: {
 ckan.module("tables-tabulator", function ($) {
     "use strict";
     return {
-        templates: {
-            footerElement: `<div class='d-flex justify-content-between align-items-center gap-2'>
-                <a class='btn btn-light d-none d-sm-inline-block' id='btn-fullscreen' title='Fullscreen toggle'><i class='fa fa-expand'></i></a>
-            </div>`,
-        },
         options: {
             config: null as any,
             rowActions: null as Record<string, TabulatorAction> | null,
@@ -72,13 +67,13 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _initAssignVariables: function (): void {
+            this.filtersModal = document.getElementById("filters-modal");
             this.filtersContainer = document.getElementById("filters-container");
             this.applyFiltersBtn = document.getElementById("apply-filters");
             this.clearFiltersModalBtn = document.getElementById("clear-filters");
             this.clearFiltersBtn = document.getElementById("clear-all-filters");
             this.filterTemplate = document.getElementById("filter-template");
             this.addFilterBtn = document.getElementById("add-filter");
-            this.closeFiltersBtn = document.getElementById("close-filters");
             this.filtersCounter = document.getElementById("filters-counter");
             this.bulkActionsMenu = document.getElementById("bulk-actions-menu");
             this.tableActionsMenu = document.getElementById("table-actions-menu");
@@ -88,10 +83,10 @@ ckan.module("tables-tabulator", function ($) {
             this.tableFilters = this._updateTableFilters();
 
             // Column visibility controls
+            this.columnsModal = document.getElementById("columns-modal");
             this.columnsContainer = document.getElementById("columns-container");
             this.applyColumnsBtn = document.getElementById("apply-columns");
             this.resetColumnsBtn = document.getElementById("reset-columns");
-            this.closeColumnsBtn = document.getElementById("close-columns");
             this.selectAllColumnsBtn = document.getElementById("select-all-columns");
             this.deselectAllColumnsBtn = document.getElementById("deselect-all-columns");
             this.columnToggles = document.querySelectorAll(".column-toggle");
@@ -141,8 +136,19 @@ ckan.module("tables-tabulator", function ($) {
 
             this.table = new Tabulator(this.el[0], {
                 ...this.options.config,
+                langs: {
+                    "default": {
+                        pagination: {
+                            page_size: ckan.i18n._("Rows per page"),
+                            first: '<i class="fa fa-angle-double-left"></i>',
+                            prev:  '<i class="fa fa-angle-left"></i>',
+                            next:  '<i class="fa fa-angle-right"></i>',
+                            last:  '<i class="fa fa-angle-double-right"></i>'
+                        }
+                    }
+                },
+                paginationCounter: "rows",
                 paginationInitialPage: parseInt(initialPage || "1"),
-                footerElement: this.templates.footerElement,
                 ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
                 ajaxResponse: (_url: string, _params: any, response: any) => {
                     const el: HTMLElement | null = document.getElementById("total-count-value");
@@ -217,7 +223,7 @@ ckan.module("tables-tabulator", function ($) {
             this.clearFiltersModalBtn.addEventListener("click", this._onClearFilters);
             this.clearFiltersBtn.addEventListener("click", this._onClearFilters);
             this.addFilterBtn.addEventListener("click", this._onAddFilter);
-            this.closeFiltersBtn.addEventListener("click", this._onCloseFilters);
+            $(this.filtersModal).on("hidden.bs.modal", this._onCloseFilters);
 
             this.filtersContainer.addEventListener("click", (e: Event) => {
                 const removeBtn = (e.target as HTMLElement).closest(".btn-remove-filter");
@@ -227,14 +233,13 @@ ckan.module("tables-tabulator", function ($) {
             });
 
             // Column visibility event listeners
+            $(this.columnsModal).on("hidden.bs.modal", this._onCloseColumns);
+
             if (this.applyColumnsBtn) {
                 this.applyColumnsBtn.addEventListener("click", this._onApplyColumns);
             }
             if (this.resetColumnsBtn) {
                 this.resetColumnsBtn.addEventListener("click", this._onResetColumns);
-            }
-            if (this.closeColumnsBtn) {
-                this.closeColumnsBtn.addEventListener("click", this._onCloseColumns);
             }
             if (this.selectAllColumnsBtn) {
                 this.selectAllColumnsBtn.addEventListener("click", this._onSelectAllColumns);
@@ -564,7 +569,7 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _onFullscreen: function (): void {
-            this.tableWrapper.classList.toggle("fullscreen");
+            document.body.classList.toggle("tables-fullscreen");
         },
 
         _onApplyColumns: function (): void {

@@ -1,1 +1,548 @@
-var ckan;ckan||(ckan={}),ckan.module("tables-tabulator",function(t){"use strict";return{templates:{footerElement:"<div class='d-flex justify-content-between align-items-center gap-2'>\n                <a class='btn btn-light d-none d-sm-inline-block' id='btn-fullscreen' title='Fullscreen toggle'><i class='fa fa-expand'></i></a>\n            </div>"},options:{config:null,rowActions:null,enableFullscreenToggle:!0},initialize:function(){t.proxyAll(this,/_/),this.options.config?(this._initAssignVariables(),this._initFiltersFromUrl(),this._initTabulatorInstance(),this._initAddTableEvents(),this._updateClearButtonsState(),this.sandbox.subscribe("tables:tabulator:refresh",this._refreshData)):this._showToast(ckan.i18n._("No config provided for tabulator"),"danger")},_initAssignVariables:function(){this.filtersContainer=document.getElementById("filters-container"),this.applyFiltersBtn=document.getElementById("apply-filters"),this.clearFiltersModalBtn=document.getElementById("clear-filters"),this.clearFiltersBtn=document.getElementById("clear-all-filters"),this.filterTemplate=document.getElementById("filter-template"),this.addFilterBtn=document.getElementById("add-filter"),this.closeFiltersBtn=document.getElementById("close-filters"),this.filtersCounter=document.getElementById("filters-counter"),this.bulkActionsMenu=document.getElementById("bulk-actions-menu"),this.tableActionsMenu=document.getElementById("table-actions-menu"),this.tableExportersMenu=document.getElementById("table-exporters-menu"),this.tableWrapper=document.querySelector(".tabulator-wrapper"),this.tableRefreshBtn=document.getElementById("refresh-table"),this.tableFilters=this._updateTableFilters(),this.columnsContainer=document.getElementById("columns-container"),this.applyColumnsBtn=document.getElementById("apply-columns"),this.resetColumnsBtn=document.getElementById("reset-columns"),this.closeColumnsBtn=document.getElementById("close-columns"),this.selectAllColumnsBtn=document.getElementById("select-all-columns"),this.deselectAllColumnsBtn=document.getElementById("deselect-all-columns"),this.columnToggles=document.querySelectorAll(".column-toggle"),this.hiddenColumnsCounter=document.getElementById("hidden-columns-counter"),this.hiddenColumnsBadge=document.getElementById("hidden-columns-badge")},_initFiltersFromUrl:function(){const t=new URL(window.location.href),e=t.searchParams.getAll("field"),n=t.searchParams.getAll("operator"),i=t.searchParams.getAll("value");e.length&&e.length===n.length&&e.length===i.length&&(this.tableFilters=e.map((t,e)=>({field:t,operator:n[e],value:i[e]})),this.filtersCounter.textContent=this.tableFilters.length.toString(),this.filtersCounter.classList.toggle("d-none",0===this.tableFilters.length),this._updateClearButtonsState())},_initTabulatorInstance:function(){if(this.options.config.ajaxURL||(this.options.config.ajaxURL=window.location.pathname),this.options.rowActions){const t=this.options.rowActions;this.options.config.rowContextMenu=Object.values(t).map(t=>({label:`${t.icon?`<i class='${t.icon} me-1'></i> `:""}${t.label}`,action:this._rowActionCallback.bind(this,t)}))}this.options.config.rowHeader&&(this.options.config.rowHeader.cellClick=function(t,e){e.getRow().toggleSelect()});const t=new URLSearchParams(window.location.search).get("page");this.table=new Tabulator(this.el[0],{...this.options.config,paginationInitialPage:parseInt(t||"1"),footerElement:this.templates.footerElement,ajaxParams:()=>({filters:JSON.stringify(this.tableFilters)}),ajaxResponse:(t,e,n)=>{const i=document.getElementById("total-count-value");return i&&void 0!==n.total&&(i.innerHTML=n.total),n}})},_showToast:function(t,e="default",n=!0){ckan.tablesToast({message:t,type:e,title:ckan.i18n._("Tables"),stacking:n})},_confirmAction:function(t,e){ckan.tablesConfirm({message:ckan.i18n._(`Are you sure you want to perform this action: <b>${t}</b>?`),onConfirm:e})},_rowActionCallback:function(t,e,n){t.with_confirmation?this._confirmAction(t.label,()=>this._onRowActionConfirm(t,n)):this._onRowActionConfirm(t,n)},_onRowActionConfirm:function(t,e){const n=new FormData;n.append("row_action",t.name),n.append("row",JSON.stringify(e.getData())),this._sendActionRequest(n,ckan.i18n._(`Row action completed: <b>${t.label}</b>`))},_sendActionRequest:function(t,e){return fetch(this.sandbox.client.url(this.options.config.ajaxURL),{method:"POST",body:t,headers:{"X-CSRFToken":this._getCSRFToken()}}).then(t=>t.json()).then(t=>{if(t.success){if(t.redirect)return void(window.location.href=t.redirect);this._refreshData().then(()=>{this._showToast(t.message||e)})}else{const e=t.error||t.errors?.[0]||"Unknown error";this._showToast(e,"danger"),t.errors?.length>1&&this._showToast(ckan.i18n._("Multiple errors occurred and were suppressed"),"error")}}).catch(t=>this._showToast(t.message,"danger"))},_initAddTableEvents:function(){this.applyFiltersBtn.addEventListener("click",this._onApplyFilters),this.clearFiltersModalBtn.addEventListener("click",this._onClearFilters),this.clearFiltersBtn.addEventListener("click",this._onClearFilters),this.addFilterBtn.addEventListener("click",this._onAddFilter),this.closeFiltersBtn.addEventListener("click",this._onCloseFilters),this.filtersContainer.addEventListener("click",t=>{const e=t.target.closest(".btn-remove-filter");e&&this.filtersContainer.contains(e)&&this._onFilterItemRemove(e)}),this.applyColumnsBtn&&this.applyColumnsBtn.addEventListener("click",this._onApplyColumns),this.resetColumnsBtn&&this.resetColumnsBtn.addEventListener("click",this._onResetColumns),this.closeColumnsBtn&&this.closeColumnsBtn.addEventListener("click",this._onCloseColumns),this.selectAllColumnsBtn&&this.selectAllColumnsBtn.addEventListener("click",this._onSelectAllColumns),this.deselectAllColumnsBtn&&this.deselectAllColumnsBtn.addEventListener("click",this._onDeselectAllColumns);const t=(t,e)=>{t&&t.querySelectorAll("button").forEach(t=>{t.addEventListener("click",e)})};t(this.bulkActionsMenu,this._onApplyBulkAction),t(this.tableActionsMenu,this._onApplyTableAction),t(this.tableExportersMenu,this._onTableExportClick),this.tableRefreshBtn&&this.tableRefreshBtn.addEventListener("click",this._onRefreshTable),document.addEventListener("click",t=>{const e=t.target.closest(".btn-row-actions");e&&this.el[0].contains(e)&&this._onRowActionsDropdownClick(t)}),this.table.on("tableBuilt",()=>{this.options.enableFullscreenToggle&&(this.btnFullscreen=document.getElementById("btn-fullscreen"),this.btnFullscreen.addEventListener("click",this._onFullscreen)),this._applyColumnVisibilityFromUrl(),this._initHeaderFilterToggles()}),this.table.on("renderComplete",function(){htmx.process(this.element);const t=document.querySelector(".tabulator-page-size");t&&t.classList.add("form-select")}),this.table.on("pageLoaded",t=>{const e=new URL(window.location.href);e.searchParams.set("page",t.toString()),window.history.replaceState({},"",e)})},_onRowActionsDropdownClick:function(t){t.preventDefault();const e=t.target,n=e.closest(".tabulator-row");if(!n)return;const i=e.getBoundingClientRect();n.dispatchEvent(new MouseEvent("contextmenu",{bubbles:!0,cancelable:!0,view:window,clientX:i.left+i.width/2,clientY:i.bottom,button:2}))},_collectValidFilters:function(){const t=[];return this.filtersContainer.querySelectorAll(".filter-item").forEach(e=>{const n=e.querySelector(".filter-field")?.value,i=e.querySelector(".filter-operator")?.value,s=e.querySelector(".filter-value")?.value;n&&i&&s&&t.push({field:n,operator:i,value:s})}),t},_updateTableFilters:function(){return this.tableFilters=this._collectValidFilters(),this.filtersCounter.textContent=this.tableFilters.length.toString(),this.filtersCounter.classList.toggle("d-none",0===this.tableFilters.length),this.tableFilters},_removeUnfilledFilters:function(){this.filtersContainer.querySelectorAll(".filter-item").forEach(t=>{const e=t.querySelector(".filter-field")?.value,n=t.querySelector(".filter-operator")?.value,i=t.querySelector(".filter-value")?.value;e&&n&&i||t.remove()})},_onApplyFilters:function(){this._updateTableFilters(),this._removeUnfilledFilters(),this._updateClearButtonsState(),this._updateUrl(),this._refreshData()},_updateClearButtonsState:function(){const t=this.tableFilters.length>0;this.clearFiltersBtn.classList.toggle("btn-table-disabled",!t),this.clearFiltersModalBtn.classList.toggle("btn-table-disabled",!t)},_onClearFilters:function(){this.filtersContainer.innerHTML="",this._updateTableFilters(),this._updateClearButtonsState(),this._updateUrl(),this._refreshData()},_onAddFilter:function(){const t=this.filterTemplate.cloneNode(!0);t.style.display="block",this.filtersContainer.appendChild(t)},_onFilterItemRemove:function(t){const e=t.closest(".filter-item");e&&e.remove()},_onCloseFilters:function(){this._recreateFilters()},_recreateFilters:function(){this.filtersContainer.innerHTML="",this.tableFilters.forEach(t=>{const e=this.filterTemplate.cloneNode(!0);e.style.display="block",e.querySelector(".filter-field").value=t.field,e.querySelector(".filter-operator").value=t.operator,e.querySelector(".filter-value").value=t.value,this.filtersContainer.appendChild(e)}),this._updateUrl()},_updateUrl:function(){const t=new URL(window.location.href);Array.from(t.searchParams.keys()).forEach(e=>{(e.startsWith("field")||e.startsWith("operator")||e.startsWith("value"))&&t.searchParams.delete(e)}),this.tableFilters.forEach(e=>{t.searchParams.append("field",e.field),t.searchParams.append("operator",e.operator),t.searchParams.append("value",e.value)}),window.history.replaceState({},"",t)},_onApplyBulkAction:function(t){const e=t.currentTarget,n=e.dataset.action,i=e.textContent?.trim()||"";n&&this._confirmAction(i,()=>this._onBulkActionConfirm(n,i))},_onBulkActionConfirm:function(t,e){const n=this.table.getSelectedData();if(!n.length)return;const i=n.map(({actions:t,...e})=>e),s=new FormData;s.append("bulk_action",t),s.append("rows",JSON.stringify(i)),this._sendActionRequest(s,ckan.i18n._(`Bulk action completed: <b>${e}</b>`))},_onApplyTableAction:function(t){const e=t.currentTarget,n=e.dataset.action,i=e.textContent?.trim()||"";n&&this._confirmAction(i,()=>this._onTableActionConfirm(n,i))},_onTableActionConfirm:function(t,e){const n=new FormData;n.append("table_action",t),this._sendActionRequest(n,ckan.i18n._(`Table action completed: <b>${e}</b>`))},_onTableExportClick:async function(t){const e=t.target,n=e.dataset.exporter;if(n){this.tableExportersMenu.previousElementSibling?.setAttribute("disabled","true");try{const t=new URL(window.location.href);t.searchParams.set("exporter",n),t.searchParams.set("filters",JSON.stringify(this.tableFilters)),this.table.getSorters().forEach(e=>{t.searchParams.set("sort[0][field]",e.field),t.searchParams.set("sort[0][dir]",e.dir)}),this._showToast(ckan.i18n._(`${e.innerText} export started.`));const i=new URL(this.sandbox.client.url(this.options.config.ajaxURL),window.location.origin);t.searchParams.forEach((t,e)=>{i.searchParams.append(e,t)});const s=i.toString(),o=await fetch(s);if(!o.ok)throw new Error(`${e.innerText} export failed`);const l=await o.blob(),r=document.createElement("a");r.href=URL.createObjectURL(l),r.download=`${this.options.config.tableId||"table"}.${n}`,document.body.appendChild(r),r.click(),document.body.removeChild(r),URL.revokeObjectURL(r.href),this._showToast(ckan.i18n._(`${e.innerText} export completed.`),"default",!1)}catch(t){this._showToast(ckan.i18n._(`${e.innerText} export failed. Please try again.`),"danger",!1),console.error("Export error:",t)}finally{this.tableExportersMenu.previousElementSibling?.removeAttribute("disabled")}}},_onRefreshTable:function(){const t=new FormData;t.append("refresh","true"),this.tableRefreshBtn.setAttribute("disabled","true"),fetch(this.sandbox.client.url(this.options.config.ajaxURL),{method:"POST",body:t}).then(t=>{this._refreshData().then(()=>{this._showToast(ckan.i18n._("Table data refreshed successfully.")),this.tableRefreshBtn.removeAttribute("disabled")})}).catch(t=>this._showToast(t.message,"danger"))},_refreshData:function(){return this.table.replaceData()},_initHeaderFilterToggles:function(){this.el[0].querySelectorAll(".tabulator-col[tabulator-field]").forEach(t=>{const e=t.querySelector(".tabulator-header-filter input");if(!e)return;const n=t.querySelector(".tabulator-col-sorter");if(!n)return;e.id=`header-filter-${t.getAttribute("tabulator-field")||""}`;const i=this._buildFilterToggleButton(t,e);this._syncHeaderFilterState(t,e,i),e.addEventListener("input",()=>{this._syncHeaderFilterState(t,e,i)}),n.insertAdjacentElement("afterend",i)})},_buildFilterToggleButton:function(t,e){const n=document.createElement("button");return n.type="button",n.className="btn-header-filter-toggle",n.title=ckan.i18n._("Toggle column filter"),n.setAttribute("aria-controls",e.id),n.innerHTML='<i class="fa fa-search"></i>',n.addEventListener("click",i=>{i.stopPropagation(),e.value.trim()?t.classList.add("filter-visible"):(t.classList.toggle("filter-visible"),this._syncHeaderFilterState(t,e,n),this.table.redraw(),t.classList.contains("filter-visible")&&e.focus())}),n},_syncHeaderFilterState:function(t,e,n){const i=Boolean(e.value.trim());t.classList.toggle("filter-active",i),n.classList.toggle("active",i||t.classList.contains("filter-visible"))},_onFullscreen:function(){this.tableWrapper.classList.toggle("fullscreen")},_onApplyColumns:function(){const t=[];this.columnToggles.forEach(e=>{const n=e.dataset.field;n&&(e.checked?this.table.showColumn(n):(t.push(n),this.table.hideColumn(n)))}),this._updateColumnsUrl(t),this._updateHiddenColumnsCounter(),this.table.redraw(!0)},_onResetColumns:function(){this.columnToggles.forEach(t=>{t.checked=!0;const e=t.dataset.field;e&&this.table.showColumn(e)}),this._updateColumnsUrl([]),this._updateHiddenColumnsCounter(),this.table.redraw(!0)},_onCloseColumns:function(){this.columnToggles.forEach(t=>{const e=t.dataset.field;if(e){const n=this.table.getColumn(e);n&&(t.checked=n.isVisible())}})},_onSelectAllColumns:function(){this.columnToggles.forEach(t=>{t.checked=!0})},_onDeselectAllColumns:function(){this.columnToggles.forEach(t=>{t.checked=!1})},_applyColumnVisibilityFromUrl:function(){new URLSearchParams(window.location.search).getAll("hidden_column").forEach(t=>{try{this.table.hideColumn(t)}catch(t){}}),this._updateHiddenColumnsCounter()},_updateHiddenColumnsCounter:function(){const t=new URLSearchParams(window.location.search).getAll("hidden_column").length;this.hiddenColumnsCounter.textContent=t.toString(),this.hiddenColumnsBadge.classList.toggle("d-none",0===t)},_updateColumnsUrl:function(t){const e=new URL(window.location.href);e.searchParams.delete("hidden_column"),t.forEach(t=>{e.searchParams.append("hidden_column",t)}),window.history.replaceState({},"",e)},_getCSRFToken:function(){const t=document.querySelector('meta[name="csrf_field_name"]')?.getAttribute("content");return document.querySelector(`meta[name="${t}"]`)?.getAttribute("content")||null}}});
+var ckan;
+(function (ckan) {
+})(ckan || (ckan = {}));
+ckan.module("tables-tabulator", function ($) {
+    "use strict";
+    return {
+        options: {
+            config: null,
+            rowActions: null,
+            enableFullscreenToggle: true,
+        },
+        initialize: function () {
+            $.proxyAll(this, /_/);
+            if (!this.options.config) {
+                this._showToast(ckan.i18n._("No config provided for tabulator"), "danger");
+                return;
+            }
+            this._initAssignVariables();
+            this._initFiltersFromUrl();
+            this._initTabulatorInstance();
+            this._initAddTableEvents();
+            this._updateClearButtonsState();
+            this.sandbox.subscribe("tables:tabulator:refresh", this._refreshData);
+        },
+        _initAssignVariables: function () {
+            this.filtersModal = document.getElementById("filters-modal");
+            this.filtersContainer = document.getElementById("filters-container");
+            this.applyFiltersBtn = document.getElementById("apply-filters");
+            this.clearFiltersModalBtn = document.getElementById("clear-filters");
+            this.clearFiltersBtn = document.getElementById("clear-all-filters");
+            this.filterTemplate = document.getElementById("filter-template");
+            this.addFilterBtn = document.getElementById("add-filter");
+            this.filtersCounter = document.getElementById("filters-counter");
+            this.bulkActionsMenu = document.getElementById("bulk-actions-menu");
+            this.tableActionsMenu = document.getElementById("table-actions-menu");
+            this.tableExportersMenu = document.getElementById("table-exporters-menu");
+            this.tableWrapper = document.querySelector(".tabulator-wrapper");
+            this.tableRefreshBtn = document.getElementById("refresh-table");
+            this.tableFilters = this._updateTableFilters();
+            this.columnsModal = document.getElementById("columns-modal");
+            this.columnsContainer = document.getElementById("columns-container");
+            this.applyColumnsBtn = document.getElementById("apply-columns");
+            this.resetColumnsBtn = document.getElementById("reset-columns");
+            this.selectAllColumnsBtn = document.getElementById("select-all-columns");
+            this.deselectAllColumnsBtn = document.getElementById("deselect-all-columns");
+            this.columnToggles = document.querySelectorAll(".column-toggle");
+            this.hiddenColumnsCounter = document.getElementById("hidden-columns-counter");
+            this.hiddenColumnsBadge = document.getElementById("hidden-columns-badge");
+        },
+        _initFiltersFromUrl: function () {
+            const url = new URL(window.location.href);
+            const fields = url.searchParams.getAll("field");
+            const operators = url.searchParams.getAll("operator");
+            const values = url.searchParams.getAll("value");
+            if (fields.length && fields.length === operators.length && fields.length === values.length) {
+                this.tableFilters = fields.map((field, i) => ({
+                    field,
+                    operator: operators[i],
+                    value: values[i],
+                }));
+                this.filtersCounter.textContent = this.tableFilters.length.toString();
+                this.filtersCounter.classList.toggle("d-none", this.tableFilters.length === 0);
+                this._updateClearButtonsState();
+            }
+        },
+        _initTabulatorInstance: function () {
+            if (!this.options.config.ajaxURL) {
+                this.options.config.ajaxURL = window.location.pathname;
+            }
+            if (this.options.rowActions) {
+                const rowActions = this.options.rowActions;
+                this.options.config.rowContextMenu = Object.values(rowActions).map((action) => ({
+                    label: `${action.icon ? `<i class='${action.icon} me-1'></i> ` : ""}${action.label}`,
+                    action: this._rowActionCallback.bind(this, action),
+                }));
+            }
+            if (this.options.config.rowHeader) {
+                this.options.config.rowHeader.cellClick = function (e, cell) {
+                    cell.getRow().toggleSelect();
+                };
+            }
+            const initialPage = new URLSearchParams(window.location.search).get("page");
+            this.table = new Tabulator(this.el[0], {
+                ...this.options.config,
+                langs: {
+                    "default": {
+                        pagination: {
+                            page_size: ckan.i18n._("Rows per page"),
+                            first: '<i class="fa fa-angle-double-left"></i>',
+                            prev: '<i class="fa fa-angle-left"></i>',
+                            next: '<i class="fa fa-angle-right"></i>',
+                            last: '<i class="fa fa-angle-double-right"></i>'
+                        }
+                    }
+                },
+                paginationCounter: "rows",
+                paginationInitialPage: parseInt(initialPage || "1"),
+                ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
+                ajaxResponse: (_url, _params, response) => {
+                    const el = document.getElementById("total-count-value");
+                    if (el && response.total !== undefined) {
+                        el.innerHTML = response.total;
+                    }
+                    return response;
+                },
+            });
+        },
+        _showToast: function (message, type = "default", stacking = true) {
+            ckan.tablesToast({
+                message,
+                type,
+                title: ckan.i18n._("Tables"),
+                stacking,
+            });
+        },
+        _confirmAction: function (label, callback) {
+            ckan.tablesConfirm({
+                message: ckan.i18n._(`Are you sure you want to perform this action: <b>${label}</b>?`),
+                onConfirm: callback,
+            });
+        },
+        _rowActionCallback: function (action, e, row) {
+            if (action.with_confirmation) {
+                this._confirmAction(action.label, () => this._onRowActionConfirm(action, row));
+            }
+            else {
+                this._onRowActionConfirm(action, row);
+            }
+        },
+        _onRowActionConfirm: function (action, row) {
+            const form = new FormData();
+            form.append("row_action", action.name);
+            form.append("row", JSON.stringify(row.getData()));
+            this._sendActionRequest(form, ckan.i18n._(`Row action completed: <b>${action.label}</b>`));
+        },
+        _sendActionRequest: function (form, successMessage) {
+            return fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
+                method: "POST",
+                body: form,
+                headers: { "X-CSRFToken": this._getCSRFToken() },
+            })
+                .then((resp) => resp.json())
+                .then((resp) => {
+                if (!resp.success) {
+                    const err = resp.error || resp.errors?.[0] || "Unknown error";
+                    this._showToast(err, "danger");
+                    if (resp.errors?.length > 1) {
+                        this._showToast(ckan.i18n._("Multiple errors occurred and were suppressed"), "error");
+                    }
+                }
+                else {
+                    if (resp.redirect) {
+                        window.location.href = resp.redirect;
+                        return;
+                    }
+                    this._refreshData().then(() => {
+                        this._showToast(resp.message || successMessage);
+                    });
+                }
+            })
+                .catch((error) => this._showToast(error.message, "danger"));
+        },
+        _initAddTableEvents: function () {
+            this.applyFiltersBtn.addEventListener("click", this._onApplyFilters);
+            this.clearFiltersModalBtn.addEventListener("click", this._onClearFilters);
+            this.clearFiltersBtn.addEventListener("click", this._onClearFilters);
+            this.addFilterBtn.addEventListener("click", this._onAddFilter);
+            $(this.filtersModal).on("hidden.bs.modal", this._onCloseFilters);
+            this.filtersContainer.addEventListener("click", (e) => {
+                const removeBtn = e.target.closest(".btn-remove-filter");
+                if (removeBtn && this.filtersContainer.contains(removeBtn)) {
+                    this._onFilterItemRemove(removeBtn);
+                }
+            });
+            $(this.columnsModal).on("hidden.bs.modal", this._onCloseColumns);
+            if (this.applyColumnsBtn) {
+                this.applyColumnsBtn.addEventListener("click", this._onApplyColumns);
+            }
+            if (this.resetColumnsBtn) {
+                this.resetColumnsBtn.addEventListener("click", this._onResetColumns);
+            }
+            if (this.selectAllColumnsBtn) {
+                this.selectAllColumnsBtn.addEventListener("click", this._onSelectAllColumns);
+            }
+            if (this.deselectAllColumnsBtn) {
+                this.deselectAllColumnsBtn.addEventListener("click", this._onDeselectAllColumns);
+            }
+            const bindMenuButtons = (menu, handler) => {
+                if (menu) {
+                    menu.querySelectorAll("button").forEach((btn) => {
+                        btn.addEventListener("click", handler);
+                    });
+                }
+            };
+            bindMenuButtons(this.bulkActionsMenu, this._onApplyBulkAction);
+            bindMenuButtons(this.tableActionsMenu, this._onApplyTableAction);
+            bindMenuButtons(this.tableExportersMenu, this._onTableExportClick);
+            if (this.tableRefreshBtn) {
+                this.tableRefreshBtn.addEventListener("click", this._onRefreshTable);
+            }
+            document.addEventListener("click", (e) => {
+                const rowActionsBtn = e.target.closest(".btn-row-actions");
+                if (rowActionsBtn && this.el[0].contains(rowActionsBtn)) {
+                    this._onRowActionsDropdownClick(e);
+                }
+            });
+            this.table.on("tableBuilt", () => {
+                if (this.options.enableFullscreenToggle) {
+                    this.btnFullscreen = document.getElementById("btn-fullscreen");
+                    this.btnFullscreen.addEventListener("click", this._onFullscreen);
+                }
+                this._applyColumnVisibilityFromUrl();
+                this._initHeaderFilterToggles();
+            });
+            this.table.on("renderComplete", function () {
+                htmx.process(this.element);
+                const pageSizeSelect = document.querySelector(".tabulator-page-size");
+                if (pageSizeSelect)
+                    pageSizeSelect.classList.add("form-select");
+            });
+            this.table.on("pageLoaded", (pageno) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("page", pageno.toString());
+                window.history.replaceState({}, "", url);
+            });
+        },
+        _onRowActionsDropdownClick: function (e) {
+            e.preventDefault();
+            const targetEl = e.target;
+            const rowEl = targetEl.closest(".tabulator-row");
+            if (!rowEl)
+                return;
+            const rect = targetEl.getBoundingClientRect();
+            rowEl.dispatchEvent(new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: rect.left + rect.width / 2,
+                clientY: rect.bottom,
+                button: 2,
+            }));
+        },
+        _collectValidFilters: function () {
+            const filters = [];
+            this.filtersContainer.querySelectorAll(".filter-item").forEach((item) => {
+                const field = item.querySelector(".filter-field")?.value;
+                const operator = item.querySelector(".filter-operator")?.value;
+                const value = item.querySelector(".filter-value")?.value;
+                if (field && operator && value)
+                    filters.push({ field, operator, value });
+            });
+            return filters;
+        },
+        _updateTableFilters: function () {
+            this.tableFilters = this._collectValidFilters();
+            this.filtersCounter.textContent = this.tableFilters.length.toString();
+            this.filtersCounter.classList.toggle("d-none", this.tableFilters.length === 0);
+            return this.tableFilters;
+        },
+        _removeUnfilledFilters: function () {
+            this.filtersContainer.querySelectorAll(".filter-item").forEach((item) => {
+                const field = item.querySelector(".filter-field")?.value;
+                const operator = item.querySelector(".filter-operator")?.value;
+                const value = item.querySelector(".filter-value")?.value;
+                if (!field || !operator || !value)
+                    item.remove();
+            });
+        },
+        _onApplyFilters: function () {
+            this._updateTableFilters();
+            this._removeUnfilledFilters();
+            this._updateClearButtonsState();
+            this._updateUrl();
+            this._refreshData();
+        },
+        _updateClearButtonsState: function () {
+            const hasFilters = this.tableFilters.length > 0;
+            this.clearFiltersBtn.classList.toggle("btn-table-disabled", !hasFilters);
+            this.clearFiltersModalBtn.classList.toggle("btn-table-disabled", !hasFilters);
+        },
+        _onClearFilters: function () {
+            this.filtersContainer.innerHTML = "";
+            this._updateTableFilters();
+            this._updateClearButtonsState();
+            this._updateUrl();
+            this._refreshData();
+        },
+        _onAddFilter: function () {
+            const newFilter = this.filterTemplate.cloneNode(true);
+            newFilter.style.display = "block";
+            this.filtersContainer.appendChild(newFilter);
+        },
+        _onFilterItemRemove: function (filterEl) {
+            const parent = filterEl.closest(".filter-item");
+            if (parent)
+                parent.remove();
+        },
+        _onCloseFilters: function () {
+            this._recreateFilters();
+        },
+        _recreateFilters: function () {
+            this.filtersContainer.innerHTML = "";
+            this.tableFilters.forEach((filter) => {
+                const newFilter = this.filterTemplate.cloneNode(true);
+                newFilter.style.display = "block";
+                newFilter.querySelector(".filter-field").value = filter.field;
+                newFilter.querySelector(".filter-operator").value = filter.operator;
+                newFilter.querySelector(".filter-value").value = filter.value;
+                this.filtersContainer.appendChild(newFilter);
+            });
+            this._updateUrl();
+        },
+        _updateUrl: function () {
+            const url = new URL(window.location.href);
+            Array.from(url.searchParams.keys()).forEach((key) => {
+                if (key.startsWith("field") || key.startsWith("operator") || key.startsWith("value")) {
+                    url.searchParams.delete(key);
+                }
+            });
+            this.tableFilters.forEach((filter) => {
+                url.searchParams.append("field", filter.field);
+                url.searchParams.append("operator", filter.operator);
+                url.searchParams.append("value", filter.value);
+            });
+            window.history.replaceState({}, "", url);
+        },
+        _onApplyBulkAction: function (e) {
+            const target = e.currentTarget;
+            const action = target.dataset.action;
+            const label = target.textContent?.trim() || "";
+            if (!action)
+                return;
+            this._confirmAction(label, () => this._onBulkActionConfirm(action, label));
+        },
+        _onBulkActionConfirm: function (bulkAction, label) {
+            const selectedData = this.table.getSelectedData();
+            if (!selectedData.length)
+                return;
+            const data = selectedData.map(({ actions, ...rest }) => rest);
+            const form = new FormData();
+            form.append("bulk_action", bulkAction);
+            form.append("rows", JSON.stringify(data));
+            this._sendActionRequest(form, ckan.i18n._(`Bulk action completed: <b>${label}</b>`));
+        },
+        _onApplyTableAction: function (e) {
+            const target = e.currentTarget;
+            const action = target.dataset.action;
+            const label = target.textContent?.trim() || "";
+            if (!action)
+                return;
+            this._confirmAction(label, () => this._onTableActionConfirm(action, label));
+        },
+        _onTableActionConfirm: function (action, label) {
+            const form = new FormData();
+            form.append("table_action", action);
+            this._sendActionRequest(form, ckan.i18n._(`Table action completed: <b>${label}</b>`));
+        },
+        _onTableExportClick: async function (e) {
+            const target = e.target;
+            const exporter = target.dataset.exporter;
+            if (!exporter)
+                return;
+            this.tableExportersMenu.previousElementSibling?.setAttribute("disabled", "true");
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set("exporter", exporter);
+                url.searchParams.set("filters", JSON.stringify(this.tableFilters));
+                this.table.getSorters().forEach((s) => {
+                    url.searchParams.set(`sort[0][field]`, s.field);
+                    url.searchParams.set(`sort[0][dir]`, s.dir);
+                });
+                this._showToast(ckan.i18n._(`${target.innerText} export started.`));
+                const targetUrl = new URL(this.sandbox.client.url(this.options.config.ajaxURL), window.location.origin);
+                url.searchParams.forEach((value, key) => {
+                    targetUrl.searchParams.append(key, value);
+                });
+                const fullUrl = targetUrl.toString();
+                const response = await fetch(fullUrl);
+                if (!response.ok)
+                    throw new Error(`${target.innerText} export failed`);
+                const blob = await response.blob();
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `${this.options.config.tableId || "table"}.${exporter}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(a.href);
+                this._showToast(ckan.i18n._(`${target.innerText} export completed.`), "default", false);
+            }
+            catch (error) {
+                this._showToast(ckan.i18n._(`${target.innerText} export failed. Please try again.`), "danger", false);
+                console.error('Export error:', error);
+            }
+            finally {
+                this.tableExportersMenu.previousElementSibling?.removeAttribute("disabled");
+            }
+        },
+        _onRefreshTable: function () {
+            const form = new FormData();
+            form.append("refresh", "true");
+            this.tableRefreshBtn.setAttribute("disabled", "true");
+            fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
+                method: "POST",
+                body: form,
+            })
+                .then((_) => {
+                this._refreshData().then(() => {
+                    this._showToast(ckan.i18n._("Table data refreshed successfully."));
+                    this.tableRefreshBtn.removeAttribute("disabled");
+                });
+            })
+                .catch((error) => this._showToast(error.message, "danger"));
+        },
+        _refreshData: function () {
+            return this.table.replaceData();
+        },
+        _initHeaderFilterToggles: function () {
+            const tableEl = this.el[0];
+            tableEl.querySelectorAll(".tabulator-col[tabulator-field]").forEach((colEl) => {
+                const filterInput = colEl.querySelector(".tabulator-header-filter input");
+                if (!filterInput)
+                    return;
+                const sorterEl = colEl.querySelector(".tabulator-col-sorter");
+                if (!sorterEl)
+                    return;
+                filterInput.id = `header-filter-${colEl.getAttribute("tabulator-field") || ""}`;
+                const btn = this._buildFilterToggleButton(colEl, filterInput);
+                this._syncHeaderFilterState(colEl, filterInput, btn);
+                filterInput.addEventListener("input", () => {
+                    this._syncHeaderFilterState(colEl, filterInput, btn);
+                });
+                sorterEl.insertAdjacentElement("afterend", btn);
+            });
+        },
+        _buildFilterToggleButton: function (colEl, filterInput) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "btn-header-filter-toggle";
+            btn.title = ckan.i18n._("Toggle column filter");
+            btn.setAttribute("aria-controls", filterInput.id);
+            btn.innerHTML = '<i class="fa fa-search"></i>';
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (filterInput.value.trim()) {
+                    colEl.classList.add("filter-visible");
+                    return;
+                }
+                colEl.classList.toggle("filter-visible");
+                this._syncHeaderFilterState(colEl, filterInput, btn);
+                this.table.redraw();
+                if (colEl.classList.contains("filter-visible")) {
+                    filterInput.focus();
+                }
+            });
+            return btn;
+        },
+        _syncHeaderFilterState: function (colEl, filterInput, btn) {
+            const hasValue = Boolean(filterInput.value.trim());
+            colEl.classList.toggle("filter-active", hasValue);
+            btn.classList.toggle("active", hasValue || colEl.classList.contains("filter-visible"));
+        },
+        _onFullscreen: function () {
+            document.body.classList.toggle("tables-fullscreen");
+        },
+        _onApplyColumns: function () {
+            const hiddenColumns = [];
+            this.columnToggles.forEach((toggle) => {
+                const field = toggle.dataset.field;
+                if (!field)
+                    return;
+                if (toggle.checked) {
+                    this.table.showColumn(field);
+                }
+                else {
+                    hiddenColumns.push(field);
+                    this.table.hideColumn(field);
+                }
+            });
+            this._updateColumnsUrl(hiddenColumns);
+            this._updateHiddenColumnsCounter();
+            this.table.redraw(true);
+        },
+        _onResetColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                toggle.checked = true;
+                const field = toggle.dataset.field;
+                if (field) {
+                    this.table.showColumn(field);
+                }
+            });
+            this._updateColumnsUrl([]);
+            this._updateHiddenColumnsCounter();
+            this.table.redraw(true);
+        },
+        _onCloseColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                const field = toggle.dataset.field;
+                if (field) {
+                    const column = this.table.getColumn(field);
+                    if (column) {
+                        toggle.checked = column.isVisible();
+                    }
+                }
+            });
+        },
+        _onSelectAllColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                toggle.checked = true;
+            });
+        },
+        _onDeselectAllColumns: function () {
+            this.columnToggles.forEach((toggle) => {
+                toggle.checked = false;
+            });
+        },
+        _applyColumnVisibilityFromUrl: function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hiddenColumns = urlParams.getAll("hidden_column");
+            hiddenColumns.forEach((field) => {
+                try {
+                    this.table.hideColumn(field);
+                }
+                catch (e) {
+                }
+            });
+            this._updateHiddenColumnsCounter();
+        },
+        _updateHiddenColumnsCounter: function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const hiddenCount = urlParams.getAll("hidden_column").length;
+            this.hiddenColumnsCounter.textContent = hiddenCount.toString();
+            this.hiddenColumnsBadge.classList.toggle("d-none", hiddenCount === 0);
+        },
+        _updateColumnsUrl: function (hiddenColumns) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("hidden_column");
+            hiddenColumns.forEach((field) => {
+                url.searchParams.append("hidden_column", field);
+            });
+            window.history.replaceState({}, "", url);
+        },
+        _getCSRFToken: function () {
+            const csrf_field = document.querySelector('meta[name="csrf_field_name"]')?.getAttribute("content");
+            return document.querySelector(`meta[name="${csrf_field}"]`)?.getAttribute("content") || null;
+        },
+    };
+});

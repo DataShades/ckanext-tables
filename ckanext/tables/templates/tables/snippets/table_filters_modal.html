@@ -16,23 +16,17 @@
                     {% endfor %}
                 </div>
 
-                <div class="d-flex mb-3">
-                    <button class="btn btn-light" id="add-filter" type="button">
+                <div id="filter-actions" class="d-flex gap-3 justify-content-end">
+                    <button class="btn me-auto text-primary ps-0" id="add-filter" type="button">
                         <i class="fa fa-plus"></i> {{ _("Add filter") }}
                     </button>
-                </div>
 
-                <div id="filter-actions" class="d-flex gap-2 justify-content-end">
-                    <button class="btn btn-primary" id="apply-filters" type="button" data-bs-dismiss="modal">
-                        {{ _("Apply") }}
-                    </button>
-
-                    <button class="btn btn-danger" id="clear-filters" type="button" data-bs-dismiss="modal">
+                    <button class="btn btn-default" id="clear-filters" type="button" data-bs-dismiss="modal">
                         {{ _("Clear") }}
                     </button>
 
-                    <button class="btn btn-light" id="close-filters" type="button" data-bs-dismiss="modal">
-                        {{ _("Close") }}
+                    <button class="btn btn-primary" id="apply-filters" type="button" data-bs-dismiss="modal">
+                        {{ _("Apply") }}
                     </button>
                 </div>
             </div> <!-- modal-body -->

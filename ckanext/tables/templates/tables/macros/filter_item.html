@@ -1,7 +1,7 @@
 {% macro filter_item(table, column, operator, value) %}
     {% set unique_id = h.tables_generate_unique_id() %}
 
-    <div class="filter-item d-flex gap-2 mb-2">
+    <div class="filter-item d-flex gap-2 mb-3">
         <select name="field-{{ unique_id }}" class="form-select filter-field">
             <option value="">{{ _('Select a field') }}</option>
             {% for col in table.columns %}
@@ -11,16 +11,24 @@
             {% endfor %}
         </select>
 
-        <select name="operator-{{ unique_id }}" class="form-select filter-operator w-25">
-            {% for op in ["=", "<", "<=", ">", ">=", "!=", "like"] %}
-                <option value="{{ op }}" {{ "selected" if op == operator }}>{{ op }}</option>
+        <select name="operator-{{ unique_id }}" class="form-select filter-operator w-50">
+            {% for label, value in {
+                "Equals": "=",
+                "Not equals": "!=",
+                "Greater than": ">",
+                "Greater than or equal to": ">=",
+                "Less than": "<",
+                "Less than or equal to": "<=",
+                "Like": "like"
+            }.items() %}
+                <option value="{{ value }}" {{ "selected" if value == operator }}>{{ label }}</option>
             {% endfor %}
         </select>
 
-        <input class="form-control filter-value" name="value-{{ unique_id }}" value="{{ value }}" type="text" placeholder="{{ _('Value to filter') }}">
+        <input class="form-control filter-value" name="value-{{ unique_id }}" value="{{ value }}" type="text" placeholder="{{ _('Enter value...') }}">
 
-        <button class="btn btn-danger btn-remove-filter" title="{{ _('Remove filter') }}">
-            <i class="fa fa-times"></i>
+        <button class="btn btn-remove-filter" title="{{ _('Remove filter') }}">
+            {% snippet "tables/svg/trash.svg" %}
         </button>
     </div>
 {% endmacro %}

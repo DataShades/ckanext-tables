@@ -27,7 +27,7 @@
                 <i class="fa fa-columns"></i>
                 {{ _("Columns") }}
                 <span class="badge bg-primary d-none" id="hidden-columns-badge">
-                    <i class="fa fa-eye-slash"></i>
+                    <i class="fa fa-eye-slash text-white"></i>
                     <span id="hidden-columns-counter">0</span>
                 </span>
             </button>
@@ -37,8 +37,8 @@
             {% if table.bulk_actions %}
                 <div class="dropdown d-inline-block">
                     <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
-                    title="{{ _('Row Actions') }}">
-                        <i class="fa fa-list-check"></i> {{ _("Row Actions") }}
+                    title="{{ _('Row actions') }}">
+                        <i class="fa fa-table-list"></i> {{ _("Row Actions") }}
                     </button>
                     <ul class="dropdown-menu" id="bulk-actions-menu">
                         {% for action in table.bulk_actions %}
@@ -60,7 +60,7 @@
             {% if table.table_actions %}
                 <div class="dropdown d-inline-block">
                     <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
-                    title="{{ _('Table Actions') }}">
+                    title="{{ _('Table actions') }}">
                         <i class="fa fa-table"></i> {{ _("Table Actions") }}
                     </button>
                     <ul class="dropdown-menu" id="table-actions-menu">
@@ -84,7 +84,7 @@
                 <div class="dropdown d-inline-block">
                     <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"
                     title="{{ _('Export Table Data') }}">
-                        <i class="fa fa-file-export"></i> {{ _("Export") }}
+                        <i class="fa fa-download"></i> {{ _("Export") }}
                     </button>
                     <ul class="dropdown-menu" id="table-exporters-menu">
                         {% for exporter in table.exporters %}
@@ -103,7 +103,7 @@
         {% endblock %}
 
         {% block table_refresh %}
-            <button class="btn btn-light" id="refresh-table" title="{{ _('Refresh Table') }}">
+            <button class="btn" id="refresh-table" title="{{ _('Refresh Table') }}">
                 <i class="fa fa-arrows-rotate"></i>
             </button>
         {% endblock %}
@@ -115,6 +115,8 @@
                 </span>
                 <span>{{ _('row(s)') }}</span>
             </div>
+
+            <a class='btn d-none d-sm-inline-block' id='btn-fullscreen' title='Fullscreen toggle'><i class='fa fa-expand'></i></a>
         {% endblock %}
     </div>
 {% endblock table_control %}
