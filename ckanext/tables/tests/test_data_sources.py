@@ -7,12 +7,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import ckan.tests.factories as factories
+import ckan.tests.helpers as helpers
+
 from ckanext.tables.cache import PickleCacheBackend, RedisCacheBackend
-from ckanext.tables.data_sources import BaseResourceDataSource, PandasDataSource
+from ckanext.tables.data_sources import CsvUrlDataSource, DataStoreDataSource, PandasDataSource
+from ckanext.tables.types import FilterItem
 
 
 @pytest.mark.usefixtures("clear_cache", "clean_redis")
-class TestBaseResourceDataSource:
+class TestCSVResourceDataSource:
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
     def test_fetch_and_parse(self, mock_read_csv):
         mock_read_csv.return_value = pd.DataFrame(
@@ -22,7 +26,7 @@ class TestBaseResourceDataSource:
             ]
         )
 
-        ds = BaseResourceDataSource("http://example.com/data.csv")
+        ds = CsvUrlDataSource("http://example.com/data.csv")
         data = ds.filter([]).all()
 
         assert len(data) == 2
@@ -34,7 +38,7 @@ class TestBaseResourceDataSource:
     def test_caching_pickle(self, mock_read_csv):
         url = "http://example.com/cached_data.csv"
         cache_dir = "/tmp/ckan-tables-cache"
-        ds = BaseResourceDataSource(url, cache_backend=PickleCacheBackend(cache_dir=cache_dir))
+        ds = CsvUrlDataSource(url, cache_backend=PickleCacheBackend(cache_dir=cache_dir))
 
         mock_read_csv.return_value = pd.DataFrame([{"id": "1", "name": "Alice", "age": "30"}])
 
@@ -53,7 +57,7 @@ class TestBaseResourceDataSource:
             ds.cache_ttl,
         )
 
-        ds2 = BaseResourceDataSource(url, cache_backend=PickleCacheBackend(cache_dir=cache_dir))
+        ds2 = CsvUrlDataSource(url, cache_backend=PickleCacheBackend(cache_dir=cache_dir))
         data = ds2.filter([]).all()
 
         assert len(data) == 2
@@ -62,7 +66,7 @@ class TestBaseResourceDataSource:
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
     def test_caching_redis(self, mock_read_csv):
         url = "http://example.com/cached_data.csv"
-        ds = BaseResourceDataSource(url, cache_backend=RedisCacheBackend())
+        ds = CsvUrlDataSource(url, cache_backend=RedisCacheBackend())
 
         mock_read_csv.return_value = pd.DataFrame([{"id": "1", "name": "Alice", "age": "30"}])
 
@@ -81,7 +85,7 @@ class TestBaseResourceDataSource:
             ds.cache_ttl,
         )
 
-        ds2 = BaseResourceDataSource(url, cache_backend=RedisCacheBackend())
+        ds2 = CsvUrlDataSource(url, cache_backend=RedisCacheBackend())
         data = ds2.filter([]).all()
 
         assert len(data) == 2
@@ -92,14 +96,14 @@ class TestBaseResourceDataSource:
         """Test retrieving path from an uploaded resource."""
         resource = create_with_upload(b"hello,world", "test.csv", package_id=package["id"])
 
-        ds = BaseResourceDataSource(resource=resource)
+        ds = CsvUrlDataSource(resource=resource)
         path = ds.get_source_path()
 
         assert path
         assert "/resources/" in path
 
     def test_get_source_path_resource_url(self):
-        ds = BaseResourceDataSource(
+        ds = CsvUrlDataSource(
             resource={
                 "id": "res-456",
                 "url_type": "link",
@@ -112,12 +116,12 @@ class TestBaseResourceDataSource:
 
     def test_get_source_path_fallback_url(self):
         """Test using the provided URL when resource_id is not present."""
-        ds = BaseResourceDataSource(url="http://fallback.com/data.csv")
+        ds = CsvUrlDataSource(url="http://fallback.com/data.csv")
         path = ds.get_source_path()
         assert path == "http://fallback.com/data.csv"
 
     def test_get_source_path_fallback_on_error(self):
-        ds = BaseResourceDataSource(resource={}, url="http://fallback.com/data.csv")
+        ds = CsvUrlDataSource(resource={}, url="http://fallback.com/data.csv")
         path = ds.get_source_path()
 
         assert path == "http://fallback.com/data.csv"
@@ -125,7 +129,7 @@ class TestBaseResourceDataSource:
     def test_init_validation(self):
         """Test that initialization fails without url or resource_id."""
         with pytest.raises(ValueError, match="Either url or resource_id must be provided"):
-            BaseResourceDataSource()
+            CsvUrlDataSource()
 
 
 class TestSerialization:
@@ -183,3 +187,60 @@ class TestSerialization:
         assert isinstance(row1["nested_dict"]["a"], float)
 
         assert row1["nan_col"] is None
+
+
+@pytest.mark.ckan_config("ckan.plugins", "datastore")
+@pytest.mark.usefixtures("clean_datastore", "with_plugins")
+class TestDataStoreDataSource:
+    @pytest.fixture(autouse=True)
+    def setup(self, with_plugins, clean_datastore):
+        self.resource = factories.Resource()
+        self.data = {
+            "resource_id": self.resource["id"],
+            "force": True,
+            "fields": [
+                {"id": "a", "type": "int"},
+                {"id": "b", "type": "text"},
+                {"id": "c", "type": "int"},
+            ],
+            "records": [
+                {"a": 1, "b": "foo!", "c": 5},
+                {"a": 2, "b": "foo_test", "c": 8},
+                {"a": 3, "b": "bar", "c": 15},
+            ],
+        }
+        helpers.call_action("datastore_create", **self.data)
+        self.ds = DataStoreDataSource(self.resource["id"])
+
+    def test_all_with_args(self):
+        self.ds.filter(
+            [
+                FilterItem(field="a", operator="=", value="1"),
+                FilterItem(field="b", operator="like", value="foo!"),
+                FilterItem(field="c", operator="<", value="10"),  # unsupported, ignored in queries dict
+            ]
+        )
+        self.ds.sort("a", "desc")
+        self.ds.paginate(1, 10)
+
+        res = self.ds.all()
+
+        assert len(res) == 1
+        assert res[0]["a"] == 1
+        assert res[0]["b"] == "foo!"
+
+    def test_count(self):
+        assert self.ds.count() == 3
+
+    def test_get_columns(self):
+        columns = self.ds.get_columns()
+        assert "a" in columns
+        assert "b" in columns
+        assert "c" in columns
+
+    def test_error_handling(self):
+        ds_err = DataStoreDataSource("invalid-id")
+
+        assert ds_err.all() == []
+        assert ds_err.count() == 0
+        assert ds_err.get_columns() == []

@@ -3,6 +3,8 @@ import shutil
 
 import pytest
 
+from ckanext.datastore.tests.conftest import clean_datastore  # noqa: F401
+
 from ckanext.tables import config
 
 

@@ -75,6 +75,9 @@ def tables_guess_data_source(resource: dict[str, Any]) -> t.BaseDataSource:
     fmt = resource.get("format", "").lower()
     url = resource.get("url")
 
+    if resource.get("datastore_active"):
+        return t.DataStoreDataSource(resource_id=resource["id"])
+
     cache_backend = t.RedisCacheBackend()
     data_sources = {
         "csv": t.CsvUrlDataSource,

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import decimal
+import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -454,3 +456,95 @@ class FeatherUrlDataSource(BaseResourceDataSource):
         except Exception:
             log.exception("Error fetching Feather from %s", self.get_source_path())
             return pd.DataFrame()
+
+
+class DataStoreDataSource(BaseDataSource):
+    """A data source that fetches records directly from the CKAN Datastore."""
+
+    def __init__(self, resource_id: str):
+        self.resource_id = resource_id
+
+        self._filters: dict[str, Any] = {}
+        self._q: dict[str, str] = {}
+        self._sort: str | None = None
+        self._limit: int | None = None
+        self._offset: int | None = None
+
+    def filter(self, filters: list[FilterItem]) -> Self:
+        self._filters = {}
+        self._q = {}
+
+        for filter_item in filters:
+            if filter_item.operator == "=":
+                self._filters[filter_item.field] = filter_item.value
+            elif filter_item.operator == "like":
+                # replace non-alphanumeric characters with FTS wildcard (_)
+                v = str(filter_item.value)
+                v = re.sub(r'[^0-9a-zA-Z\-]+', '_', v)
+                # append ':*' so we can do partial FTS searches
+                self._q[filter_item.field] = v + ":*"
+            # Other operators like <, > might require datastore_search_sql
+            # which is more complex, so we skip them unless necessary.
+        return self
+
+    def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
+        self._sort = f"{sort_by} {sort_order or 'asc'}" if sort_by else None
+        return self
+
+    def paginate(self, page: int, size: int) -> Self:
+        if page and size:
+            self._limit = size
+            self._offset = (page - 1) * size
+        return self
+
+    def all(self) -> list[dict[str, Any]]:
+        data_dict: dict[str, Any] = {"resource_id": self.resource_id}
+
+        if self._filters:
+            data_dict["filters"] = self._filters
+
+        if self._q:
+            data_dict["q"] = json.dumps(self._q)
+            data_dict["plain"] = False
+            data_dict["language"] = "simple"
+
+        if self._sort:
+            data_dict["sort"] = self._sort
+
+        if self._limit is not None:
+            data_dict["limit"] = self._limit
+
+        if self._offset is not None:
+            data_dict["offset"] = self._offset
+
+        try:
+            result = tk.get_action("datastore_search")({}, data_dict)
+            return result.get("records", [])
+        except (tk.ObjectNotFound, tk.NotAuthorized):
+            return []
+
+    def count(self) -> int:
+        data_dict: dict[str, Any] = {"resource_id": self.resource_id, "limit": 0}
+
+        if self._filters:
+            data_dict["filters"] = self._filters
+
+        if self._q:
+            data_dict["q"] = json.dumps(self._q)
+            data_dict["plain"] = False
+            data_dict["language"] = "simple"
+
+        try:
+            result = tk.get_action("datastore_search")({}, data_dict)
+            return result.get("total", 0)
+        except (tk.ObjectNotFound, tk.NotAuthorized):
+            return 0
+
+    def get_columns(self) -> list[str]:
+        data_dict = {"resource_id": self.resource_id, "limit": 0}
+
+        try:
+            result = tk.get_action("datastore_search")({}, data_dict)
+            return [f["id"] for f in result.get("fields", []) if f["id"] != "_id"]
+        except (tk.ObjectNotFound, tk.NotAuthorized):
+            return []
