@@ -190,10 +190,10 @@ class TestSerialization:
 
 
 @pytest.mark.ckan_config("ckan.plugins", "datastore")
-@pytest.mark.usefixtures("clean_datastore", "with_plugins")
+@pytest.mark.usefixtures("clean_datastore", "with_request_context", "with_plugins")
 class TestDataStoreDataSource:
     @pytest.fixture(autouse=True)
-    def setup(self, with_plugins, clean_datastore):
+    def setup(self, with_plugins, with_request_context, clean_datastore):
         self.resource = factories.Resource()
         self.data = {
             "resource_id": self.resource["id"],
