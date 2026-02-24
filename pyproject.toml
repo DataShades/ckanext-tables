@@ -1,6 +1,6 @@
 [project]
 name = "ckanext-tables"
-version = "1.17.1"
+version = "1.17.2"
 description = "An extension to render dynamic tables"
 readme = "README.md"
 authors = [
@@ -92,7 +92,7 @@ lint.ignore = [
 exclude = ["**/cookiecutter/**", "**/{cookiecutter.*}/**"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests*" = ["S", "PL", "ANN", "D102"]
+"**/tests*" = ["S", "PL", "ANN", "D102", "DTZ001", "PT019", "E741"]
 
 [tool.ruff.lint.flake8-import-conventions]
 aliases = { "ckan.plugins" = "p", "ckan.plugins.toolkit" = "tk", "sqlalchemy" = "sa" }

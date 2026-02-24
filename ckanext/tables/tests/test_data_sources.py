@@ -1,17 +1,29 @@
 import decimal
 import os
-from datetime import datetime
+from datetime import datetime  # noqa: DTZ001
 from unittest import mock
 
 import numpy as np
 import pandas as pd
 import pytest
+from sqlalchemy import select
 
 import ckan.tests.factories as factories
 import ckan.tests.helpers as helpers
+from ckan import model
 
 from ckanext.tables.cache import PickleCacheBackend, RedisCacheBackend
-from ckanext.tables.data_sources import CsvUrlDataSource, DataStoreDataSource, PandasDataSource
+from ckanext.tables.data_sources import (
+    CsvUrlDataSource,
+    DatabaseDataSource,
+    DataStoreDataSource,
+    FeatherUrlDataSource,
+    ListDataSource,
+    OrcUrlDataSource,
+    PandasDataSource,
+    ParquetUrlDataSource,
+    XlsxUrlDataSource,
+)
 from ckanext.tables.types import FilterItem
 
 
@@ -244,3 +256,305 @@ class TestDataStoreDataSource:
         assert ds_err.all() == []
         assert ds_err.count() == 0
         assert ds_err.get_columns() == []
+
+
+class TestListDataSource:
+    @pytest.fixture
+    def ds(self):
+        return ListDataSource(
+            [
+                {"name": "Alice", "age": "30", "score": "95"},
+                {"name": "Bob", "age": "25", "score": "80"},
+                {"name": "Charlie", "age": "35", "score": "70"},
+            ]
+        )
+
+    def test_all_returns_all(self, ds):
+        result = ds.filter([]).all()
+        assert len(result) == 3
+
+    def test_filter_equal(self, ds):
+        result = ds.filter([FilterItem(field="name", operator="=", value="Alice")]).all()
+        assert len(result) == 1
+        assert result[0]["name"] == "Alice"
+
+    def test_filter_not_equal(self, ds):
+        result = ds.filter([FilterItem(field="name", operator="!=", value="Alice")]).all()
+        assert len(result) == 2
+
+    def test_filter_like(self, ds):
+        result = ds.filter([FilterItem(field="name", operator="like", value="li")]).all()
+        # Matches "Alice" and "Charlie"
+        assert len(result) == 2
+
+    def test_filter_less_than(self, ds):
+        result = ds.filter([FilterItem(field="age", operator="<", value="30")]).all()
+        assert len(result) == 1
+        assert result[0]["name"] == "Bob"
+
+    def test_filter_greater_than(self, ds):
+        result = ds.filter([FilterItem(field="score", operator=">", value="80")]).all()
+        assert len(result) == 1
+
+    def test_filter_less_than_or_equal(self, ds):
+        result = ds.filter([FilterItem(field="age", operator="<=", value="30")]).all()
+        assert len(result) == 2
+
+    def test_filter_greater_than_or_equal(self, ds):
+        result = ds.filter([FilterItem(field="age", operator=">=", value="35")]).all()
+        assert len(result) == 1
+
+    def test_unknown_operator_no_filter(self, ds):
+        result = ds.filter([FilterItem(field="name", operator="UNKNOWN", value="Alice")]).all()
+        assert len(result) == 3  # no filter applied
+
+    def test_sort_asc(self, ds):
+        result = ds.filter([]).sort("name", "asc").all()
+        assert result[0]["name"] == "Alice"
+        assert result[-1]["name"] == "Charlie"
+
+    def test_sort_desc(self, ds):
+        result = ds.filter([]).sort("name", "desc").all()
+        assert result[0]["name"] == "Charlie"
+
+    def test_sort_none_field(self, ds):
+        result = ds.filter([]).sort(None, None).all()
+        assert len(result) == 3
+
+    def test_paginate_page1(self, ds):
+        result = ds.filter([]).paginate(1, 2).all()
+        assert len(result) == 2
+
+    def test_paginate_page2(self, ds):
+        result = ds.filter([]).paginate(2, 2).all()
+        assert len(result) == 1
+
+    def test_count(self, ds):
+        ds.filter([])
+        assert ds.count() == 3
+
+    def test_count_after_filter(self, ds):
+        ds.filter([FilterItem(field="name", operator="=", value="Alice")])
+        assert ds.count() == 1
+
+    def test_get_columns(self, ds):
+        cols = ds.get_columns()
+        assert "name" in cols
+        assert "age" in cols
+
+    def test_get_columns_empty(self):
+        ds = ListDataSource([])
+        assert ds.get_columns() == []
+
+
+class StubPandasDataSource(PandasDataSource):
+    def __init__(self, df: pd.DataFrame):
+        super().__init__()
+        self._df = df
+        self._filtered_df = df
+
+    def fetch_dataframe(self):
+        return self._df
+
+
+class TestPandasDataSource:
+    @pytest.fixture
+    def ds(self):
+        df = pd.DataFrame(
+            {
+                "fruit": ["apple", "banana", "cherry"],
+                "count": [10, 5, 20],
+            }
+        )
+        return StubPandasDataSource(df)
+
+    def test_all_returns_records(self, ds):
+        result = ds.filter([]).all()
+        assert len(result) == 3
+
+    def test_filter_eq(self, ds):
+        result = ds.filter([FilterItem("fruit", "=", "apple")]).all()
+        assert len(result) == 1
+        assert result[0]["fruit"] == "apple"
+
+    def test_filter_not_eq(self, ds):
+        result = ds.filter([FilterItem("fruit", "!=", "apple")]).all()
+        assert len(result) == 2
+
+    def test_filter_like(self, ds):
+        result = ds.filter([FilterItem("fruit", "like", "an")]).all()
+        # banana matches "an"; cherry does not; apple does not
+        assert len(result) == 1
+        assert result[0]["fruit"] == "banana"
+
+    def test_filter_numeric_lt(self, ds):
+        result = ds.filter([FilterItem("count", "<", "10")]).all()
+        assert len(result) == 1
+
+    def test_filter_numeric_gte(self, ds):
+        result = ds.filter([FilterItem("count", ">=", "10")]).all()
+        assert len(result) == 2
+
+    def test_filter_unknown_field_ignored(self, ds):
+        result = ds.filter([FilterItem("nonexistent", "=", "value")]).all()
+        assert len(result) == 3
+
+    def test_sort_asc(self, ds):
+        result = ds.filter([]).sort("fruit", "asc").all()
+        assert result[0]["fruit"] == "apple"
+
+    def test_sort_desc(self, ds):
+        result = ds.filter([]).sort("count", "desc").all()
+        assert result[0]["count"] == 20
+
+    def test_sort_unknown_field(self, ds):
+        result = ds.filter([]).sort("nonexistent", "asc").all()
+        assert len(result) == 3
+
+    def test_paginate(self, ds):
+        result = ds.filter([]).paginate(1, 2).all()
+        assert len(result) == 2
+
+    def test_paginate_page2(self, ds):
+        result = ds.filter([]).paginate(2, 2).all()
+        assert len(result) == 1
+
+    def test_count(self, ds):
+        ds.filter([])
+        assert ds.count() == 3
+
+    def test_get_columns(self, ds):
+        cols = ds.get_columns()
+        assert "fruit" in cols
+        assert "count" in cols
+
+    def test_all_empty_df(self):
+        ds = StubPandasDataSource(pd.DataFrame())
+        ds.filter([])
+        assert ds.all() == []
+
+    def test_count_none_filtered_df(self):
+        ds = StubPandasDataSource(pd.DataFrame())
+        ds._filtered_df = None
+        assert ds.count() == 0
+
+    def test_filter_on_none_df(self):
+        """filter() with a None _df should return early without crashing."""
+        ds = StubPandasDataSource(pd.DataFrame())
+        ds._df = None
+        ds._filtered_df = None
+        result = ds.filter([FilterItem("x", "=", "1")]).all()
+        assert result == []
+
+    def test_serialize_value_types(self, ds):
+        assert ds.serialize_value(None) is None
+        assert ds.serialize_value(True) is True
+        assert ds.serialize_value(42) == 42
+        assert ds.serialize_value(3.14) == 3.14
+        assert ds.serialize_value("text") == "text"
+        assert ds.serialize_value(b"bytes") == "bytes"
+        assert isinstance(ds.serialize_value(datetime(2024, 1, 1)), str)
+        assert isinstance(ds.serialize_value(decimal.Decimal("1.5")), float)
+        assert ds.serialize_value([1, 2]) == [1, 2]
+        assert ds.serialize_value((1, 2)) == [1, 2]
+        assert ds.serialize_value({"a": 1}) == {"a": 1}
+        assert ds.serialize_value(np.int64(5)) == 5
+        # Fallback path
+        assert ds.serialize_value(object()) is not None
+
+
+class TestUrlDataSourceErrorPaths:
+    """All URL-based sources should return an empty DataFrame on errors."""
+
+    def _run_with_exception(self, source_class, exc_class=Exception):
+        with mock.patch.object(source_class, "fetch_dataframe", return_value=pd.DataFrame()):
+            ds = source_class(url="http://example.com/file")
+            ds._df = None
+            ds._filtered_df = None
+        return ds
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
+    def test_xlsx_error_returns_empty(self, _):
+        ds = XlsxUrlDataSource(url="http://example.com/file.xlsx")
+        df = ds.fetch_dataframe()
+        assert df.empty
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_orc", side_effect=OSError("boom"))
+    def test_orc_error_returns_empty(self, _):
+        ds = OrcUrlDataSource(url="http://example.com/file.orc")
+        df = ds.fetch_dataframe()
+        assert df.empty
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_parquet", side_effect=OSError("boom"))
+    def test_parquet_error_returns_empty(self, _):
+        ds = ParquetUrlDataSource(url="http://example.com/file.parquet")
+        df = ds.fetch_dataframe()
+        assert df.empty
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_feather", side_effect=OSError("boom"))
+    def test_feather_error_returns_empty(self, _):
+        ds = FeatherUrlDataSource(url="http://example.com/file.feather")
+        df = ds.fetch_dataframe()
+        assert df.empty
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv", side_effect=OSError("boom"))
+    def test_csv_error_returns_empty(self, _):
+        ds = CsvUrlDataSource(url="http://example.com/file.csv")
+        df = ds.fetch_dataframe()
+        assert df.empty
+
+
+class TestDatabaseDataSource:
+    """Tests for DatabaseDataSource using CKAN's test DB."""
+
+    def test_filter_sort_paginate(self):
+        """Test filter, sort, and paginate on the CKAN user table."""
+        ds = DatabaseDataSource(select(model.User))
+
+        # Just ensure methods chain without error and return lists
+        result = ds.filter([]).sort(None, None).paginate(1, 5).all()
+        assert isinstance(result, list)
+
+    def test_get_columns(self):
+        ds = DatabaseDataSource(select(model.User))
+        cols = ds.get_columns()
+        assert isinstance(cols, list)
+
+    def test_count(self):
+        ds = DatabaseDataSource(select(model.User))
+        ds.filter([])
+        count = ds.count()
+        assert count >= 0
+
+    def test_build_filter_boolean(self):
+        # We only test the type-casting logic via the build_filter method
+        stmt = select(model.User)
+        ds = DatabaseDataSource(stmt)
+
+        col = stmt.selected_columns.state
+        # build_filter for a String column
+        expr = ds.build_filter(col, "=", "active")
+        assert expr is not None
+
+    def test_build_filter_like(self):
+        stmt = select(model.User)
+        ds = DatabaseDataSource(stmt)
+        col = stmt.selected_columns.name
+        expr = ds.build_filter(col, "like", "admin")
+        assert expr is not None
+
+    def test_build_filter_unknown_operator(self):
+        stmt = select(model.User)
+        ds = DatabaseDataSource(stmt)
+        col = stmt.selected_columns.name
+        expr = ds.build_filter(col, "UNKNOWN_OP", "value")
+        assert expr is None
+
+    @pytest.mark.usefixtures("clean_db")
+    def test_dataset_source(self):
+        for _ in range(10):
+            factories.Dataset()
+
+        ds = DatabaseDataSource(select(model.Package))
+        result = ds.filter([]).all()
+        assert len(result) == 10

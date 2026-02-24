@@ -29,10 +29,14 @@ def tables_get_filters_from_request() -> list[t.FilterItem]:
     operators = tk.request.args.getlist("operator")
     values = tk.request.args.getlist("value")
 
-    return [
-        t.FilterItem(field=field, operator=op, value=value)
-        for field, op, value in zip(fields, operators, values, strict=True)
-    ]
+    filters = []
+
+    for field, op, value in zip(fields, operators, values):  # noqa: B905
+        if not field or not op or not value:
+            continue
+        filters.append(t.FilterItem(field=field, operator=op, value=value))
+
+    return filters
 
 
 def tables_get_columns_visibility_from_request() -> dict[str, bool]:
