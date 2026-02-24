@@ -23,7 +23,7 @@
                     </button>
                 </div>
 
-                <div id="columns-container" style="max-height: 300px" class="list-group list-group-flush overflow-y-auto">
+                <div id="columns-container" style="max-height: 300px; overflow: auto" class="list-group list-group-flush overflow-y-auto">
                     {% for column in table.columns %}
                         {% if column.field != '__table_actions' %}
                             <label class="list-group-item d-flex align-items-center gap-2">

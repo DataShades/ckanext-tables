@@ -470,6 +470,8 @@ class DataStoreDataSource(BaseDataSource):
         self._limit: int | None = None
         self._offset: int | None = None
 
+        self._datastore_enabled = "datastore" in tk.g.plugins
+
     def filter(self, filters: list[FilterItem]) -> Self:
         self._filters = {}
         self._q = {}
@@ -498,6 +500,9 @@ class DataStoreDataSource(BaseDataSource):
         return self
 
     def all(self) -> list[dict[str, Any]]:
+        if not self._datastore_enabled:
+            return []
+
         data_dict: dict[str, Any] = {"resource_id": self.resource_id}
 
         if self._filters:
@@ -524,6 +529,9 @@ class DataStoreDataSource(BaseDataSource):
             return []
 
     def count(self) -> int:
+        if not self._datastore_enabled:
+            return 0
+
         data_dict: dict[str, Any] = {"resource_id": self.resource_id, "limit": 0}
 
         if self._filters:
@@ -541,6 +549,9 @@ class DataStoreDataSource(BaseDataSource):
             return 0
 
     def get_columns(self) -> list[str]:
+        if not self._datastore_enabled:
+            return []
+
         data_dict = {"resource_id": self.resource_id, "limit": 0}
 
         try:
