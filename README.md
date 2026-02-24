@@ -1,5 +1,5 @@
 [![Tests](https://github.com/DataShades/ckanext-tables/actions/workflows/test.yml/badge.svg)](https://github.com/DataShades/ckanext-tables/actions/workflows/test.yml)
-[![Coverage Status](https://coveralls.io/repos/github/DataShades/ckanext-tables/badge.svg?branch=main)](https://coveralls.io/github/DataShades/ckanext-tables?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/DataShades/ckanext-tables/badge.svg?branch=master)](https://coveralls.io/github/DataShades/ckanext-tables?branch=master)
 
 # ckanext-tables
 
