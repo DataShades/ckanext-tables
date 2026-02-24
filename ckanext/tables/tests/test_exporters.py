@@ -112,15 +112,9 @@ class TestXLSXExporter:
         assert len(result) > 0
 
     def test_export_without_openpyxl_returns_empty(self, simple_table, params):
-        with (
-            mock.patch.dict("sys.modules", {"openpyxl": None}),
-            mock.patch("builtins.__import__", side_effect=ImportError),
-            mock.patch("ckanext.tables.exporters.XLSXExporter.export", return_value=b"") as _mock,
-        ):
-            # Patching the import inside the function
+        with mock.patch.dict("sys.modules", {"openpyxl": None}):
             result = XLSXExporter.export(simple_table, params)
-            # With the mock in place, just ensure we get bytes
-            assert isinstance(result, bytes)
+            assert result == b""
 
     def test_exporter_attributes(self):
         assert XLSXExporter.name == "xlsx"
