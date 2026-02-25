@@ -480,9 +480,9 @@ class DataStoreDataSource(BaseDataSource):
             if filter_item.operator == "=":
                 self._filters[filter_item.field] = filter_item.value
             elif filter_item.operator == "like":
-                # replace non-alphanumeric characters with FTS wildcard (_)
+                # replace non-alphanumeric characters (except dots) with FTS wildcard (_)
                 v = str(filter_item.value)
-                v = re.sub(r"[^0-9a-zA-Z\-]+", "_", v)
+                v = re.sub(r"[^\w\-\.]+", "_", v)
                 # append ':*' so we can do partial FTS searches
                 self._q[filter_item.field] = v + ":*"
             # Other operators like <, > might require datastore_search_sql
