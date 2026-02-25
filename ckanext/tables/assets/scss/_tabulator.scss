@@ -173,6 +173,10 @@ body.tables-fullscreen {
                     color: #212529;
                     line-height: 1;
 
+                    &.active {
+                        pointer-events: none;
+                    }
+
                     &.active,
                     &:hover,
                     &:focus,

@@ -137,6 +137,9 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
   color: #212529;
   line-height: 1;
 }
+.tabulator-wrapper .tabulator .tabulator-footer .tabulator-footer-contents .tabulator-paginator .tabulator-page.active {
+  pointer-events: none;
+}
 .tabulator-wrapper .tabulator .tabulator-footer .tabulator-footer-contents .tabulator-paginator .tabulator-page.active, .tabulator-wrapper .tabulator .tabulator-footer .tabulator-footer-contents .tabulator-paginator .tabulator-page:hover, .tabulator-wrapper .tabulator .tabulator-footer .tabulator-footer-contents .tabulator-paginator .tabulator-page:focus, .tabulator-wrapper .tabulator .tabulator-footer .tabulator-footer-contents .tabulator-paginator .tabulator-page:active {
   background-color: #035C7A;
   border-color: #035C7A;
