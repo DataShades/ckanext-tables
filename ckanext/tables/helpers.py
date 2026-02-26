@@ -73,7 +73,7 @@ def tables_init_temporary_preview_table(
     data_source = tk.h.tables_guess_data_source(resource, resource_view)
 
     return t.TableDefinition(
-        name=f"preview resource {resource['id']}",
+        name=f"preview_resource_{resource['id']}_{resource_view['id']}",
         data_source=data_source,
         exporters=t.ALL_EXPORTERS,
         ajax_url=tk.url_for(

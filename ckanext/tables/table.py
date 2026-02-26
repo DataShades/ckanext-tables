@@ -51,16 +51,11 @@ class TableDefinition:
     table_template: str = "tables/base.html"
 
     def __post_init__(self):
-        # Wire up caching through the data source's backend, if it has one.
-        if isinstance(self.data_source, CachedDataSourceMixin):
-            self._cache = self.data_source.cache_backend
-            self._cache_key = f"table:{self.name}"
-            self._cache_ttl = self.data_source.cache_ttl
-        else:
-            self._cache = None
-            self._cache_key = ""
-            self._cache_ttl = 0
+        cacheable = isinstance(self.data_source, CachedDataSourceMixin)
 
+        self._cache = self.data_source.cache_backend if cacheable else None
+        self._cache_key = f"table:{self.name}" if cacheable else ""
+        self._cache_ttl = self.data_source.cache_ttl if cacheable else 0
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
 
         if self.placeholder is None:
