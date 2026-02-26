@@ -8,9 +8,7 @@ def define_env(env: object) -> None:
 
     @env.macro
     def render_config_options():
-        with open(
-            Path(env.project_dir) / "ckanext" / "tables" / "config_declaration.yml"
-        ) as f:
+        with open(Path(env.project_dir) / "ckanext" / "tables" / "config_declaration.yml") as f:
             data = yaml.safe_load(f)
 
         markdown = ""

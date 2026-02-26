@@ -17,11 +17,12 @@ bp = Blueprint("tables", __name__)
 class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
     """Handler for resource view AJAX requests."""
 
-    def get_table_for_resource(self, resource_id: str) -> TableDefinition:
+    def get_table_for_resource(self, resource_id: str, resource_view_id: str) -> TableDefinition:
         """Get a table definition for a given resource.
 
         Args:
             resource_id: The resource ID
+            resource_view_id: The resource view ID
 
         Returns:
             A TableDefinition object
@@ -33,18 +34,26 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         except tk.NotAuthorized:
             tk.abort(403, tk._("Not authorized to view this resource"))
 
-        return tables_init_temporary_preview_table(resource)
+        try:
+            resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
+        except tk.ObjectNotFound:
+            tk.abort(404, tk._("Resource view not found"))
+        except tk.NotAuthorized:
+            tk.abort(403, tk._("Not authorized to view this resource"))
 
-    def get(self, resource_id: str) -> str | Response:
+        return tables_init_temporary_preview_table(resource, resource_view)
+
+    def get(self, resource_id: str, resource_view_id: str) -> str | Response:
         """Handle AJAX requests for resource view tables.
 
         Args:
             resource_id: The resource ID
+            resource_view_id: The resource view ID
 
         Returns:
             JSON response with table data or export file
         """
-        table = self.get_table_for_resource(resource_id)
+        table = self.get_table_for_resource(resource_id, resource_view_id)
 
         if exporter_name := tk.request.args.get("exporter"):
             return self._export(table, exporter_name)
@@ -54,16 +63,17 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
 
         tk.abort(400, tk._("This endpoint only accepts AJAX requests"))
 
-    def post(self, resource_id: str) -> Response:
+    def post(self, resource_id: str, resource_view_id: str) -> Response:
         """Handle POST requests for resource view tables (actions, refresh).
 
         Args:
             resource_id: The resource ID
+            resource_view_id: The resource view ID
 
         Returns:
             JSON response with action result
         """
-        table = self.get_table_for_resource(resource_id)
+        table = self.get_table_for_resource(resource_id, resource_view_id)
 
         row_action = tk.request.form.get("row_action")
         table_action = tk.request.form.get("table_action")
@@ -84,4 +94,7 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         return jsonify({"success": False, "error": "No action specified"})
 
 
-bp.add_url_rule("/resource-table-ajax/<resource_id>", view_func=ResourceViewHandler.as_view("resource_table_ajax"))
+bp.add_url_rule(
+    "/resource-table-ajax/<resource_id>/<resource_view_id>",
+    view_func=ResourceViewHandler.as_view("resource_table_ajax"),
+)

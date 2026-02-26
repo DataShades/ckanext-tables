@@ -21,7 +21,8 @@ import ckan.plugins.toolkit as tk
 from ckan import model
 from ckan.lib import uploader
 
-from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin, RedisCacheBackend
+from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin
+from ckanext.tables.config import get_cache_backend
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -41,7 +42,6 @@ class DatabaseDataSource(BaseDataSource):
 
     Args:
         stmt: The SQLAlchemy statement to use as the data source
-        model: The model class to use for filtering and sorting, e.g. `model.User`
     """
 
     def __init__(self, stmt: Select):
@@ -343,26 +343,26 @@ class PandasDataSource(BaseDataSource):
 class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     """A data source that loads resource data from a file or URL.
 
-    Uses :class:`~ckanext.tables.cache.PickleCacheBackend` by default so that
-    the fetched DataFrame is cached on disk.
+    The cache backend defaults to the value of ``ckanext.tables.cache.backend``
+    (``"pickle"`` by default). Pass an explicit *cache_backend* to
+    override for a specific instance.
 
-    Override ``cache_backend`` on a subclass to switch to a different backend,
-    or set ``cache_ttl`` to change the expiry.
+    Override ``cache_ttl`` on a subclass or pass it to the constructor to
+    change the expiry.
 
     Args:
         url: Direct URL to fetch data from.
         resource: The CKAN resource dictionary.
+        cache_backend: Override the configured cache backend for this instance.
+        cache_ttl: Override the default TTL (seconds) for this instance.
     """
-
-    cache_backend: CacheBackend = RedisCacheBackend()
-    cache_ttl: int = 300
 
     def __init__(
         self,
         url: str | None = None,
         resource: dict[str, Any] | None = None,
         cache_backend: CacheBackend | None = None,
-        cache_ttl: int | None = None,
+        cache_ttl: int = 600,
     ):
         super().__init__()
 
@@ -374,9 +374,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         self.url = url
         self.resource = resource
         self._source_path: str = ""
-
-        if cache_backend is not None:
-            self.cache_backend = cache_backend
+        self.cache_backend = cache_backend if cache_backend is not None else get_cache_backend()
 
         if cache_ttl is not None:
             self.cache_ttl = cache_ttl

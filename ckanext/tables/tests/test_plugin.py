@@ -59,6 +59,17 @@ class TestTablesPlugin:
         }
         result = plugin.setup_template_variables({}, data_dict)
         assert result["resource_id"] == "my-resource-id"
+        assert result["file_url"] == ""
+
+    def test_setup_template_variables_with_file_url(self):
+        plugin = TablesPlugin()
+        data_dict = {
+            "resource": {"id": "my-resource-id"},
+            "resource_view": {"file_url": "my-file-url"},
+        }
+        result = plugin.setup_template_variables({}, data_dict)
+        assert result["resource_id"] == "my-resource-id"
+        assert result["file_url"] == "my-file-url"
 
     def test_setup_template_variables_defaults_title(self):
         plugin = TablesPlugin()
@@ -73,6 +84,7 @@ class TestTablesPlugin:
     def test_blueprint_endpoint_accessible(self, app):
         """Verify the resource_table_ajax blueprint route is registered."""
         with app.flask_app.test_request_context():
-
             # just check the URL can be built - means the route is registered
-            assert "test-id" in tk.h.url_for("tables.resource_table_ajax", resource_id="test-id")
+            url = tk.h.url_for("tables.resource_table_ajax", resource_id="test-id", resource_view_id="view-id")
+            assert "test-id" in url
+            assert "view-id" in url

@@ -14,6 +14,8 @@ from typing import Any
 
 from ckan.lib.redis import connect_to_redis
 
+from ckanext.tables.config import get_cache_dir
+
 log = logging.getLogger(__name__)
 
 
@@ -39,19 +41,6 @@ class CacheBackend(ABC):
     def delete(self, key: str) -> None:
         """Remove the cached value for *key* (no-op if not present)."""
         ...
-
-
-# class NoCacheBackend(CacheBackend):
-#     """A no-op backend that disables caching entirely."""
-
-#     def get(self, key: str) -> Any:
-#         return None
-
-#     def set(self, key: str, value: Any, ttl: int) -> None:
-#         pass
-
-#     def delete(self, key: str) -> None:
-#         pass
 
 
 class _TablesJSONEncoder(json.JSONEncoder):
@@ -112,8 +101,8 @@ class PickleCacheBackend(CacheBackend):
         cache_dir: Directory where cache files are stored.
     """
 
-    def __init__(self, cache_dir: str) -> None:
-        self.cache_dir = cache_dir
+    def __init__(self, cache_dir: str | None = None) -> None:
+        self.cache_dir = cache_dir or get_cache_dir()
 
     def _cache_path(self, key: str) -> str:
         key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()

@@ -49,4 +49,7 @@ class TablesPlugin(p.SingletonPlugin):
 
         resource_id = data_dict["resource"]["id"]
 
-        return {"resource_id": resource_id}
+        return {
+            "resource_id": resource_id,
+            "file_url": data_dict["resource_view"].get("file_url", ""),
+        }
