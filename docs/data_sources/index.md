@@ -4,7 +4,26 @@ Data sources provide the underlying data for table definitions. They handle filt
 
 **Each table definition must specify a data source to fetch its data from.**
 
-The list of available data sources includes:
+## Available Data Sources
 
-  - [`DatabaseDataSource`](./database.md): Uses SQLAlchemy statements to fetch data from the database. This is the most common data source for production use.
-  - [`ListDataSource`](./list.md): Uses an in-memory list of dictionaries. This is useful for small datasets or testing.
+### Custom table definitions
+
+Use these when you are building your own table view with a `TableDefinition`.
+
+| Data Source | Description |
+| ----------- | ----------- |
+| [`DatabaseDataSource`](./database.md) | SQLAlchemy queries — the standard choice for production tables backed by the database. |
+| [`ListDataSource`](./list.md) | In-memory list of dicts — ideal for small datasets, demos, and tests. |
+
+### Resource preview (automatic)
+
+These data sources are used automatically by the [Resource View](../resource_view.md) feature to preview uploaded or linked resources. You generally do not need to instantiate them directly.
+
+| Data Source | Triggered by format | Description |
+| ----------- | ------------------- | ----------- |
+| [`CsvUrlDataSource`](./resource.md#csvurldatasource) | `csv` | Reads CSV files with auto-detected delimiter. |
+| [`XlsxUrlDataSource`](./resource.md#xlsxurldatasource) | `xlsx` | Reads the first sheet of an Excel workbook. |
+| [`OrcUrlDataSource`](./resource.md#orcurldatasource) | `orc` | Reads Apache ORC columnar files. |
+| [`ParquetUrlDataSource`](./resource.md#parqueturldatasource) | `parquet` | Reads Apache Parquet columnar files. |
+| [`FeatherUrlDataSource`](./resource.md#featherurldatasource) | `feather` | Reads Apache Arrow Feather files. |
+| [`DataStoreDataSource`](./resource.md#datastoredatasource) | any (when `datastore_active`) | Queries the CKAN Datastore API directly — no caching. |

@@ -1,4 +1,4 @@
-site_name: ckanext-tables
+site_name: Tables
 site_url: https://github.io/ckanext-tables/
 repo_url:  https://github.com/DataShades/ckanext-tables
 
@@ -44,6 +44,8 @@ nav:
 
   - Usage: usage.md
 
+  - Resource View: resource_view.md
+
   - Entities:
     - Overview: entities/index.md
     - Table: entities/table.md
@@ -62,10 +64,13 @@ nav:
     - Overview: data_sources/index.md
     - Database: data_sources/database.md
     - List: data_sources/list.md
+    - Resource: data_sources/resource.md
 
   - Generics: generics.md
 
   - Helpers: helpers.md
+
+  - Configuration: config.md
 
 markdown_extensions:
     - pymdownx.snippets
@@ -83,6 +88,8 @@ markdown_extensions:
         alternate_style: true
 
 plugins:
+  - macros:
+      module_name: docs/main
   - mkdocstrings:
       handlers:
         python:

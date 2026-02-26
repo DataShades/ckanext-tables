@@ -1,8 +1,39 @@
 version: 1
 groups:
-  - annotation: General settings
+  - annotation: Cache settings
+    description: >
+      These options control how downloaded resource data is cached.
+      They apply to file-based Resource Data Sources (CSV, XLSX, ORC, Parquet, Feather).
     options:
-      - key: ckanext.tables.cache_dir
-        default: "/tmp/ckanext-tables-cache"
-        description: Directory to use for caching downloaded table data.
-        example: "/tmp/ckanext-tables-cache"
+      - key: ckanext.tables.cache.backend
+        default: "pickle"
+        allowed_values:
+          - pickle
+          - redis
+        description: |
+          The storage backend used to cache downloaded table data.
+
+          - **`pickle`** — data is cached as pickle files on disk. Simple and requires no additional
+            infrastructure. The cache directory is controlled by
+            `ckanext.tables.cache.pickle.cache_dir`.
+          - **`redis`** — data is stored in Redis using CKAN's built-in Redis connection.
+            Suitable for multi-worker deployments where shared cache is needed.
+
+          Unknown values fall back to `pickle` with a warning in the logs.
+        example: "redis"
+
+      - key: ckanext.tables.cache.pickle.cache_dir
+        default: "/tmp/tables-cache"
+        description: |
+          Directory where pickle cache files are written.
+          Only used when the pickle cache backend is enabled.
+
+          If the directory does not exist it will be created automatically.
+          If creation fails (e.g. due to permissions), the system temp directory is used as a fallback.
+
+          !!! Note
+              It's recommended to set this directory to a persistent location with appropriate permissions.
+
+              For example, you can set it to `%(ckan.storage_path)/tables-cache` in your CKAN config.
+
+        example: "/var/cache/ckanext-tables"
