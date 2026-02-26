@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import decimal
+import json
 import os
 import time
 from datetime import date, datetime
@@ -114,7 +114,7 @@ class TestParquetCacheBackend:
         data = [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
         parquet_backend.set("key1", data, ttl=60)
         result = parquet_backend.get("key1")
-        assert result == data
+        assert result.to_dict(orient="records") == data
 
     def test_miss_returns_none(self, parquet_backend):
         assert parquet_backend.get("nonexistent") is None
@@ -162,7 +162,7 @@ class TestFeatherCacheBackend:
         data = [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
         feather_backend.set("key1", data, ttl=60)
         result = feather_backend.get("key1")
-        assert result == data
+        assert result.to_dict(orient="records") == data
 
     def test_miss_returns_none(self, feather_backend):
         assert feather_backend.get("nonexistent") is None

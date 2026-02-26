@@ -85,6 +85,9 @@ class RedisCacheBackend(CacheBackend):
         return json.loads(data)
 
     def set(self, key: str, value: Any, ttl: int) -> None:
+        if isinstance(value, pd.DataFrame):
+            value = value.to_dict(orient="records")
+
         with connect_to_redis() as conn:
             conn.setex(self._full_key(key), ttl, json.dumps(value, cls=_TablesJSONEncoder))
 
@@ -158,7 +161,7 @@ class _FileCacheBackend(CacheBackend, ABC):
         try:
             os.makedirs(self.cache_dir, exist_ok=True)
 
-            if isinstance(value, list):
+            if isinstance(value, (list, pd.DataFrame)):
                 self._write_data(value, path)
                 with open(meta_path, "w") as f:
                     json.dump({"ttl": ttl}, f)
@@ -194,7 +197,7 @@ class _DataFrameFileCacheBackend(_FileCacheBackend, ABC):
     def _write_df(self, df: pd.DataFrame, path: str) -> None: ...
 
     def _read_data(self, path: str) -> Any:
-        return self._read_df(path).to_dict(orient="records")
+        return self._read_df(path)
 
     def _write_data(self, value: Any, path: str) -> None:
         self._write_df(pd.DataFrame(value), path)

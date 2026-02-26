@@ -222,7 +222,8 @@ class PandasDataSource(BaseDataSource):
 
         if isinstance(self, CachedDataSourceMixin):
             try:
-                if cached := self.cache_backend.get(self.get_cache_key()):
+                cached = self.cache_backend.get(self.get_cache_key())
+                if cached is not None:
                     self._df = pd.DataFrame(cached)
                     return True
             except (ValueError, TypeError, OSError):
@@ -243,7 +244,7 @@ class PandasDataSource(BaseDataSource):
                 try:
                     self.cache_backend.set(
                         self.get_cache_key(),
-                        self._df.to_dict(orient="records"),
+                        self._df,
                         self.cache_ttl,
                     )
                 except OSError:
