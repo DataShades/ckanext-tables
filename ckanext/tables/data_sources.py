@@ -9,8 +9,12 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+import fsspec
 import numpy as np
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+from pyarrow import feather, orc
 from sqlalchemy import Boolean, DateTime, Integer
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.sql import Select, func, select
@@ -211,16 +215,26 @@ class PandasDataSource(BaseDataSource):
         """Fetch the data and return it as a pandas DataFrame."""
         raise NotImplementedError
 
+    def _load_from_cache(self) -> bool:
+        """Attempt to restore the dataframe from cache. Returns True on success."""
+        if self._df is not None:
+            return True
+
+        if isinstance(self, CachedDataSourceMixin):
+            try:
+                if cached := self.cache_backend.get(self.get_cache_key()):
+                    self._df = pd.DataFrame(cached)
+                    return True
+            except (ValueError, TypeError, OSError):
+                log.debug("Failed to restore DataFrame from cache", exc_info=True)
+
+        return False
+
     def _ensure_loaded(self) -> None:
         """Load the dataframe, using the cache backend when available."""
-        if self._df is not None:
+        if self._load_from_cache():
+            self._filtered_df = self._df
             return
-
-        if isinstance(self, CachedDataSourceMixin) and (cached := self.cache_backend.get(self.get_cache_key())):
-            try:
-                self._df = pd.DataFrame(cached)
-            except (ValueError, TypeError):
-                log.debug("Failed to restore DataFrame from cache", exc_info=True)
 
         if self._df is None:
             self._df = self.fetch_dataframe()
@@ -419,6 +433,19 @@ class CsvUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching CSV from %s", self.get_source_path())
             return pd.DataFrame()
 
+    def get_columns(self) -> list[str]:
+        if self._load_from_cache():
+            return list(self._df.columns)
+
+        try:
+            df_preview = pd.read_csv(self.get_source_path(), sep=None, engine="python", nrows=0)
+        except (OSError, ValueError, pd.errors.ParserError):
+            log.exception("Failed fast CSV schema read, falling back to full load")
+            self._ensure_loaded()
+            return list(self._df.columns) if self._df is not None else []
+
+        return list(df_preview.columns)
+
 
 class XlsxUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
@@ -427,6 +454,19 @@ class XlsxUrlDataSource(BaseResourceDataSource):
         except Exception:
             log.exception("Error fetching XLSX from %s", self.get_source_path())
             return pd.DataFrame()
+
+    def get_columns(self) -> list[str]:
+        if self._load_from_cache():
+            return list(self._df.columns)
+
+        try:
+            df_preview = pd.read_excel(self.get_source_path(), nrows=0)
+        except (OSError, ValueError):
+            log.exception("Failed fast XLSX schema read, falling back to full load")
+            self._ensure_loaded()
+            return list(self._df.columns) if self._df is not None else []
+
+        return list(df_preview.columns)
 
 
 class OrcUrlDataSource(BaseResourceDataSource):
@@ -437,6 +477,25 @@ class OrcUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching ORC from %s", self.get_source_path())
             return pd.DataFrame()
 
+    def get_columns(self) -> list[str]:
+        if self._load_from_cache():
+            return list(self._df.columns)
+
+        source = self.get_source_path()
+
+        try:
+            if source.startswith(("http://", "https://")):
+                with fsspec.open(source) as f:
+                    schema_names = orc.ORCFile(f).schema.names
+            else:
+                schema_names = orc.ORCFile(source).schema.names
+        except (OSError, ValueError, pa.ArrowInvalid):
+            log.exception("Failed fast ORC schema read, falling back to full load")
+            self._ensure_loaded()
+            return list(self._df.columns) if self._df is not None else []
+
+        return schema_names
+
 
 class ParquetUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
@@ -446,6 +505,25 @@ class ParquetUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching Parquet from %s", self.get_source_path())
             return pd.DataFrame()
 
+    def get_columns(self) -> list[str]:
+        if self._load_from_cache():
+            return list(self._df.columns)
+
+        source = self.get_source_path()
+
+        try:
+            if source.startswith(("http://", "https://")):
+                with fsspec.open(source) as f:
+                    schema_names = pq.read_schema(f).names
+            else:
+                schema_names = pq.read_schema(source).names
+        except (OSError, ValueError, pa.ArrowInvalid):
+            log.exception("Failed fast Parquet schema read, falling back to full load")
+            self._ensure_loaded()
+            return list(self._df.columns) if self._df is not None else []
+
+        return schema_names
+
 
 class FeatherUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
@@ -454,6 +532,25 @@ class FeatherUrlDataSource(BaseResourceDataSource):
         except Exception:
             log.exception("Error fetching Feather from %s", self.get_source_path())
             return pd.DataFrame()
+
+    def get_columns(self) -> list[str]:
+        if self._load_from_cache():
+            return list(self._df.columns)
+
+        source = self.get_source_path()
+
+        try:
+            if source.startswith(("http://", "https://")):
+                with fsspec.open(source) as f:
+                    schema_names = feather.read_table(f, columns=[]).schema.names
+            else:
+                schema_names = feather.read_table(source, columns=[]).schema.names
+        except (OSError, ValueError, pa.ArrowInvalid):
+            log.exception("Failed fast Feather schema read, falling back to full load")
+            self._ensure_loaded()
+            return list(self._df.columns) if self._df is not None else []
+
+        return schema_names
 
 
 class DataStoreDataSource(BaseDataSource):
