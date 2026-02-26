@@ -20,12 +20,14 @@ If the resource has been pushed to the **CKAN Datastore** (i.e. its `datastore_a
 
 ## Caching
 
-For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is cached with a default TTL of **600 seconds** (10 minutes). The cache backend is configurable:
+For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is cached with a default TTL of **3600 seconds** (1 hour), configurable via `ckanext.tables.cache.ttl`. The cache backend is configurable:
 
-| Config value | Backend | Config key for extra options |
-| ------------ | ------- | ---------------------------- |
-| `pickle` *(default)* | Disk-based pickle files | `ckanext.tables.cache.pickle.cache_dir` |
-| `redis` | CKAN's Redis connection | *(none — uses CKAN's Redis config)* |
+| Config value | Backend |
+| ------------ | ------- |
+| `pickle` *(default)* | Disk-based pickle files |
+| `redis` | CKAN's Redis connection |
+| `parquet` | Disk-based parquet files |
+| `feather` | Disk-based feather (Arrow IPC) files |
 
 ```ini
 # Switch to Redis
@@ -33,7 +35,7 @@ ckanext.tables.cache.backend = redis
 
 # Or keep pickle and customise the cache directory
 ckanext.tables.cache.backend = pickle
-ckanext.tables.cache.pickle.cache_dir = /var/cache/ckanext-tables
+ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
 ```
 
 The Datastore-backed view does **not** use caching — it queries the Datastore API directly on every request.

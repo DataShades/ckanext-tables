@@ -6,27 +6,33 @@ groups:
       They apply to file-based Resource Data Sources (CSV, XLSX, ORC, Parquet, Feather).
     options:
       - key: ckanext.tables.cache.backend
-        default: "pickle"
+        default: "feather"
         allowed_values:
           - pickle
           - redis
+          - parquet
+          - feather
         description: |
           The storage backend used to cache downloaded table data.
 
           - **`pickle`** — data is cached as pickle files on disk. Simple and requires no additional
             infrastructure. The cache directory is controlled by
-            `ckanext.tables.cache.pickle.cache_dir`.
+            `ckanext.tables.cache.cache_dir`.
           - **`redis`** — data is stored in Redis using CKAN's built-in Redis connection.
             Suitable for multi-worker deployments where shared cache is needed.
+          - **`parquet`** — data is cached as Apache Parquet files on disk. Scales well for
+            large DataFrames. The cache directory is controlled by `ckanext.tables.cache.cache_dir`.
+          - **`feather`** — data is cached as Arrow IPC (Feather) files on disk. Optimised for
+            fast read/write speed with minimal serialisation overhead.
+            The cache directory is controlled by `ckanext.tables.cache.cache_dir`.
 
           Unknown values fall back to `pickle` with a warning in the logs.
         example: "redis"
 
-      - key: ckanext.tables.cache.pickle.cache_dir
+      - key: ckanext.tables.cache.cache_dir
         default: "/tmp/tables-cache"
         description: |
-          Directory where pickle cache files are written.
-          Only used when the pickle cache backend is enabled.
+          Directory where cache files are stored. Used for file-based cache backends.
 
           If the directory does not exist it will be created automatically.
           If creation fails (e.g. due to permissions), the system temp directory is used as a fallback.
@@ -37,3 +43,13 @@ groups:
               For example, you can set it to `%(ckan.storage_path)/tables-cache` in your CKAN config.
 
         example: "/var/cache/ckanext-tables"
+
+      - key: ckanext.tables.cache.ttl
+        default: 3600
+        description: |
+          Time-to-live (in seconds) for cached data. After this period, cached
+          entries are considered stale and will be re-fetched from the original source.
+
+          This value is used as the default for all cache backends and data sources.
+          Individual data source instances can still override the TTL programmatically.
+        example: 86400

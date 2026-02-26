@@ -1,5 +1,5 @@
 from . import exporters, formatters
-from .cache import CacheBackend, PickleCacheBackend, RedisCacheBackend
+from .cache import CacheBackend, FeatherCacheBackend, ParquetCacheBackend, PickleCacheBackend, RedisCacheBackend
 from .data_sources import (
     BaseDataSource,
     CsvUrlDataSource,
@@ -72,6 +72,8 @@ __all__ = [
     "tables_build_params",
     "ALL_EXPORTERS",
     "CacheBackend",
+    "FeatherCacheBackend",
+    "ParquetCacheBackend",
     "PickleCacheBackend",
     "RedisCacheBackend",
 ]

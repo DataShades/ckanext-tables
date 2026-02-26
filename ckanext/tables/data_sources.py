@@ -26,7 +26,7 @@ from ckan import model
 from ckan.lib import uploader
 
 from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin
-from ckanext.tables.config import get_cache_backend
+from ckanext.tables.config import get_cache_backend, get_cache_ttl
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -376,7 +376,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         url: str | None = None,
         resource: dict[str, Any] | None = None,
         cache_backend: CacheBackend | None = None,
-        cache_ttl: int = 600,
+        cache_ttl: int | None = None,
     ):
         super().__init__()
 
@@ -389,9 +389,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         self.resource = resource
         self._source_path: str = ""
         self.cache_backend = cache_backend if cache_backend is not None else get_cache_backend()
-
-        if cache_ttl is not None:
-            self.cache_ttl = cache_ttl
+        self.cache_ttl = cache_ttl if cache_ttl is not None else get_cache_ttl()
 
     def get_cache_key(self) -> str:
         return f"resource-{self.resource['id']}" if self.resource else f"url-{self.url}"

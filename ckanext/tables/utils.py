@@ -4,9 +4,9 @@ import re
 from ckan.lib.redis import connect_to_redis
 from ckan.plugins import toolkit as tk
 
+from ckanext.tables.config import get_cache_ttl
 from ckanext.tables.types import FilterItem, QueryParams
 
-REDIS_CACHE_DEFAULT_TTL = 300  # 5 minutes
 FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
 
 
@@ -59,8 +59,8 @@ class CacheManager:
 
     _PREFIX = "ckanext:tables:table:"
 
-    def __init__(self, cache_ttl: int = REDIS_CACHE_DEFAULT_TTL) -> None:
-        self.cache_ttl = cache_ttl
+    def __init__(self, cache_ttl: int | None = None) -> None:
+        self.cache_ttl = cache_ttl if cache_ttl is not None else get_cache_ttl()
 
     def _key(self, table_name: str) -> str:
         return f"{self._PREFIX}{table_name}"

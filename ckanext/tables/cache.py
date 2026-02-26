@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from datetime import date, datetime
 from typing import Any
 
+import pandas as pd
+
 from ckan.lib.redis import connect_to_redis
 
 from ckanext.tables.config import get_cache_dir
@@ -91,69 +93,152 @@ class RedisCacheBackend(CacheBackend):
             conn.delete(self._full_key(key))  # type: ignore
 
 
-class PickleCacheBackend(CacheBackend):
-    """Cache backend that stores data as pickle files on disk.
+class _FileCacheBackend(CacheBackend, ABC):
+    """Base class for file-based cache backends.
 
-    Each key is hashed to a filename inside *cache_dir*. Expiry is
-    implemented by comparing the file's modification time against *ttl*.
+    Subclasses only need to define:
+
+    - ``_file_extension`` — e.g. ``".parquet"``
+    - ``_read_data(path)`` — deserialise data from the cache file
+    - ``_write_data(value, path)`` — serialise data to the cache file
+
+    TTL and non-tabular scalar values are stored in a ``.meta`` JSON sidecar.
 
     Args:
         cache_dir: Directory where cache files are stored.
     """
 
+    _file_extension: str
+
     def __init__(self, cache_dir: str | None = None) -> None:
         self.cache_dir = cache_dir or get_cache_dir()
 
+    @abstractmethod
+    def _read_data(self, path: str) -> Any: ...
+
+    @abstractmethod
+    def _write_data(self, value: Any, path: str) -> None: ...
+
     def _cache_path(self, key: str) -> str:
         key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        return os.path.join(self.cache_dir, f"{key_hash}.pkl")
+        return os.path.join(self.cache_dir, f"{key_hash}{self._file_extension}")
+
+    def _meta_path(self, key: str) -> str:
+        key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return os.path.join(self.cache_dir, f"{key_hash}.meta")
 
     def get(self, key: str) -> Any:
-        path = self._cache_path(key)
+        meta_path = self._meta_path(key)
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
 
+        if time.time() - os.path.getmtime(meta_path) >= meta.get("ttl", 0):
+            return None
+
+        if "scalar_value" in meta:
+            return meta["scalar_value"]
+
+        path = self._cache_path(key)
         if not os.path.exists(path):
             return None
 
         try:
-            if time.time() - os.path.getmtime(path) >= self._get_ttl(path):
-                return None
-
-            with open(path, "rb") as f:
-                data = pickle.load(f)  # noqa: S301
-
-            return data["value"] if isinstance(data, dict) and "value" in data else data
-        except (OSError, pickle.PickleError):
-            log.debug("Failed to read pickle cache %s", path, exc_info=True)
+            return self._read_data(path)
+        except (OSError, ValueError):
+            log.debug("Failed to read %s cache %s", self._file_extension, path, exc_info=True)
             return None
 
     def set(self, key: str, value: Any, ttl: int) -> None:
         path = self._cache_path(key)
+        meta_path = self._meta_path(key)
 
         try:
             os.makedirs(self.cache_dir, exist_ok=True)
-            # Store ttl alongside value so get() can check expiry correctly
-            with open(path, "wb") as f:
-                pickle.dump({"ttl": ttl, "value": value}, f)
-        except OSError:
-            log.warning("Failed to write pickle cache %s", path, exc_info=True)
+
+            if isinstance(value, list):
+                self._write_data(value, path)
+                with open(meta_path, "w") as f:
+                    json.dump({"ttl": ttl}, f)
+            else:
+                with open(meta_path, "w") as f:
+                    json.dump({"ttl": ttl, "scalar_value": value}, f)
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(path)
+        except (OSError, ValueError):
+            log.warning("Failed to write %s cache %s", self._file_extension, path, exc_info=True)
 
     def delete(self, key: str) -> None:
-        path = self._cache_path(key)
         with contextlib.suppress(FileNotFoundError):
-            os.remove(path)
-
-    def _get_ttl(self, path: str) -> int:
-        """Read the TTL that was stored alongside the value."""
-        try:
-            with open(path, "rb") as f:
-                data = pickle.load(f)  # noqa: S301
-            return data.get("ttl", 0) if isinstance(data, dict) else 0
-        except (OSError, pickle.PickleError, AttributeError):
-            return 0
+            os.remove(self._cache_path(key))
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(self._meta_path(key))
 
     def get_cache_path(self, key: str) -> str:
         """Public accessor for the cache file path (useful in tests)."""
         return self._cache_path(key)
+
+
+class _DataFrameFileCacheBackend(_FileCacheBackend, ABC):
+    """File cache backend that serialises values via a pandas DataFrame.
+
+    Subclasses define ``_read_df`` / ``_write_df`` for the actual I/O.
+    """
+
+    @abstractmethod
+    def _read_df(self, path: str) -> pd.DataFrame: ...
+
+    @abstractmethod
+    def _write_df(self, df: pd.DataFrame, path: str) -> None: ...
+
+    def _read_data(self, path: str) -> Any:
+        return self._read_df(path).to_dict(orient="records")
+
+    def _write_data(self, value: Any, path: str) -> None:
+        self._write_df(pd.DataFrame(value), path)
+
+
+class PickleCacheBackend(_FileCacheBackend):
+    """Cache backend that stores data as pickle files on disk."""
+
+    _file_extension = ".pkl"
+
+    def _read_data(self, path: str) -> Any:
+        try:
+            with open(path, "rb") as f:
+                return pickle.load(f)  # noqa: S301
+        except pickle.PickleError as err:
+            raise ValueError(str(err)) from err
+
+    def _write_data(self, value: Any, path: str) -> None:
+        with open(path, "wb") as f:
+            pickle.dump(value, f)
+
+
+class ParquetCacheBackend(_DataFrameFileCacheBackend):
+    """Cache backend that stores data as parquet files on disk."""
+
+    _file_extension = ".parquet"
+
+    def _read_df(self, path: str) -> pd.DataFrame:
+        return pd.read_parquet(path)
+
+    def _write_df(self, df: pd.DataFrame, path: str) -> None:
+        df.to_parquet(path, engine="pyarrow")
+
+
+class FeatherCacheBackend(_DataFrameFileCacheBackend):
+    """Cache backend that stores data as feather (Arrow IPC) files on disk."""
+
+    _file_extension = ".feather"
+
+    def _read_df(self, path: str) -> pd.DataFrame:
+        return pd.read_feather(path)
+
+    def _write_df(self, df: pd.DataFrame, path: str) -> None:
+        df.to_feather(path)
 
 
 class CachedDataSourceMixin:
@@ -173,7 +258,22 @@ class CachedDataSourceMixin:
 
         class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
             cache_backend = PickleCacheBackend("/var/cache/tables")
-            cache_ttl = 600
+
+            def get_cache_key(self) -> str:
+                ...
+
+    Example — use parquet files::
+
+        class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
+            cache_backend = ParquetCacheBackend("/var/cache/tables")
+
+            def get_cache_key(self) -> str:
+                ...
+
+    Example — use feather files::
+
+        class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
+            cache_backend = FeatherCacheBackend("/var/cache/tables")
 
             def get_cache_key(self) -> str:
                 ...
