@@ -260,6 +260,14 @@ body.tables-fullscreen .ckanext-datapreview .tabulator-container {
     background-position: 300px 0;
   }
 }
+.table-skeleton-control .btn {
+  opacity: 1;
+  cursor: default;
+  pointer-events: none;
+  background-color: #f8f9fa;
+  border-color: #dee2e6;
+}
+
 .btn-table-disabled {
   pointer-events: none;
 }

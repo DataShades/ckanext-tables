@@ -1,4 +1,7 @@
-{% snippet "tables/render_table.html", table=h.tables_init_temporary_preview_table(resource, resource_view) %}
+{% snippet "tables/snippets/table_loading.html",
+    resource_id=resource.id,
+    resource_view_id=resource_view.id
+%}
 
 {% asset "tables/tables-js" %}
 {% asset "tables/tables-css" %}

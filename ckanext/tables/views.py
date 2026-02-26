@@ -98,3 +98,40 @@ bp.add_url_rule(
     "/resource-table-ajax/<resource_id>/<resource_view_id>",
     view_func=ResourceViewHandler.as_view("resource_table_ajax"),
 )
+
+
+class ResourceViewDeferredHandler(MethodView):
+    """Renders the full table HTML snippet, called lazily after page load.
+
+    HTMX fires a GET request to this endpoint on page load, so the expensive
+    ``tables_init_temporary_preview_table`` call (which fetches remote data to
+    discover column names) happens *after* the browser has already rendered the
+    page skeleton — avoiding a blank-page experience and production timeouts on
+    the initial page request.
+    """
+
+    def get(self, resource_id: str, resource_view_id: str) -> str:
+        try:
+            resource = tk.get_action("resource_show")({"ignore_auth": False}, {"id": resource_id})
+            resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
+        except tk.ObjectNotFound:
+            tk.abort(404, tk._("Resource not found"))
+        except tk.NotAuthorized:
+            tk.abort(403, tk._("Not authorized to view this resource"))
+
+        try:
+            table = tables_init_temporary_preview_table(resource, resource_view)
+        except Exception:
+            log.exception("Failed to initialize table for resource %s", resource_id)
+            tk.abort(500, tk._("Failed to load table. The resource may be unavailable or in an unsupported format."))
+
+        return tk.render(
+            "tables/render_table.html",
+            extra_vars={"table": table},
+        )
+
+
+bp.add_url_rule(
+    "/resource-table-deferred/<resource_id>/<resource_view_id>",
+    view_func=ResourceViewDeferredHandler.as_view("resource_table_deferred"),
+)
