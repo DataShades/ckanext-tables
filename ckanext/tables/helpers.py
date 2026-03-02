@@ -104,7 +104,7 @@ def tables_guess_data_source(
     """
     file_url = (resource_view or {}).get("file_url", "")
 
-    if resource.get("datastore_active") and not file_url:
+    if "datastore" in tk.g.plugins and resource.get("datastore_active") and not file_url:
         return t.DataStoreDataSource(resource_id=resource["id"])
 
     if file_url:
