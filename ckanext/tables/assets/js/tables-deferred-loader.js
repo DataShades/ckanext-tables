@@ -1,8 +1,15 @@
-document.addEventListener("htmx:afterSwap", function (ev) {
-    ev.detail.target.querySelectorAll("[data-module]").forEach(function (el) {
-        if (el.hasAttribute("data-module-initialized")) return;
+// document.body.addEventListener("htmx:oobAfterSwap", htmx_initialize_tables);
+// document.body.addEventListener("htmx:afterSwap", htmx_initialize_tables);
 
-        el.setAttribute("data-module-initialized", "true");
-        ckan.module.initializeElement(el);
-    });
-});
+// function htmx_initialize_tables(event) {
+//     console.log("htmx_initialize_tables", event);
+
+//     var el = event.detail.target.querySelector(".tabulator-container");
+
+//     if (el.getAttribute("dm-initialized")) {
+//         return;
+//     }
+
+//     ckan.module.initializeElement(el);
+//     el.setAttribute("dm-initialized", true)
+// }
