@@ -1,4 +1,5 @@
-<div hx-get="{{ h.url_for('tables.resource_table_deferred', resource_id=resource.id, resource_view_id=resource_view.id) }}"
+<div data-module="tables-deferred-loader"
+    hx-get="{{ h.url_for('tables.resource_table_deferred', resource_id=resource.id, resource_view_id=resource_view.id) }}"
     hx-trigger="load" hx-swap="innerHTML">
     {% snippet "tables/snippets/table_control_skeleton.html" %}
     {% snippet "tables/snippets/table_skeleton.html" %}

@@ -1,15 +1,23 @@
-// document.body.addEventListener("htmx:oobAfterSwap", htmx_initialize_tables);
-// document.body.addEventListener("htmx:afterSwap", htmx_initialize_tables);
+ckan.module("tables-deferred-loader", function ($, _) {
+    "use strict";
 
-// function htmx_initialize_tables(event) {
-//     console.log("htmx_initialize_tables", event);
+    return {
+        initialize: function () {
+            $.proxyAll(this, /_/);
 
-//     var el = event.detail.target.querySelector(".tabulator-container");
+            document.body.addEventListener("htmx:oobAfterSwap", this._htmx_initialize_tables);
+            document.body.addEventListener("htmx:afterSwap", this._htmx_initialize_tables);
+        },
 
-//     if (el.getAttribute("dm-initialized")) {
-//         return;
-//     }
+        _htmx_initialize_tables: function (event) {
+            var el = event.detail.target.querySelector(".tabulator-container");
 
-//     ckan.module.initializeElement(el);
-//     el.setAttribute("dm-initialized", true)
-// }
+            if (el.getAttribute("dm-initialized")) {
+                return;
+            }
+
+            ckan.module.initializeElement(el);
+            el.setAttribute("dm-initialized", true)
+        }
+    };
+});
