@@ -1,13 +1,7 @@
 document.addEventListener("htmx:afterSwap", function (ev) {
-    var parent = ev.detail.target.parentNode;
-    if (!parent) {
-        return;
-    }
+    ev.detail.target.querySelectorAll("[data-module]").forEach(function (el) {
+        if (el.hasAttribute("data-module-initialized")) return;
 
-    parent.querySelectorAll("[data-module]").forEach(function (el) {
-        if (el.getAttribute("data-module-initialized")) {
-            return;
-        }
         el.setAttribute("data-module-initialized", "true");
         ckan.module.initializeElement(el);
     });

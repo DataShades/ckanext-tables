@@ -36,6 +36,7 @@ class TableDefinition:
         placeholder: (Optional) Placeholder text for an empty table.
         page_size: (Optional) Number of rows per page. Defaults to 10.
         table_template: (Optional) Template to render the table. Defaults to `tables/base.html`.
+        table_layout: (Optional) Layout for the table. Defaults to `fitColumns`.
     """
 
     name: str
@@ -49,6 +50,7 @@ class TableDefinition:
     placeholder: str | None = None
     page_size: int = 10
     table_template: str = "tables/base.html"
+    table_layout: str = "fitColumns"
 
     def __post_init__(self):
         cacheable = isinstance(self.data_source, CachedDataSourceMixin)
@@ -82,7 +84,7 @@ class TableDefinition:
             "columns": columns,
             "placeholder": self.placeholder,
             "sortMode": "remote",
-            "layout": "fitColumns",
+            "layout": self.table_layout,
             "pagination": True,
             "paginationMode": "remote",
             "paginationSize": self.page_size,

@@ -81,7 +81,8 @@ def tables_init_temporary_preview_table(
             resource_id=resource["id"],
             resource_view_id=resource_view["id"],
         ),
-        columns=[t.ColumnDefinition(field=col) for col in data_source.get_columns()],
+        columns=[t.ColumnDefinition(field=col, title=col) for col in data_source.get_columns()],
+        table_layout="fitDataStretch",
     )
 
 

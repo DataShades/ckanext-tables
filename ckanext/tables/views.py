@@ -115,9 +115,9 @@ class ResourceViewDeferredHandler(MethodView):
             resource = tk.get_action("resource_show")({"ignore_auth": False}, {"id": resource_id})
             resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
         except tk.ObjectNotFound:
-            tk.abort(404, tk._("Resource not found"))
+            return tk.abort(404, tk._("Resource not found"))
         except tk.NotAuthorized:
-            tk.abort(403, tk._("Not authorized to view this resource"))
+            return tk.abort(403, tk._("Not authorized to view this resource"))
 
         try:
             table = tables_init_temporary_preview_table(resource, resource_view)

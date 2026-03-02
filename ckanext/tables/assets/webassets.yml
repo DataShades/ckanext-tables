@@ -7,16 +7,12 @@ tables-js:
     - js/tables-toast.js
     - js/tables-confirm.js
     - js/tables-tabulator.js
+    - js/tables-deferred-loader.js
 
   extra:
     preload:
       - base/main
 
-tables-deferred-js:
-  filter: rjsmin
-  output: ckanext-tables/%(version)s-tables-deferred.js
-  contents:
-    - js/tables-deferred-loader.js
 
 tables-css:
   output: ckanext-tables/%(version)s-tables.css
