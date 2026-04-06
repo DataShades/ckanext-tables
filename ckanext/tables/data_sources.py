@@ -240,7 +240,7 @@ class PandasDataSource(BaseDataSource):
         if self._df is None:
             self._df = self.fetch_dataframe()
 
-            if isinstance(self, CachedDataSourceMixin):
+            if isinstance(self, CachedDataSourceMixin) and self._df is not None and not self._df.empty:
                 try:
                     self.cache_backend.set(
                         self.get_cache_key(),
@@ -500,8 +500,8 @@ class ParquetUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
             return pd.read_parquet(self.get_source_path())
-        except Exception:
-            log.exception("Error fetching Parquet from %s", self.get_source_path())
+        except Exception as e:
+            log.error("Error fetching Parquet from %s: %s", self.get_source_path(), e)
             return pd.DataFrame()
 
     def get_columns(self) -> list[str]:
