@@ -33,7 +33,7 @@
                                     data-field="{{ column.field }}"
                                     {% if columns_visibility.get(column.field, column.visible) %}checked{% endif %}
                                 >
-                                <span class="flex-grow-1">{{ column.title }}</span>
+                                <span class="flex-grow-1">{{ column.title or column.field }}</span>
                             </label>
                         {% endif %}
                     {% endfor %}
