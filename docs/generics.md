@@ -9,7 +9,7 @@ The `GenericTableView` is a Flask `MethodView` that automatically renders any re
 ### Basic Usage
 
 ```python
---8<-- "ckanext/tables_demo/views.py"
+--8 < --"ckanext/tables_demo/views.py"
 ```
 
 ### Constructor Parameters

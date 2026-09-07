@@ -58,9 +58,7 @@ class TablesPlugin(p.SingletonPlugin):
 
     # IResourceController
 
-    def before_resource_update(
-        self, context: types.Context, current: dict[str, Any], resource: dict[str, Any]
-    ) -> None:
+    def before_resource_update(self, context: types.Context, current: dict[str, Any], resource: dict[str, Any]) -> None:
         if resource.get("url_type") == "upload" and not resource.get("upload"):
             return
 

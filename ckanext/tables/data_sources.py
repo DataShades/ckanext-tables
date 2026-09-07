@@ -87,7 +87,7 @@ class DatabaseDataSource(BaseDataSource):
             ">": lambda col, val: col > val,
             ">=": lambda col, val: col >= val,
             "!=": lambda col, val: col != val,
-            "like": lambda col, val: (col.ilike(f"%{val}%") if isinstance(val, str) else None),
+            "like": lambda col, val: col.ilike(f"%{val}%") if isinstance(val, str) else None,
         }
 
         func = operators.get(operator)
@@ -500,8 +500,8 @@ class ParquetUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
             return pd.read_parquet(self.get_source_path())
-        except Exception as e:
-            log.error("Error fetching Parquet from %s: %s", self.get_source_path(), e)
+        except Exception:
+            log.exception("Error fetching Parquet from %s", self.get_source_path())
             return pd.DataFrame()
 
     def get_columns(self) -> list[str]:

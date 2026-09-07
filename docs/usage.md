@@ -30,7 +30,7 @@ If you're interested in how we're generating the mock data, check out the `gener
 Below is the full code of the `PeopleTable` definition:
 
 ```python
---8<-- "ckanext/tables_demo/table.py"
+--8 < --"ckanext/tables_demo/table.py"
 ```
 
 ### Using Formatters
@@ -40,11 +40,11 @@ The tables extension provides several built-in formatters to change the way data
 For example, from the above `PeopleTable`, we are using the `datetime` formatter to format the `created` field. So this `2024-02-25T11:10:00Z` value will be displayed as `2024-02-25`.
 
 ```py
-ColumnDefinition(
-    field="created",
-    formatters=[(formatters.DateFormatter, {"date_format": "%Y-%m-%d"})],
-    sortable=True
-),
+(
+    ColumnDefinition(
+        field="created", formatters=[(formatters.DateFormatter, {"date_format": "%Y-%m-%d"})], sortable=True
+    ),
+)
 ```
 
 ### Using Exporters
@@ -54,10 +54,12 @@ The tables extension also provides several built-in exporters to export the tabl
 In the above `PeopleTable`, we are using all the available exporters by specifying `t.ALL_EXPORTERS`. You can also specify individual exporters if you want to limit the available export options.
 
 ```py
-exporters=[
-    t.exporters.CSVExporter,
-    t.exporters.TSVExporter,
-],
+exporters = (
+    [
+        t.exporters.CSVExporter,
+        t.exporters.TSVExporter,
+    ],
+)
 ```
 
 Obviously, you can write your own custom exporters as well. See the [exporters](exporters/index.md) documentation for more information.
@@ -75,7 +77,7 @@ Read more about actions in the [actions](entities/actions.md) documentation.
 Once your table is defined, you can create a view to display it using the `GenericTableView`:
 
 ```python
---8<-- "ckanext/tables_demo/views.py"
+--8 < --"ckanext/tables_demo/views.py"
 ```
 
 As you can see, this view does not require any custom code to render the table. The `GenericTableView` takes care of everything.

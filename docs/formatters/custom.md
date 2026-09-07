@@ -7,12 +7,11 @@ Below is an example of how to create a simple custom formatter, that replaces th
 ```python
 from ckanext.tables.shared import BaseFormatter
 
+
 class MyCustomFormatter(BaseFormatter):
     """Replaces cell content with a bold Hello World."""
 
-    def format(
-        self, value: types.Value, options: types.Options
-    ) -> types.FormatterResult:
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         return tk.literal(f"<strong>Hello World</strong>")
 ```
 

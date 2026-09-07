@@ -32,10 +32,7 @@ from ckanext.tables.shared import formatters, ColumnDefinition
 
 ColumnDefinition(
     field="timestamp",
-    formatters=[
-        (formatters.DateFormatter, {"date_format": "%Y-%m-%d %H:%M"}),
-        (formatters.TextBoldFormatter, {})
-    ],
+    formatters=[(formatters.DateFormatter, {"date_format": "%Y-%m-%d %H:%M"}), (formatters.TextBoldFormatter, {})],
     tabulator_formatter="html",
 )
 ```
