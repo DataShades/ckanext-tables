@@ -1,23 +1,45 @@
 name: Tests
 on: [push, pull_request]
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+
   test:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ckan-image: see https://github.com/ckan/ckan-docker-base
+          - ckan-version: "2.12"
+            ckan-image: "2.12-py3.14"
+          - ckan-version: "2.11"
+            ckan-image: "2.11-py3.10"
+          - ckan-version: "2.10"
+            ckan-image: "2.10-py3.10"
+
+    name: Test CKAN ${{ matrix.ckan-version }}
     runs-on: ubuntu-latest
     container:
-      image: ckan/ckan-dev:2.10-py3.10
+      image: ckan/ckan-dev:${{ matrix.ckan-image }}
       options: --user root
     services:
       solr:
-        image: ckan/ckan-solr:2.10
+        image: ckan/ckan-solr:${{ matrix.ckan-version }}-solr9
       postgres:
-        image: ckan/ckan-postgres-dev:2.10
+        image: ckan/ckan-postgres-dev:${{ matrix.ckan-version }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
       redis:
-          image: redis:3
+        image: redis:7
+
     env:
       CKAN_SQLALCHEMY_URL: postgresql://ckan_default:pass@postgres/ckan_test
       CKAN_DATASTORE_WRITE_URL: postgresql://datastore_write:pass@postgres/datastore_test
@@ -26,24 +48,25 @@ jobs:
       CKAN_REDIS_URL: redis://redis:6379/1
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Install requirements
-      # Install any extra requirements your extension has here (dev requirements, other extensions etc)
-      run: |
-        pip install -e .
-    - name: Setup extension
-      # Extra initialization steps
-      run: |
-        # Replace default path to CKAN core config file with the one on the container
-        sed -i -e 's/use = config:.*/use = config:\/srv\/app\/src\/ckan\/test-core.ini/' test.ini
+      - uses: actions/checkout@v4
 
-        ckan -c test.ini db init
-    - name: Run tests
-      run: pytest --ckan-ini=test.ini --cov=ckanext.tables --disable-warnings ckanext/tables
-    - name: Upload coverage to Coveralls
-      env:
-        COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
-      run: |
-        git config --global --add safe.directory '*'
-        pip install coveralls
-        coveralls
+      - name: Install requirements
+        # Install any extra requirements your extension has here (dev requirements, other extensions etc)
+        run: pip install -e '.[test]'
+
+      - name: Setup extension
+        run: |
+          # Point test.ini at the CKAN core config shipped in the container
+          sed -i -e 's/use = config:.*/use = config:\/srv\/app\/src\/ckan\/test-core.ini/' test.ini
+          ckan -c test.ini db init
+
+      - name: Run tests
+        run: pytest --ckan-ini=test.ini --cov=ckanext.tables --disable-warnings ckanext/tables
+
+      - name: Upload coverage to Coveralls
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+        run: |
+          git config --global --add safe.directory '*'
+          pip install coveralls
+          coveralls

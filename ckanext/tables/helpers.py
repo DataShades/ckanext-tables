@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import ckan.plugins as p
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables import shared as t
@@ -104,7 +105,11 @@ def tables_guess_data_source(
     """
     file_url = (resource_view or {}).get("file_url", "")
 
-    if "datastore" in tk.g.plugins and resource.get("datastore_active") and not file_url:
+    if (
+        not file_url
+        and resource.get("datastore_active")
+        and p.plugin_loaded("datastore")
+    ):
         return t.DataStoreDataSource(resource_id=resource["id"])
 
     if file_url:

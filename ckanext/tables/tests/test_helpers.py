@@ -120,6 +120,7 @@ class TestTablesGuessDataSource:
         ds = tables_guess_data_source(resource)
         assert isinstance(ds, FeatherUrlDataSource)
 
+    @pytest.mark.ckan_config("ckan.plugins", "datastore")
     @pytest.mark.usefixtures("clean_datastore", "with_request_context", "with_plugins")
     def test_datastore_active(self):
         resource = {

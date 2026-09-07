@@ -112,7 +112,10 @@ class TestCSVResourceDataSource:
         path = ds.get_source_path()
 
         assert path
-        assert "/resources/" in path
+
+        rid = resource["id"]
+
+        assert path == f"{rid[:3]}/{rid[3:6]}/{rid[6:]}"
 
     def test_get_source_path_resource_url(self):
         ds = CsvUrlDataSource(
