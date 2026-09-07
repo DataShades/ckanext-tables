@@ -114,8 +114,13 @@ class TestCSVResourceDataSource:
         assert path
 
         rid = resource["id"]
+        expected = os.path.join(rid[:3], rid[3:6], rid[6:])
 
-        assert path == f"{rid[:3]}/{rid[3:6]}/{rid[6:]}"
+        # CKAN < 2.12 returns an absolute filesystem path from
+        # ``ResourceUpload.get_path``; CKAN 2.12+ with a file_keeper resource
+        # storage returns a storage-relative location. Assert the layout that
+        # holds either way.
+        assert path == expected or path.endswith(os.sep + expected)
 
     def test_get_source_path_resource_url(self):
         ds = CsvUrlDataSource(
