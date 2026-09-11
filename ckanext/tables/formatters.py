@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import datetime
 import uuid
+from urllib.parse import urlparse
 
 from ckan import model
 from ckan.plugins import toolkit as tk
@@ -48,15 +49,29 @@ class URLFormatter(BaseFormatter):
 
     Options:
         - `target` (str): The target attribute for the link. Defaults to "_blank".
+
+    Only ``http``/``https`` values are turned into a link. Anything else
+    (e.g. a ``javascript:`` URI, or a value with no scheme at all) is
+    rendered as plain, escaped text instead — cell values can come from
+    untrusted data, and letting an arbitrary scheme or unescaped markup
+    through here would let one row inject a link or script for everyone
+    who views the table.
     """
+
+    _ALLOWED_SCHEMES = ("http", "https")
 
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not value:
             return ""
 
+        url = str(value)
+
+        if urlparse(url).scheme not in self._ALLOWED_SCHEMES:
+            return tk.literal("{}").format(url)
+
         target = options.get("target", "_blank")
 
-        return tk.literal(f"<a href='{value}' target='{target}'>{value}</a>")
+        return tk.literal('<a href="{}" target="{}">{}</a>').format(url, target, url)
 
 
 class UserLinkFormatter(BaseFormatter):
@@ -175,7 +190,7 @@ class TextBoldFormatter(BaseFormatter):
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not value:
             return ""
-        return tk.literal(f"<strong>{value}</strong>")
+        return tk.literal("<strong>{}</strong>").format(value)
 
 
 class DialogModalFormatter(BaseFormatter):

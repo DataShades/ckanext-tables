@@ -110,6 +110,28 @@ class TestURLFormatter:
     def test_none_value(self):
         assert _fmt(formatters.URLFormatter, None) == ""
 
+    def test_javascript_scheme_not_rendered_as_link(self):
+        result = _fmt(formatters.URLFormatter, "javascript:alert(1)")
+        assert "<a" not in result
+
+    def test_value_with_no_scheme_not_rendered_as_link(self):
+        result = _fmt(formatters.URLFormatter, "example.com")
+        assert "<a" not in result
+
+    def test_protocol_relative_value_not_rendered_as_link(self):
+        result = _fmt(formatters.URLFormatter, "//evil.com/phish")
+        assert "<a" not in result
+
+    def test_html_injection_in_value_is_escaped(self):
+        result = _fmt(formatters.URLFormatter, "'><img src=x onerror=alert(1)>")
+        assert "<img" not in result
+        assert "&lt;img" in result
+
+    def test_quote_breakout_in_url_is_escaped(self):
+        result = _fmt(formatters.URLFormatter, 'http://example.com/"><script>alert(1)</script>')
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+
 
 class TestTextBoldFormatter:
     def test_wraps_in_strong(self):
@@ -121,6 +143,11 @@ class TestTextBoldFormatter:
 
     def test_none_returns_empty(self):
         assert _fmt(formatters.TextBoldFormatter, None) == ""
+
+    def test_html_injection_is_escaped(self):
+        result = _fmt(formatters.TextBoldFormatter, "<img src=x onerror=alert(1)>")
+        assert "<img" not in result
+        assert "&lt;img" in result
 
 
 @pytest.mark.usefixtures("with_request_context")
