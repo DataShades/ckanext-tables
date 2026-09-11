@@ -8,6 +8,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import fsspec
 import numpy as np
@@ -30,6 +31,8 @@ from ckanext.tables.config import get_cache_backend, get_cache_ttl
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
+
+_ALLOWED_URL_SCHEMES = ("http", "https")
 
 
 class BaseDataSource:
@@ -382,7 +385,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         super().__init__()
 
         if not url and not resource:
-            raise ValueError(  # noqa: TRY003
+            raise ValueError(
                 "Either url or resource_id must be provided"
             )
 
@@ -407,21 +410,42 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
                     return self._source_path
 
                 if self.resource.get("url"):
-                    self._source_path = self.resource["url"]
+                    self._source_path = self._ensure_remote_url(self.resource["url"])
                     return self._source_path
 
             except (OSError, TypeError, tk.ValidationError, tk.ObjectNotFound):
                 log.warning(
                     "Failed to resolve path for resource %s, falling back to provided url",
-                    self.resource_id,  # noqa: TRY003
+                    self.resource_id,
                     exc_info=True,
                 )
 
         if self.url:
-            self._source_path = self.url
+            self._source_path = self._ensure_remote_url(self.url)
             return self._source_path
 
-        raise ValueError("Could not resolve source path")  # noqa: TRY003
+        raise ValueError("Could not resolve source path")
+
+    @staticmethod
+    def _ensure_remote_url(url: str) -> str:
+        """Reject anything that is not a well-formed http(s) URL.
+
+        These readers (``pd.read_csv``, ``read_excel``, ``read_parquet``,
+        ``read_feather``, ``read_orc``) all accept local filesystem paths and
+        ``file://`` URLs, not just http(s) URLs. A resource's ``url`` (or a
+        resource view's ``file_url``) is set by dataset editors, not
+        sysadmins, so without this check anyone able to edit a resource could
+        make the server read and return the contents of an arbitrary local
+        file (e.g. ``ckan.ini``, secrets, other users' uploads).
+        """
+        parsed = urlparse(url)
+
+        if parsed.scheme not in _ALLOWED_URL_SCHEMES or not parsed.netloc:
+            raise ValueError(
+                f"Unsupported or unsafe URL: {url!r}. Only http(s) URLs are allowed."
+            )
+
+        return url
 
 
 class CsvUrlDataSource(BaseResourceDataSource):
