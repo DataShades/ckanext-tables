@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import csv
 import decimal
 import json
 import logging
 import re
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from itertools import islice
 from typing import Any
 from urllib.parse import urlparse
 
@@ -33,6 +35,30 @@ from ckanext.tables.types import FilterItem
 log = logging.getLogger(__name__)
 
 _ALLOWED_URL_SCHEMES = ("http", "https")
+
+_CSV_SNIFF_LINES = 10
+
+
+def _sniff_csv_delimiter(path: str) -> str | None:
+    """Detect a local CSV file's delimiter from its first few lines.
+
+    Returns ``None`` if sniffing fails (e.g. a single-column file, or too few
+    rows to compare), so the caller can fall back to pandas' own slower but
+    more thorough auto-detection instead of guessing wrong.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace", newline="") as f:
+            sample = "".join(islice(f, _CSV_SNIFF_LINES))
+    except OSError:
+        return None
+
+    if not sample:
+        return None
+
+    try:
+        return csv.Sniffer().sniff(sample).delimiter
+    except csv.Error:
+        return None
 
 
 class BaseDataSource:
@@ -470,10 +496,24 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
 
 
 class CsvUrlDataSource(BaseResourceDataSource):
+    @staticmethod
+    def _read_csv(path: str, **kwargs: Any) -> pd.DataFrame:
+        """Read a local CSV file, using the fast C engine when possible.
+
+        Sniffs the delimiter from the first few lines so the C engine can be
+        used for the actual read; only falls back to pandas' own slower
+        ``engine="python"`` auto-detection when sniffing fails.
+        """
+        delimiter = _sniff_csv_delimiter(path)
+        if delimiter is not None:
+            return pd.read_csv(path, sep=delimiter, **kwargs)
+
+        return pd.read_csv(path, sep=None, engine="python", **kwargs)
+
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
             with self._open_source() as path:
-                return pd.read_csv(path, sep=None, engine="python")
+                return self._read_csv(path)
         except Exception:
             log.exception("Error fetching CSV from %s", self.get_source_path())
             return pd.DataFrame()
@@ -484,7 +524,7 @@ class CsvUrlDataSource(BaseResourceDataSource):
 
         try:
             with self._open_source() as path:
-                df_preview = pd.read_csv(path, sep=None, engine="python", nrows=0)
+                df_preview = self._read_csv(path, nrows=0)
         except (OSError, ValueError, pd.errors.ParserError):
             log.exception("Failed fast CSV schema read, falling back to full load")
             self._ensure_loaded()

@@ -24,6 +24,7 @@ from ckanext.tables.data_sources import (
     PandasDataSource,
     ParquetUrlDataSource,
     XlsxUrlDataSource,
+    _sniff_csv_delimiter,
 )
 from ckanext.tables.types import FilterItem
 
@@ -485,6 +486,71 @@ class TestPandasDataSource:
         assert ds.serialize_value(np.int64(5)) == 5
         # Fallback path
         assert ds.serialize_value(object()) is not None
+
+
+class TestCsvDelimiterSniffing:
+    """Sniffing lets CsvUrlDataSource use pandas' fast C engine, not the slow one.
+
+    Locks in that both the sniffed-delimiter (C engine) and the fallback
+    (``engine="python"``) paths still parse real files identically to before.
+    """
+
+    @pytest.mark.parametrize(
+        ("content", "expected_delimiter"),
+        [
+            ("a,b,c\n1,2,3\n4,5,6\n", ","),
+            ("a;b;c\n1;2;3\n4;5;6\n", ";"),
+            ("a\tb\tc\n1\t2\t3\n4\t5\t6\n", "\t"),
+            ("a|b|c\n1|2|3\n", "|"),
+        ],
+    )
+    def test_sniffs_common_delimiters(self, tmp_path, content, expected_delimiter):
+        path = tmp_path / "data.csv"
+        path.write_text(content)
+
+        assert _sniff_csv_delimiter(str(path)) == expected_delimiter
+
+    def test_returns_none_for_a_missing_file(self, tmp_path):
+        assert _sniff_csv_delimiter(str(tmp_path / "does-not-exist.csv")) is None
+
+    def test_returns_none_for_an_empty_file(self, tmp_path):
+        path = tmp_path / "empty.csv"
+        path.write_text("")
+
+        assert _sniff_csv_delimiter(str(path)) is None
+
+    def test_read_csv_parses_a_semicolon_file_via_the_c_engine(self, tmp_path):
+        path = tmp_path / "data.csv"
+        path.write_text("a;b\n1;x\n2;y\n")
+
+        with mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read_csv:
+            mock_read_csv.return_value = pd.DataFrame([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
+            CsvUrlDataSource._read_csv(str(path))
+
+        # sep is passed explicitly and engine is left at its (C) default.
+        assert mock_read_csv.call_args.kwargs["sep"] == ";"
+        assert "engine" not in mock_read_csv.call_args.kwargs
+
+    def test_read_csv_falls_back_to_python_engine_when_sniffing_fails(self, tmp_path):
+        path = tmp_path / "single_column.csv"
+        path.write_text("a\n1\n2\n")
+
+        with mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read_csv:
+            mock_read_csv.return_value = pd.DataFrame([{"a": 1}, {"a": 2}])
+            CsvUrlDataSource._read_csv(str(path))
+
+        assert mock_read_csv.call_args.kwargs["sep"] is None
+        assert mock_read_csv.call_args.kwargs["engine"] == "python"
+
+    def test_real_parse_matches_the_original_slow_path(self, tmp_path):
+        """The actual parsed data must be identical to the pre-optimisation approach."""
+        path = tmp_path / "data.csv"
+        path.write_text("id,name,score\n1,Alice,95\n2,Bob,80\n3,Charlie,70\n")
+
+        fast = CsvUrlDataSource._read_csv(str(path))
+        slow = pd.read_csv(str(path), sep=None, engine="python")
+
+        assert fast.equals(slow)
 
 
 @pytest.mark.usefixtures("mocked_fetch_remote_file")
