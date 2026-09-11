@@ -7,8 +7,10 @@ import json
 import logging
 import os
 import pickle
+import threading
 import time
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from datetime import date, datetime
 from typing import Any
 
@@ -19,6 +21,11 @@ from ckan.lib.redis import connect_to_redis
 from ckanext.tables.config import get_cache_dir
 
 log = logging.getLogger(__name__)
+
+# Cap on how many distinct cache files a single worker process memoises in RAM
+# at once (see _FileCacheBackend._memo) — bounds memory use across many
+# distinct cached tables rather than letting the in-process copy grow forever.
+_MEMO_MAX_ENTRIES = 32
 
 
 class CacheBackend(ABC):
@@ -118,6 +125,17 @@ class _FileCacheBackend(CacheBackend, ABC):
 
     _file_extension: str
 
+    # Shared across every instance of every subclass within this process —
+    # deliberately a class attribute rather than set in __init__, since a fresh
+    # backend instance is constructed per request (see config.get_cache_backend),
+    # and the whole point is for the memo to outlive any single instance. Keyed by
+    # the resolved cache file path (already unique per directory/key/extension) to
+    # a (meta file mtime, deserialised value) pair; a request that re-reads the
+    # same still-fresh cache file within the same worker process is served from
+    # RAM instead of re-reading and re-deserialising the file from disk.
+    _memo: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+    _memo_lock = threading.Lock()
+
     def __init__(self, cache_dir: str | None = None) -> None:
         self.cache_dir: str | None = get_cache_dir(cache_dir)
 
@@ -126,6 +144,28 @@ class _FileCacheBackend(CacheBackend, ABC):
 
     @abstractmethod
     def _write_data(self, value: Any, path: str) -> None: ...
+
+    def _memo_get(self, path: str, mtime: float) -> tuple[bool, Any]:
+        """Return ``(True, value)`` if *path* has a memoised copy as of *mtime*."""
+        with self._memo_lock:
+            entry = self._memo.get(path)
+            if entry is not None and entry[0] == mtime:
+                self._memo.move_to_end(path)
+                return True, entry[1]
+
+        return False, None
+
+    def _memo_set(self, path: str, mtime: float, value: Any) -> None:
+        with self._memo_lock:
+            self._memo[path] = (mtime, value)
+            self._memo.move_to_end(path)
+
+            while len(self._memo) > _MEMO_MAX_ENTRIES:
+                self._memo.popitem(last=False)
+
+    def _memo_delete(self, path: str) -> None:
+        with self._memo_lock:
+            self._memo.pop(path, None)
 
     def _require_cache_dir(self) -> str:
         """Return ``self.cache_dir``, which callers must have already checked is not ``None``.
@@ -159,21 +199,30 @@ class _FileCacheBackend(CacheBackend, ABC):
         except (OSError, json.JSONDecodeError):
             return None
 
-        if time.time() - os.path.getmtime(meta_path) >= meta.get("ttl", 0):
+        meta_mtime = os.path.getmtime(meta_path)
+        if time.time() - meta_mtime >= meta.get("ttl", 0):
             return None
 
         if "scalar_value" in meta:
             return meta["scalar_value"]
 
         path = self._cache_path(key)
+
+        hit, value = self._memo_get(path, meta_mtime)
+        if hit:
+            return value
+
         if not os.path.exists(path):
             return None
 
         try:
-            return self._read_data(path)
+            value = self._read_data(path)
         except (OSError, ValueError):
             log.debug("Failed to read %s cache %s", self._file_extension, path, exc_info=True)
             return None
+
+        self._memo_set(path, meta_mtime, value)
+        return value
 
     def set(self, key: str, value: Any, ttl: int) -> None:
         if self.cache_dir is None:
@@ -198,6 +247,8 @@ class _FileCacheBackend(CacheBackend, ABC):
     def delete(self, key: str) -> None:
         if self.cache_dir is None:
             return
+
+        self._memo_delete(self._cache_path(key))
 
         with contextlib.suppress(FileNotFoundError):
             os.remove(self._cache_path(key))

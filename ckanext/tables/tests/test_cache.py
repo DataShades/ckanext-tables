@@ -5,8 +5,10 @@ import json
 import os
 import time
 from datetime import date, datetime
+from unittest import mock
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from ckanext.tables.cache import (
@@ -263,3 +265,77 @@ class TestFileCacheBackendUnsafeDir:
         backend.set("key1", [{"a": 1}], ttl=60)
         assert backend.get("key1") is None
         assert os.listdir(unsafe_dir) == []
+
+
+class TestFileCacheBackendInProcessMemo:
+    """A hit that has not gone stale must be served from RAM, not re-read from disk.
+
+    ``get()`` used to deserialise the cache file from disk on every call, even for
+    repeated requests against the same still-fresh entry within the same worker
+    process — that's the expensive part for a large cached table.
+    """
+
+    def test_repeated_get_does_not_re_read_the_file(self, feather_backend):
+        df = pd.DataFrame([{"a": 1, "b": "x"}])
+        feather_backend.set("key1", df, ttl=60)
+
+        first = feather_backend.get("key1")  # real read, warms the memo
+        assert first.to_dict() == df.to_dict()
+
+        with mock.patch.object(feather_backend, "_read_data") as mock_read:
+            second = feather_backend.get("key1")
+
+        assert not mock_read.called
+        assert second.to_dict() == df.to_dict()
+
+    def test_a_fresh_instance_still_sees_the_shared_memo(self, tmp_path):
+        """A new backend object (as constructed fresh per request) must still hit it.
+
+        The memo is process-wide, not per-instance.
+        """
+        cache_dir = str(tmp_path)
+        df = pd.DataFrame([{"a": 1}])
+        FeatherCacheBackend(cache_dir=cache_dir).set("key1", df, ttl=60)
+        FeatherCacheBackend(cache_dir=cache_dir).get("key1")  # warms the memo
+
+        other_instance = FeatherCacheBackend(cache_dir=cache_dir)
+        with mock.patch.object(other_instance, "_read_data") as mock_read:
+            result = other_instance.get("key1")
+
+        assert not mock_read.called
+        assert result.to_dict() == df.to_dict()
+
+    def test_overwrite_busts_the_memo(self, feather_backend):
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=60)
+        feather_backend.get("key1")
+
+        time.sleep(0.01)
+        feather_backend.set("key1", pd.DataFrame([{"a": 99}]), ttl=60)
+
+        assert feather_backend.get("key1").to_dict() == pd.DataFrame([{"a": 99}]).to_dict()
+
+    def test_delete_clears_the_memo(self, feather_backend):
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=60)
+        feather_backend.get("key1")
+
+        feather_backend.delete("key1")
+
+        assert feather_backend.get("key1") is None
+
+    def test_ttl_expiry_still_applies_to_a_warm_memo(self, feather_backend):
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=1)
+        feather_backend.get("key1")  # warms the memo
+
+        old_mtime = time.time() - 10
+        os.utime(feather_backend._meta_path("key1"), (old_mtime, old_mtime))
+
+        assert feather_backend.get("key1") is None
+
+    def test_memo_size_is_bounded(self, feather_backend):
+        from ckanext.tables.cache import _MEMO_MAX_ENTRIES
+
+        for i in range(_MEMO_MAX_ENTRIES + 10):
+            feather_backend.set(f"bulk-{i}", pd.DataFrame([{"x": i}]), ttl=60)
+            feather_backend.get(f"bulk-{i}")
+
+        assert len(FeatherCacheBackend._memo) <= _MEMO_MAX_ENTRIES

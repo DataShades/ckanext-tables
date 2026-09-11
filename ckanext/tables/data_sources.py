@@ -227,7 +227,10 @@ class PandasDataSource(BaseDataSource):
             try:
                 cached = self.cache_backend.get(self.get_cache_key())
                 if cached is not None:
-                    self._df = pd.DataFrame(cached)
+                    # File-based backends already return a DataFrame; only the Redis
+                    # backend (JSON records) needs reconstructing into one — skip the
+                    # otherwise-unnecessary copy for the common (file-based) case.
+                    self._df = cached if isinstance(cached, pd.DataFrame) else pd.DataFrame(cached)
                     return True
             except (ValueError, TypeError, OSError):
                 log.debug("Failed to restore DataFrame from cache", exc_info=True)
@@ -262,12 +265,18 @@ class PandasDataSource(BaseDataSource):
         if self._filtered_df is None or self._filtered_df.empty:
             return self
 
+        # Work through a local variable, not self._filtered_df directly: it's
+        # reassigned on every loop iteration below, and a type checker can't
+        # carry the "not None" guard above across those reassignments the way
+        # it can for a local variable.
+        df = self._filtered_df
+
         for filter_item in filters:
-            if filter_item.field not in self._filtered_df.columns:
+            if filter_item.field not in df.columns:
                 continue
 
             try:
-                series = self._filtered_df[filter_item.field]
+                series = df[filter_item.field]
                 val = filter_item.value
                 op = filter_item.operator
 
@@ -278,26 +287,25 @@ class PandasDataSource(BaseDataSource):
                         val = float(val)
 
                 if op == "=":
-                    self._filtered_df = self._filtered_df[series == val]
+                    df = df[series == val]
                 elif op == "!=":
-                    self._filtered_df = self._filtered_df[series != val]
+                    df = df[series != val]
                 elif op == "<":
-                    self._filtered_df = self._filtered_df[series < val]
+                    df = df[series < val]
                 elif op == "<=":
-                    self._filtered_df = self._filtered_df[series <= val]
+                    df = df[series <= val]
                 elif op == ">":
-                    self._filtered_df = self._filtered_df[series > val]
+                    df = df[series > val]
                 elif op == ">=":
-                    self._filtered_df = self._filtered_df[series >= val]
+                    df = df[series >= val]
                 elif op == "like":
                     # Cast series to str so LIKE works on numeric columns too.
                     # Use filter_item.value (the original string) to avoid float repr like "157.0".
-                    self._filtered_df = self._filtered_df[
-                        series.astype(str).str.contains(str(filter_item.value), case=False, na=False)
-                    ]
+                    df = df[series.astype(str).str.contains(str(filter_item.value), case=False, na=False)]
             except (ValueError, TypeError):
                 log.debug("Failed to apply filter %s", filter_item, exc_info=True)
 
+        self._filtered_df = df
         return self
 
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
@@ -472,7 +480,7 @@ class CsvUrlDataSource(BaseResourceDataSource):
 
     def get_columns(self) -> list[str]:
         if self._load_from_cache():
-            return list(self._df.columns)
+            return list(self._df.columns) if self._df is not None else []
 
         try:
             with self._open_source() as path:
@@ -496,7 +504,7 @@ class XlsxUrlDataSource(BaseResourceDataSource):
 
     def get_columns(self) -> list[str]:
         if self._load_from_cache():
-            return list(self._df.columns)
+            return list(self._df.columns) if self._df is not None else []
 
         try:
             with self._open_source() as path:
@@ -520,7 +528,7 @@ class OrcUrlDataSource(BaseResourceDataSource):
 
     def get_columns(self) -> list[str]:
         if self._load_from_cache():
-            return list(self._df.columns)
+            return list(self._df.columns) if self._df is not None else []
 
         try:
             with self._open_source() as path:
@@ -544,7 +552,7 @@ class ParquetUrlDataSource(BaseResourceDataSource):
 
     def get_columns(self) -> list[str]:
         if self._load_from_cache():
-            return list(self._df.columns)
+            return list(self._df.columns) if self._df is not None else []
 
         try:
             with self._open_source() as path:
@@ -568,7 +576,7 @@ class FeatherUrlDataSource(BaseResourceDataSource):
 
     def get_columns(self) -> list[str]:
         if self._load_from_cache():
-            return list(self._df.columns)
+            return list(self._df.columns) if self._df is not None else []
 
         try:
             with self._open_source() as path:
