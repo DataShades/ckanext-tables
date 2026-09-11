@@ -12,6 +12,7 @@ from ckanext.tables.logic.schema import get_preview_schema
 @tk.blanket.helpers
 @tk.blanket.blueprints
 @tk.blanket.config_declarations
+@tk.blanket.cli
 class TablesPlugin(p.SingletonPlugin):
     p.implements(p.IConfigurer)
     p.implements(p.IResourceView, inherit=True)

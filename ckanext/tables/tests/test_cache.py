@@ -339,3 +339,80 @@ class TestFileCacheBackendInProcessMemo:
             feather_backend.get(f"bulk-{i}")
 
         assert len(FeatherCacheBackend._memo) <= _MEMO_MAX_ENTRIES
+
+
+class TestFileCacheBackendExpiryCleanup:
+    """An expired entry must not be left on disk forever.
+
+    ``get`` used to just return ``None`` for an expired entry and leave its
+    file where it was — a key that's never read again (a removed resource, a
+    one-off filter/page/sort count key) would then never be cleaned up.
+    """
+
+    def test_get_deletes_the_files_on_an_expired_read(self, feather_backend):
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=1)
+        data_path = feather_backend.get_cache_path("key1")
+        meta_path = feather_backend._meta_path("key1")
+        assert os.path.exists(data_path)
+        assert os.path.exists(meta_path)
+
+        old_mtime = time.time() - 10
+        os.utime(meta_path, (old_mtime, old_mtime))
+
+        assert feather_backend.get("key1") is None
+        assert not os.path.exists(data_path)
+        assert not os.path.exists(meta_path)
+
+    def test_clean_expired_removes_only_expired_entries(self, feather_backend):
+        feather_backend.set("fresh", pd.DataFrame([{"a": 1}]), ttl=3600)
+        feather_backend.set("expired", pd.DataFrame([{"a": 2}]), ttl=1)
+
+        old_mtime = time.time() - 10
+        os.utime(feather_backend._meta_path("expired"), (old_mtime, old_mtime))
+
+        removed = feather_backend.clean_expired()
+
+        assert removed == 1
+        assert os.path.exists(feather_backend.get_cache_path("fresh"))
+        assert not os.path.exists(feather_backend.get_cache_path("expired"))
+        assert not os.path.exists(feather_backend._meta_path("expired"))
+
+    def test_clean_expired_handles_a_scalar_entry(self, feather_backend):
+        feather_backend.set("count", 42, ttl=1)
+        old_mtime = time.time() - 10
+        os.utime(feather_backend._meta_path("count"), (old_mtime, old_mtime))
+
+        assert feather_backend.clean_expired() == 1
+        assert not os.path.exists(feather_backend._meta_path("count"))
+
+    def test_clean_expired_cleans_up_a_former_backend_format_too(self, tmp_path):
+        """Sweeping must not assume the current backend wrote every file present.
+
+        If ``ckanext.tables.cache.backend`` was switched, old entries in a
+        different format share the same directory and sidecar format.
+        """
+        cache_dir = str(tmp_path)
+        pickle_backend = PickleCacheBackend(cache_dir=cache_dir)
+        pickle_backend.set("old", [{"x": 1}], ttl=1)
+        old_mtime = time.time() - 10
+        os.utime(pickle_backend._meta_path("old"), (old_mtime, old_mtime))
+        pkl_path = pickle_backend.get_cache_path("old")
+        assert os.path.exists(pkl_path)
+
+        feather_backend = FeatherCacheBackend(cache_dir=cache_dir)
+        removed = feather_backend.clean_expired()
+
+        assert removed == 1
+        assert not os.path.exists(pkl_path)
+
+    def test_clean_expired_is_a_noop_for_unsafe_or_missing_dir(self, tmp_path):
+        unsafe_dir = tmp_path / "shared"
+        unsafe_dir.mkdir()
+        unsafe_dir.chmod(0o777)
+
+        backend = FeatherCacheBackend(cache_dir=str(unsafe_dir))
+        assert backend.cache_dir is None
+        assert backend.clean_expired() == 0
+
+    def test_redis_backend_clean_expired_is_a_noop(self):
+        assert RedisCacheBackend().clean_expired() == 0

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import decimal
+import glob
 import hashlib
 import json
 import logging
@@ -50,6 +51,17 @@ class CacheBackend(ABC):
     def delete(self, key: str) -> None:
         """Remove the cached value for *key* (no-op if not present)."""
         ...
+
+    def clean_expired(self) -> int:
+        """Delete every expired entry, returning how many were removed.
+
+        The default is a no-op: only backends whose entries can otherwise
+        outlive their TTL indefinitely (the file-based backends — an entry
+        that's never read again after expiring would otherwise sit on disk
+        forever) need to override this. Redis already expires and removes
+        its own keys via ``SETEX``, so it does not.
+        """
+        return 0
 
 
 class _TablesJSONEncoder(json.JSONEncoder):
@@ -201,6 +213,9 @@ class _FileCacheBackend(CacheBackend, ABC):
 
         meta_mtime = os.path.getmtime(meta_path)
         if time.time() - meta_mtime >= meta.get("ttl", 0):
+            # An entry that's never read again after expiring would otherwise sit
+            # on disk forever (see clean_expired for entries that never get here).
+            self.delete(key)
             return None
 
         if "scalar_value" in meta:
@@ -258,6 +273,65 @@ class _FileCacheBackend(CacheBackend, ABC):
     def get_cache_path(self, key: str) -> str:
         """Public accessor for the cache file path (useful in tests)."""
         return self._cache_path(key)
+
+    def clean_expired(self) -> int:
+        """Delete every expired cache entry in this directory, of any format.
+
+        ``get`` already deletes an entry the next time it's read past its TTL,
+        but a key that's never read again — a resource that's since been
+        removed or renamed, or a one-off filter/page/sort count key — would
+        otherwise leave its file on disk forever; this sweeps the whole
+        directory for that case. Intended to be run periodically (e.g. from a
+        cron-triggered CLI command), not on every request.
+
+        Sweeps every ``.meta`` sidecar regardless of which backend wrote its
+        matching data file (they all share the same sidecar format), so this
+        also cleans up entries left behind by a since-changed
+        ``ckanext.tables.cache.backend`` setting. Returns how many entries
+        were removed.
+        """
+        if self.cache_dir is None:
+            return 0
+
+        try:
+            entries = list(os.scandir(self.cache_dir))
+        except OSError:
+            return 0
+
+        removed = 0
+        now = time.time()
+
+        for entry in entries:
+            if not entry.name.endswith(".meta"):
+                continue
+
+            try:
+                with open(entry.path) as f:
+                    meta = json.load(f)
+                mtime = entry.stat().st_mtime
+            except (OSError, json.JSONDecodeError):
+                continue
+
+            if now - mtime < meta.get("ttl", 0):
+                continue
+
+            key_hash = entry.name[: -len(".meta")]
+
+            for data_path in glob.glob(os.path.join(self.cache_dir, f"{key_hash}.*")):
+                if data_path == entry.path:
+                    continue
+
+                with contextlib.suppress(FileNotFoundError):
+                    os.remove(data_path)
+
+                self._memo_delete(data_path)
+
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(entry.path)
+
+            removed += 1
+
+        return removed
 
 
 class _DataFrameFileCacheBackend(_FileCacheBackend, ABC):

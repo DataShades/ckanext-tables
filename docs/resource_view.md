@@ -40,6 +40,14 @@ ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
 
 The Datastore-backed view does **not** use caching — it queries the Datastore API directly on every request.
 
+An expired entry is deleted the next time it's read, but one that's never read again after expiring (a removed or renamed resource, for example) would otherwise stay on disk indefinitely. For the file-based backends, run the following periodically (e.g. from a cron job) to sweep away anything past its TTL:
+
+```sh
+ckan -c /etc/ckan/default/ckan.ini tables clean-cache
+```
+
+The Redis backend already expires and removes its own keys, so this command is a no-op there.
+
 ## View Configuration
 
 When a CKAN administrator creates a *Tables View* manually, an optional **File URL** field is available in the view configuration form. If filled in, the data is fetched from that URL instead of the resource's own URL. This is useful when:
