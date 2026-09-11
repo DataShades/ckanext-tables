@@ -1,9 +1,16 @@
 import os
 import stat
 import tempfile
+from pathlib import Path
 from unittest import mock
 
+import yaml
+
+from ckan.config.declaration import Declaration
+
 from ckanext.tables import config
+
+CONFIG_DECLARATION_PATH = Path(__file__).resolve().parent.parent / "config_declaration.yml"
 
 
 class TestGetCacheDir:
@@ -42,8 +49,8 @@ class TestGetCacheDir:
     def test_refuses_group_or_world_writable_dir(self, tmp_path):
         """A pre-existing directory that other local users could write to must be refused.
 
-        This is the SEC-5 attack surface: a shared/writable cache directory lets another
-        local user plant a file at the predictable, hash-derived cache path.
+        A shared/writable cache directory would let another local user plant a file
+        at the predictable, hash-derived cache path.
         """
         unsafe_dir = tmp_path / "shared"
         unsafe_dir.mkdir()
@@ -82,3 +89,67 @@ class TestGetCacheDir:
     def test_default_falls_back_to_tempdir_without_storage_path(self):
         with mock.patch.object(config.tk, "config", {}):
             assert config._default_cache_dir() == os.path.join(tempfile.gettempdir(), "tables-cache")
+
+
+class TestConfigDeclarationDefaultsAreLiteral:
+    """A declaration's ``default`` is applied to the live config verbatim.
+
+    CKAN does ``config[key] = declared_default`` — unlike a value written directly in an
+    actual ``.ini`` file, it is never passed through ``ConfigParser`` interpolation,
+    so a `%(...)s`-style placeholder in a `default` is applied as that literal
+    string, not resolved. This caught ``ckanext.tables.cache.cache_dir`` declaring
+    a computed path as its `default`, which produced a directory named exactly
+    ``<ckan.storage_path>/tables-cache`` on disk once loaded through CKAN's own
+    declaration machinery — guard the whole file against that class of mistake for
+    every current and future option.
+    """
+
+    def _all_options(self):
+        with open(CONFIG_DECLARATION_PATH) as f:
+            data = yaml.safe_load(f)
+
+        for group in data.get("groups", []):
+            yield from group.get("options", [])
+
+    def test_no_default_looks_like_an_unresolved_placeholder(self):
+        for opt in self._all_options():
+            default = opt.get("default")
+            if not isinstance(default, str):
+                continue
+
+            assert "%(" not in default, (
+                f"{opt['key']}: `default` contains a %(...)s ConfigParser placeholder, "
+                "which CKAN's config declaration never interpolates — use `placeholder` "
+                "for a value that must be computed at runtime instead."
+            )
+            assert "<" not in default, (
+                f"{opt['key']}: `default` looks like an unresolved <...> placeholder, "
+                "which CKAN applies to the live config as this literal string."
+            )
+
+    def test_declared_defaults_are_applied_as_written(self):
+        """Load the file through CKAN's own Declaration and check the applied values.
+
+        Every static default should resolve to the exact value used elsewhere in
+        this codebase, while cache_dir (computed at runtime — see get_cache_dir)
+        should be left unset.
+        """
+        with open(CONFIG_DECLARATION_PATH) as f:
+            data = yaml.safe_load(f)
+
+        decl = Declaration()
+        decl.load_dict(data)
+        live_config = {}
+        decl.make_safe(live_config)
+
+        assert live_config[config.CONF_CACHE_BACKEND] == config.DEFAULT_CACHE_BACKEND
+        assert live_config[config.CONF_CACHE_TTL] == config.DEFAULT_CACHE_TTL
+        assert live_config[config.CONF_FETCH_CONNECT_TIMEOUT] == config.DEFAULT_FETCH_CONNECT_TIMEOUT
+        assert live_config[config.CONF_FETCH_READ_TIMEOUT] == config.DEFAULT_FETCH_READ_TIMEOUT
+        assert live_config[config.CONF_FETCH_MAX_BYTES] == config.DEFAULT_FETCH_MAX_BYTES
+        assert live_config[config.CONF_MAX_PAGE_SIZE] == config.DEFAULT_MAX_PAGE_SIZE
+        assert live_config[config.CONF_EXPORT_MAX_ROWS] == config.DEFAULT_EXPORT_MAX_ROWS
+
+        # The one option whose real default is computed in Python, not declared —
+        # CKAN must leave it unset (None) so get_cache_dir()'s fallback actually runs.
+        assert live_config[config.CONF_CACHE_DIR] is None

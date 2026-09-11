@@ -6,7 +6,63 @@ import ckan.plugins.toolkit as tk
 
 from ckanext.tables.data_sources import ListDataSource
 from ckanext.tables.table import TableDefinition
-from ckanext.tables.views import ResourceViewHandler
+from ckanext.tables.views import ResourceViewHandler, _get_resource_and_view
+
+
+def _fake_get_action(resource: dict, resource_view: dict):
+    """Return a tk.get_action stand-in serving the given resource/view dicts by id."""
+
+    def resource_show(context, data_dict):
+        if data_dict["id"] != resource["id"]:
+            raise tk.ObjectNotFound
+        return resource
+
+    def resource_view_show(context, data_dict):
+        if data_dict["id"] != resource_view["id"]:
+            raise tk.ObjectNotFound
+        return resource_view
+
+    def get_action(name):
+        return {"resource_show": resource_show, "resource_view_show": resource_view_show}[name]
+
+    return get_action
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestGetResourceAndView:
+    """A resource and a resource view are each looked up independently by id.
+
+    Nothing else confirms the view actually belongs to that resource unless
+    ``_get_resource_and_view`` checks it.
+    """
+
+    def test_mismatched_pair_is_rejected(self, app):
+        resource = {"id": "res-1", "url": "http://example.com/data.csv", "format": "csv"}
+        # This view genuinely exists, but it belongs to a *different* resource.
+        resource_view = {"id": "view-1", "resource_id": "res-OTHER", "file_url": ""}
+
+        with (
+            app.flask_app.test_request_context("/"),
+            mock.patch("ckanext.tables.views.tk.get_action", side_effect=_fake_get_action(resource, resource_view)),
+            mock.patch("ckanext.tables.views.tk.abort", side_effect=tk.ObjectNotFound) as mock_abort,
+            pytest.raises(tk.ObjectNotFound),
+        ):
+            _get_resource_and_view("res-1", "view-1")
+
+        assert mock_abort.call_args[0][0] == 404
+
+    def test_matching_pair_is_returned(self, app):
+        resource = {"id": "res-1", "url": "http://example.com/data.csv", "format": "csv"}
+        resource_view = {"id": "view-1", "resource_id": "res-1", "file_url": ""}
+
+        with (
+            app.flask_app.test_request_context("/"),
+            mock.patch("ckanext.tables.views.tk.get_action", side_effect=_fake_get_action(resource, resource_view)),
+        ):
+            fetched_resource, fetched_resource_view = _get_resource_and_view("res-1", "view-1")
+
+        assert fetched_resource == resource
+        assert fetched_resource_view == resource_view
 
 
 @pytest.mark.usefixtures("with_request_context")

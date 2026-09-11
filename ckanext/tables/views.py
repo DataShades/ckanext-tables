@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from flask import Blueprint, Response, jsonify
 from flask.views import MethodView
@@ -14,6 +15,35 @@ log = logging.getLogger(__name__)
 bp = Blueprint("tables", __name__)
 
 
+def _get_resource_and_view(resource_id: str, resource_view_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fetch and authorise a resource and a resource view, confirming they actually belong together.
+
+    Each is looked up independently by id, so without the ``resource_id`` match
+    check below, a resource view's ``file_url`` override (and the table name/cache
+    keys derived from this pair) could be applied against any other resource id
+    the caller happens to be able to read, just by pairing a real view id with an
+    unrelated resource id in the URL.
+    """
+    try:
+        resource = tk.get_action("resource_show")({"ignore_auth": False}, {"id": resource_id})
+    except tk.ObjectNotFound:
+        return tk.abort(404, tk._("Resource not found"))
+    except tk.NotAuthorized:
+        return tk.abort(403, tk._("Not authorized to view this resource"))
+
+    try:
+        resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
+    except tk.ObjectNotFound:
+        return tk.abort(404, tk._("Resource view not found"))
+    except tk.NotAuthorized:
+        return tk.abort(403, tk._("Not authorized to view this resource"))
+
+    if resource_view["resource_id"] != resource["id"]:
+        return tk.abort(404, tk._("Resource view not found"))
+
+    return resource, resource_view
+
+
 class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
     """Handler for resource view AJAX requests."""
 
@@ -27,19 +57,7 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         Returns:
             A TableDefinition object
         """
-        try:
-            resource = tk.get_action("resource_show")({"ignore_auth": False}, {"id": resource_id})
-        except tk.ObjectNotFound:
-            tk.abort(404, tk._("Resource not found"))
-        except tk.NotAuthorized:
-            tk.abort(403, tk._("Not authorized to view this resource"))
-
-        try:
-            resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
-        except tk.ObjectNotFound:
-            tk.abort(404, tk._("Resource view not found"))
-        except tk.NotAuthorized:
-            tk.abort(403, tk._("Not authorized to view this resource"))
+        resource, resource_view = _get_resource_and_view(resource_id, resource_view_id)
 
         return tables_init_temporary_preview_table(resource, resource_view)
 
@@ -115,13 +133,7 @@ class ResourceViewDeferredHandler(MethodView):
     """
 
     def get(self, resource_id: str, resource_view_id: str) -> str:
-        try:
-            resource = tk.get_action("resource_show")({"ignore_auth": False}, {"id": resource_id})
-            resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
-        except tk.ObjectNotFound:
-            return tk.abort(404, tk._("Resource not found"))
-        except tk.NotAuthorized:
-            return tk.abort(403, tk._("Not authorized to view this resource"))
+        resource, resource_view = _get_resource_and_view(resource_id, resource_view_id)
 
         try:
             table = tables_init_temporary_preview_table(resource, resource_view)
