@@ -30,17 +30,22 @@ groups:
         example: "redis"
 
       - key: ckanext.tables.cache.cache_dir
-        default: "/tmp/tables-cache"
+        default: "<ckan.storage_path>/tables-cache"
         description: |
           Directory where cache files are stored. Used for file-based cache backends.
 
-          If the directory does not exist it will be created automatically.
-          If creation fails (e.g. due to permissions), the system temp directory is used as a fallback.
+          If the directory does not exist it is created automatically, with permissions
+          restricted to the CKAN process user (mode `0700`). If it already exists but is
+          owned by another user, or is writable by other users/groups, it is refused and
+          table caching is disabled (a warning is logged) rather than falling back to a
+          shared, predictable location such as the system temp directory — a shared or
+          attacker-owned cache directory would let another local user plant a file that
+          gets read back as trusted cache data (notably by the `pickle` backend).
 
           !!! Note
-              It's recommended to set this directory to a persistent location with appropriate permissions.
-
-              For example, you can set it to `%(ckan.storage_path)/tables-cache` in your CKAN config.
+              It's recommended to set this directory to a persistent location with appropriate
+              permissions, e.g. `%(ckan.storage_path)s/tables-cache` in your CKAN config — which
+              is also the default when `ckan.storage_path` is configured.
 
         example: "/var/cache/ckanext-tables"
 

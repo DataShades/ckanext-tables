@@ -108,13 +108,18 @@ class _FileCacheBackend(CacheBackend, ABC):
     TTL and non-tabular scalar values are stored in a ``.meta`` JSON sidecar.
 
     Args:
-        cache_dir: Directory where cache files are stored.
+        cache_dir: Directory where cache files are stored. Validated (and
+            created with mode ``0700`` if missing) the same way as the
+            configured/default directory — see :func:`ckanext.tables.config.get_cache_dir`.
+            If it cannot be made private to this process, caching is
+            silently disabled (every ``get``/``set``/``delete`` becomes a
+            no-op) rather than writing to a shared, predictable location.
     """
 
     _file_extension: str
 
     def __init__(self, cache_dir: str | None = None) -> None:
-        self.cache_dir = cache_dir or get_cache_dir()
+        self.cache_dir: str | None = get_cache_dir(cache_dir)
 
     @abstractmethod
     def _read_data(self, path: str) -> Any: ...
@@ -122,15 +127,31 @@ class _FileCacheBackend(CacheBackend, ABC):
     @abstractmethod
     def _write_data(self, value: Any, path: str) -> None: ...
 
+    def _require_cache_dir(self) -> str:
+        """Return ``self.cache_dir``, which callers must have already checked is not ``None``.
+
+        ``_cache_path``/``_meta_path`` are only ever reached from ``get``/``set``/``delete``,
+        each of which returns early when ``self.cache_dir is None`` — this just gives that
+        already-established invariant a return type a type checker can rely on, and raises
+        instead of silently joining with ``None`` if that invariant is ever violated.
+        """
+        if self.cache_dir is None:
+            raise RuntimeError("Cache directory is not available")
+
+        return self.cache_dir
+
     def _cache_path(self, key: str) -> str:
         key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        return os.path.join(self.cache_dir, f"{key_hash}{self._file_extension}")
+        return os.path.join(self._require_cache_dir(), f"{key_hash}{self._file_extension}")
 
     def _meta_path(self, key: str) -> str:
         key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        return os.path.join(self.cache_dir, f"{key_hash}.meta")
+        return os.path.join(self._require_cache_dir(), f"{key_hash}.meta")
 
-    def get(self, key: str) -> Any:
+    def get(self, key: str) -> Any:  # noqa: PLR0911
+        if self.cache_dir is None:
+            return None
+
         meta_path = self._meta_path(key)
         try:
             with open(meta_path) as f:
@@ -155,12 +176,13 @@ class _FileCacheBackend(CacheBackend, ABC):
             return None
 
     def set(self, key: str, value: Any, ttl: int) -> None:
+        if self.cache_dir is None:
+            return
+
         path = self._cache_path(key)
         meta_path = self._meta_path(key)
 
         try:
-            os.makedirs(self.cache_dir, exist_ok=True)
-
             if isinstance(value, (list, pd.DataFrame)):
                 self._write_data(value, path)
                 with open(meta_path, "w") as f:
@@ -174,6 +196,9 @@ class _FileCacheBackend(CacheBackend, ABC):
             log.warning("Failed to write %s cache %s", self._file_extension, path, exc_info=True)
 
     def delete(self, key: str) -> None:
+        if self.cache_dir is None:
+            return
+
         with contextlib.suppress(FileNotFoundError):
             os.remove(self._cache_path(key))
         with contextlib.suppress(FileNotFoundError):

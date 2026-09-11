@@ -233,3 +233,33 @@ class TestRedisCacheBackend:
         backend.set("decimal_key", decimal.Decimal("9.99"), ttl=60)
         result = backend.get("decimal_key")
         assert abs(result - 9.99) < 0.001
+
+
+class TestFileCacheBackendUnsafeDir:
+    """A cache directory another local user could write to must disable caching, not use it."""
+
+    def test_pickle_backend_disables_caching_for_unsafe_dir(self, tmp_path):
+        unsafe_dir = tmp_path / "shared"
+        unsafe_dir.mkdir()
+        unsafe_dir.chmod(0o777)
+
+        backend = PickleCacheBackend(cache_dir=str(unsafe_dir))
+        assert backend.cache_dir is None
+
+        # get/set/delete become no-ops rather than writing to the unsafe directory.
+        backend.set("key1", [1, 2, 3], ttl=60)
+        assert backend.get("key1") is None
+        backend.delete("key1")
+
+        assert os.listdir(unsafe_dir) == []
+
+    def test_feather_backend_disables_caching_for_unsafe_dir(self, tmp_path):
+        unsafe_dir = tmp_path / "shared"
+        unsafe_dir.mkdir()
+        unsafe_dir.chmod(0o777)
+
+        backend = FeatherCacheBackend(cache_dir=str(unsafe_dir))
+        assert backend.cache_dir is None
+        backend.set("key1", [{"a": 1}], ttl=60)
+        assert backend.get("key1") is None
+        assert os.listdir(unsafe_dir) == []
