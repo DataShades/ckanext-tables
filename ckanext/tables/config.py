@@ -15,10 +15,16 @@ log = logging.getLogger(__name__)
 CONF_CACHE_BACKEND = "ckanext.tables.cache.backend"
 CONF_CACHE_DIR = "ckanext.tables.cache.cache_dir"
 CONF_CACHE_TTL = "ckanext.tables.cache.ttl"
+CONF_FETCH_CONNECT_TIMEOUT = "ckanext.tables.fetch.connect_timeout"
+CONF_FETCH_READ_TIMEOUT = "ckanext.tables.fetch.read_timeout"
+CONF_FETCH_MAX_BYTES = "ckanext.tables.fetch.max_bytes"
 
 DEFAULT_CACHE_BACKEND = "feather"
 DEFAULT_CACHE_DIR = os.path.join(tempfile.gettempdir(), "tables-cache")
 DEFAULT_CACHE_TTL = 3600
+DEFAULT_FETCH_CONNECT_TIMEOUT = 5
+DEFAULT_FETCH_READ_TIMEOUT = 30
+DEFAULT_FETCH_MAX_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 def get_cache_dir() -> str:
@@ -39,6 +45,30 @@ def get_cache_ttl() -> int:
     Reads ``ckanext.tables.cache.ttl``. Defaults to 3600 (1 hour).
     """
     return tk.config.get(CONF_CACHE_TTL, DEFAULT_CACHE_TTL)
+
+
+def get_fetch_connect_timeout() -> float:
+    """Return the connect timeout (seconds) for remote resource/file_url fetches.
+
+    Reads ``ckanext.tables.fetch.connect_timeout``. Defaults to 5.
+    """
+    return tk.config.get(CONF_FETCH_CONNECT_TIMEOUT, DEFAULT_FETCH_CONNECT_TIMEOUT)
+
+
+def get_fetch_read_timeout() -> float:
+    """Return the read timeout (seconds) for remote resource/file_url fetches.
+
+    Reads ``ckanext.tables.fetch.read_timeout``. Defaults to 30.
+    """
+    return tk.config.get(CONF_FETCH_READ_TIMEOUT, DEFAULT_FETCH_READ_TIMEOUT)
+
+
+def get_fetch_max_bytes() -> int:
+    """Return the maximum response size (bytes) allowed for remote fetches.
+
+    Reads ``ckanext.tables.fetch.max_bytes``. Defaults to 200 MB.
+    """
+    return tk.config.get(CONF_FETCH_MAX_BYTES, DEFAULT_FETCH_MAX_BYTES)
 
 
 def get_cache_backend() -> CacheBackend:

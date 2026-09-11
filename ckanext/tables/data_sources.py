@@ -5,12 +5,11 @@ import decimal
 import json
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
-import fsspec
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -28,6 +27,7 @@ from ckan.lib import uploader
 
 from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin
 from ckanext.tables.config import get_cache_backend, get_cache_ttl
+from ckanext.tables.net import fetch_remote_file
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -385,9 +385,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         super().__init__()
 
         if not url and not resource:
-            raise ValueError(
-                "Either url or resource_id must be provided"
-            )
+            raise ValueError("Either url or resource_id must be provided")
 
         self.url = url
         self.resource = resource
@@ -441,17 +439,33 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         parsed = urlparse(url)
 
         if parsed.scheme not in _ALLOWED_URL_SCHEMES or not parsed.netloc:
-            raise ValueError(
-                f"Unsupported or unsafe URL: {url!r}. Only http(s) URLs are allowed."
-            )
+            raise ValueError(f"Unsupported or unsafe URL: {url!r}. Only http(s) URLs are allowed.")
 
         return url
+
+    @contextlib.contextmanager
+    def _open_source(self) -> Iterator[str]:
+        """Yield a local filesystem path for the source.
+
+        A remote http(s) URL is downloaded to a guarded temporary file first
+        (timeouts, size cap, SSRF checks — see :mod:`ckanext.tables.net`);
+        the temp file is removed once the caller is done with it. A local
+        path (resolved via the CKAN uploader) is yielded unchanged.
+        """
+        source = self.get_source_path()
+
+        if source.startswith(("http://", "https://")):
+            with fetch_remote_file(source) as local_path:
+                yield local_path
+        else:
+            yield source
 
 
 class CsvUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
-            return pd.read_csv(self.get_source_path(), sep=None, engine="python")
+            with self._open_source() as path:
+                return pd.read_csv(path, sep=None, engine="python")
         except Exception:
             log.exception("Error fetching CSV from %s", self.get_source_path())
             return pd.DataFrame()
@@ -461,7 +475,8 @@ class CsvUrlDataSource(BaseResourceDataSource):
             return list(self._df.columns)
 
         try:
-            df_preview = pd.read_csv(self.get_source_path(), sep=None, engine="python", nrows=0)
+            with self._open_source() as path:
+                df_preview = pd.read_csv(path, sep=None, engine="python", nrows=0)
         except (OSError, ValueError, pd.errors.ParserError):
             log.exception("Failed fast CSV schema read, falling back to full load")
             self._ensure_loaded()
@@ -473,7 +488,8 @@ class CsvUrlDataSource(BaseResourceDataSource):
 class XlsxUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
-            return pd.read_excel(self.get_source_path())
+            with self._open_source() as path:
+                return pd.read_excel(path)
         except Exception:
             log.exception("Error fetching XLSX from %s", self.get_source_path())
             return pd.DataFrame()
@@ -483,7 +499,8 @@ class XlsxUrlDataSource(BaseResourceDataSource):
             return list(self._df.columns)
 
         try:
-            df_preview = pd.read_excel(self.get_source_path(), nrows=0)
+            with self._open_source() as path:
+                df_preview = pd.read_excel(path, nrows=0)
         except (OSError, ValueError):
             log.exception("Failed fast XLSX schema read, falling back to full load")
             self._ensure_loaded()
@@ -495,7 +512,8 @@ class XlsxUrlDataSource(BaseResourceDataSource):
 class OrcUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
-            return pd.read_orc(self.get_source_path())
+            with self._open_source() as path:
+                return pd.read_orc(path)
         except Exception:
             log.exception("Error fetching ORC from %s", self.get_source_path())
             return pd.DataFrame()
@@ -504,14 +522,9 @@ class OrcUrlDataSource(BaseResourceDataSource):
         if self._load_from_cache():
             return list(self._df.columns)
 
-        source = self.get_source_path()
-
         try:
-            if source.startswith(("http://", "https://")):
-                with fsspec.open(source) as f:
-                    schema_names = orc.ORCFile(f).schema.names
-            else:
-                schema_names = orc.ORCFile(source).schema.names
+            with self._open_source() as path:
+                schema_names = orc.ORCFile(path).schema.names
         except (OSError, ValueError, pa.ArrowInvalid):
             log.exception("Failed fast ORC schema read, falling back to full load")
             self._ensure_loaded()
@@ -523,7 +536,8 @@ class OrcUrlDataSource(BaseResourceDataSource):
 class ParquetUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
-            return pd.read_parquet(self.get_source_path())
+            with self._open_source() as path:
+                return pd.read_parquet(path)
         except Exception:
             log.exception("Error fetching Parquet from %s", self.get_source_path())
             return pd.DataFrame()
@@ -532,14 +546,9 @@ class ParquetUrlDataSource(BaseResourceDataSource):
         if self._load_from_cache():
             return list(self._df.columns)
 
-        source = self.get_source_path()
-
         try:
-            if source.startswith(("http://", "https://")):
-                with fsspec.open(source) as f:
-                    schema_names = pq.read_schema(f).names
-            else:
-                schema_names = pq.read_schema(source).names
+            with self._open_source() as path:
+                schema_names = pq.read_schema(path).names
         except (OSError, ValueError, pa.ArrowInvalid):
             log.exception("Failed fast Parquet schema read, falling back to full load")
             self._ensure_loaded()
@@ -551,7 +560,8 @@ class ParquetUrlDataSource(BaseResourceDataSource):
 class FeatherUrlDataSource(BaseResourceDataSource):
     def fetch_dataframe(self) -> pd.DataFrame:
         try:
-            return pd.read_feather(self.get_source_path())
+            with self._open_source() as path:
+                return pd.read_feather(path)
         except Exception:
             log.exception("Error fetching Feather from %s", self.get_source_path())
             return pd.DataFrame()
@@ -560,14 +570,9 @@ class FeatherUrlDataSource(BaseResourceDataSource):
         if self._load_from_cache():
             return list(self._df.columns)
 
-        source = self.get_source_path()
-
         try:
-            if source.startswith(("http://", "https://")):
-                with fsspec.open(source) as f:
-                    schema_names = feather.read_table(f, columns=[]).schema.names
-            else:
-                schema_names = feather.read_table(source, columns=[]).schema.names
+            with self._open_source() as path:
+                schema_names = feather.read_table(path, columns=[]).schema.names
         except (OSError, ValueError, pa.ArrowInvalid):
             log.exception("Failed fast Feather schema read, falling back to full load")
             self._ensure_loaded()

@@ -53,3 +53,34 @@ groups:
           This value is used as the default for all cache backends and data sources.
           Individual data source instances can still override the TTL programmatically.
         example: 86400
+
+  - annotation: Remote fetch settings
+    description: >
+      These options control how the file-based Resource Data Sources (CSV, XLSX, ORC, Parquet,
+      Feather) download data from a resource's `url` or a resource view's `file_url` override.
+      Both are set by dataset editors, not sysadmins, but are fetched by the CKAN server process,
+      so downloads are guarded against SSRF (requests to private/loopback/link-local/internal
+      addresses are refused), hangs (connect/read timeouts), and unbounded response bodies
+      (a maximum size, enforced while streaming).
+    options:
+      - key: ckanext.tables.fetch.connect_timeout
+        default: 5
+        description: |
+          Maximum time (in seconds) to wait for a connection to the remote host to be established
+          before giving up.
+        example: 5
+
+      - key: ckanext.tables.fetch.read_timeout
+        default: 30
+        description: |
+          Maximum time (in seconds) to wait between bytes received from the remote host before
+          giving up.
+        example: 30
+
+      - key: ckanext.tables.fetch.max_bytes
+        default: 209715200
+        description: |
+          Maximum response size (in bytes) accepted from a remote resource/`file_url`. Enforced
+          both from the `Content-Length` response header and while streaming the body, so a
+          server that lies about or omits `Content-Length` cannot bypass it. Defaults to 200 MB.
+        example: 209715200

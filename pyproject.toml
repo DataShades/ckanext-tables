@@ -17,7 +17,6 @@ classifiers = [
 
 keywords = [ "CKAN", ]
 dependencies = [
-    "fsspec[http]",
     "pandas[parquet, feather]",
 ]
 
