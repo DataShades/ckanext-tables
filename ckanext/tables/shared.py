@@ -27,6 +27,7 @@ from .types import (
     Options,
     QueryParams,
     Row,
+    RowActionHandler,
     TableActionHandler,
     Value,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "GenericTableView",
     "BulkActionDefinition",
     "BulkActionHandler",
+    "RowActionHandler",
     "TableActionHandler",
     "ListDataSource",
     "CsvUrlDataSource",

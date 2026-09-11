@@ -361,7 +361,7 @@ class StubPandasDataSource(PandasDataSource):
         self._df = df
         self._filtered_df = df
 
-    def fetch_dataframe(self):
+    def fetch_dataframe(self) -> pd.DataFrame:
         return self._df
 
 
@@ -473,13 +473,6 @@ class TestPandasDataSource:
 
 class TestUrlDataSourceErrorPaths:
     """All URL-based sources should return an empty DataFrame on errors."""
-
-    def _run_with_exception(self, source_class, exc_class=Exception):
-        with mock.patch.object(source_class, "fetch_dataframe", return_value=pd.DataFrame()):
-            ds = source_class(url="http://example.com/file")
-            ds._df = None
-            ds._filtered_df = None
-        return ds
 
     @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
     def test_xlsx_error_returns_empty(self, _):

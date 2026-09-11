@@ -24,17 +24,17 @@ For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is 
 
 | Config value | Backend |
 | ------------ | ------- |
-| `pickle` *(default)* | Disk-based pickle files |
-| `redis` | CKAN's Redis connection |
+| `feather` *(default)* | Disk-based feather (Arrow IPC) files |
 | `parquet` | Disk-based parquet files |
-| `feather` | Disk-based feather (Arrow IPC) files |
+| `pickle` | Disk-based pickle files |
+| `redis` | CKAN's Redis connection |
 
 ```ini
 # Switch to Redis
 ckanext.tables.cache.backend = redis
 
-# Or keep pickle and customise the cache directory
-ckanext.tables.cache.backend = pickle
+# Or keep the default feather backend and customise the cache directory
+ckanext.tables.cache.backend = feather
 ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
 ```
 

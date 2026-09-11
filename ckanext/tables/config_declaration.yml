@@ -26,7 +26,7 @@ groups:
             fast read/write speed with minimal serialisation overhead.
             The cache directory is controlled by `ckanext.tables.cache.cache_dir`.
 
-          Unknown values fall back to `pickle` with a warning in the logs.
+          Unknown values fall back to `feather` with a warning in the logs.
         example: "redis"
 
       - key: ckanext.tables.cache.cache_dir

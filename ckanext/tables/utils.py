@@ -1,10 +1,8 @@
 import json
 import re
 
-from ckan.lib.redis import connect_to_redis
 from ckan.plugins import toolkit as tk
 
-from ckanext.tables.config import get_cache_ttl
 from ckanext.tables.types import FilterItem, QueryParams
 
 FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
@@ -25,7 +23,7 @@ def tables_build_params() -> QueryParams:
     )
 
 
-def parse_tabulator_filters() -> list[dict[str, str]]:
+def parse_tabulator_filters() -> list[FilterItem]:
     """Parse Tabulator's remote filter params.
 
     They come from column native tabulator column filters.
@@ -52,35 +50,3 @@ def parse_tabulator_filters() -> list[dict[str, str]]:
         for f in filters.values()
         if f.get("field") and f.get("value") and f.get("type")
     ]
-
-
-class CacheManager:
-    """Cache manager for table data."""
-
-    _PREFIX = "ckanext:tables:table:"
-
-    def __init__(self, cache_ttl: int | None = None) -> None:
-        self.cache_ttl = cache_ttl if cache_ttl is not None else get_cache_ttl()
-
-    def _key(self, table_name: str) -> str:
-        return f"{self._PREFIX}{table_name}"
-
-    def save(self, table_name: str, data: dict[str, str | int]) -> None:
-        """Save table data to Redis."""
-        with connect_to_redis() as conn:
-            conn.setex(self._key(table_name), self.cache_ttl, json.dumps(data))
-
-    def get(self, table_name: str) -> dict[str, str | int]:
-        """Retrieve a table data from Redis."""
-        with connect_to_redis() as conn:
-            data: bytes = conn.get(self._key(table_name))  # type: ignore
-
-        if not data:
-            return {}
-
-        return json.loads(data)
-
-    def delete(self, table_name: str) -> None:
-        """Delete a table data from Redis."""
-        with connect_to_redis() as conn:
-            conn.delete(self._key(table_name))  # type: ignore

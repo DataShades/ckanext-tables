@@ -359,7 +359,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     """A data source that loads resource data from a file or URL.
 
     The cache backend defaults to the value of ``ckanext.tables.cache.backend``
-    (``"pickle"`` by default). Pass an explicit *cache_backend* to
+    (``"feather"`` by default). Pass an explicit *cache_backend* to
     override for a specific instance.
 
     Override ``cache_ttl`` on a subclass or pass it to the constructor to

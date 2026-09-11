@@ -16,12 +16,13 @@ CONF_CACHE_BACKEND = "ckanext.tables.cache.backend"
 CONF_CACHE_DIR = "ckanext.tables.cache.cache_dir"
 CONF_CACHE_TTL = "ckanext.tables.cache.ttl"
 
+DEFAULT_CACHE_BACKEND = "feather"
+DEFAULT_CACHE_DIR = os.path.join(tempfile.gettempdir(), "tables-cache")
 DEFAULT_CACHE_TTL = 3600
 
 
 def get_cache_dir() -> str:
-    default_cache = os.path.join(tempfile.gettempdir(), "ckanext-tables-cache")
-    cache_dir = tk.config.get(CONF_CACHE_DIR, default_cache)
+    cache_dir = tk.config.get(CONF_CACHE_DIR, DEFAULT_CACHE_DIR)
 
     if not os.path.exists(cache_dir):
         try:
@@ -66,7 +67,7 @@ def get_cache_backend() -> CacheBackend:
         RedisCacheBackend,
     )
 
-    backend = tk.config.get(CONF_CACHE_BACKEND, "pickle").strip().lower()
+    backend = tk.config.get(CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND).strip().lower()
 
     if backend == "redis":
         return RedisCacheBackend()
@@ -77,10 +78,12 @@ def get_cache_backend() -> CacheBackend:
     if backend == "pickle":
         return PickleCacheBackend()
 
-    if backend != "feather":
+    if backend != DEFAULT_CACHE_BACKEND:
         log.warning(
-            "Unknown ckanext.tables.cache.backend value %r — falling back to 'feather'.",
+            "Unknown %s value %r — falling back to %r.",
+            CONF_CACHE_BACKEND,
             backend,
+            DEFAULT_CACHE_BACKEND,
         )
 
     return FeatherCacheBackend()

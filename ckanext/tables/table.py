@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Any
@@ -323,7 +322,7 @@ class BulkActionDefinition:
 
     action: str
     label: str
-    callback: Callable[[list[types.Row]], types.ActionHandlerResult]
+    callback: types.BulkActionHandler
     icon: str | None = None
     attrs: dict[str, Any] = dataclass_field(default_factory=dict)
     with_confirmation: bool = True
@@ -347,7 +346,7 @@ class TableActionDefinition:
 
     action: str
     label: str
-    callback: Callable[..., types.ActionHandlerResult]
+    callback: types.TableActionHandler
     icon: str | None = None
     attrs: dict[str, Any] = dataclass_field(default_factory=dict)
     with_confirmation: bool = True
@@ -370,7 +369,7 @@ class RowActionDefinition:
 
     action: str
     label: str
-    callback: Callable[[types.Row], types.ActionHandlerResult]
+    callback: types.RowActionHandler
     icon: str | None = None
     attrs: dict[str, Any] = dataclass_field(default_factory=dict)
     with_confirmation: bool = False

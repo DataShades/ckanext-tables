@@ -17,8 +17,7 @@ classifiers = [
 
 keywords = [ "CKAN", ]
 dependencies = [
-    "fsspec",
-    "aiohttp",
+    "fsspec[http]",
     "pandas[parquet, feather]",
 ]
 

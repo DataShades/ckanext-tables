@@ -1,9 +1,7 @@
 import json
 import urllib.parse
 
-import pytest
-
-from ckanext.tables.utils import CacheManager, parse_tabulator_filters, tables_build_params
+from ckanext.tables.utils import parse_tabulator_filters, tables_build_params
 
 
 class TestParseTabulatorFilters:
@@ -76,28 +74,3 @@ class TestTablesBuildParams:
             params = tables_build_params()
             assert len(params.filters) == 1
             assert params.filters[0].field == "age"
-
-
-@pytest.mark.usefixtures("clean_redis")
-class TestCacheManager:
-    def test_save_and_get(self):
-        manager = CacheManager(cache_ttl=60)
-        manager.save("my_table", {"col": "val", "page": 1})
-        result = manager.get("my_table")
-        assert result == {"col": "val", "page": 1}
-
-    def test_get_missing_returns_empty_dict(self):
-        manager = CacheManager()
-        result = manager.get("nonexistent_table")
-        assert result == {}
-
-    def test_delete(self):
-        manager = CacheManager(cache_ttl=60)
-        manager.save("del_table", {"x": "y"})
-        manager.delete("del_table")
-        result = manager.get("del_table")
-        assert result == {}
-
-    def test_key_prefix(self):
-        manager = CacheManager()
-        assert manager._key("foo") == "ckanext:tables:table:foo"

@@ -123,18 +123,9 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
         if not self.check_access():
             return tk.abort(403, tk._("You are not authorized to view this table."))
 
-        table = self.table()  # type: ignore
+        table_instance = self.table()  # type: ignore
 
-        if exporter_name := request.args.get("exporter"):
-            return self._export(table, exporter_name)
-
-        if tk.request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return self._ajax_data(table)
-
-        return table.render_table(
-            breadcrumb_label=self.breadcrumb_label,
-            page_title=self.page_title,
-        )
+        return self._dispatch_get(table_instance)
 
     def _dispatch_get(self, table_instance: TableDefinition) -> str | Response:
         if exporter_name := request.args.get("exporter"):
