@@ -11,6 +11,7 @@ from flask.views import MethodView
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables import exporters
+from ckanext.tables.config import get_export_max_rows
 from ckanext.tables.table import TableDefinition
 from ckanext.tables.types import ActionHandlerResult
 from ckanext.tables.utils import tables_build_params
@@ -92,7 +93,17 @@ class ExportTableMixin:
         if not exporter:
             return tk.abort(404, tk._(f"Exporter {exporter_name} not found"))
 
-        data = exporter.export(table, tables_build_params())
+        params = tables_build_params()
+        total = table.get_total_count(params)
+        max_rows = get_export_max_rows()
+
+        if total > max_rows:
+            return tk.abort(
+                413,
+                tk._(f"Cannot export {total} rows: the maximum is {max_rows}. Add filters to narrow the result set."),
+            )
+
+        data = exporter.export(table, params)
         filename = self._prepare_export_filename(table, exporter)
 
         return Response(

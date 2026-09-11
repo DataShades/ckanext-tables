@@ -204,6 +204,28 @@ class TestExportTableMixin:
         data = json.loads(response.data)
         assert isinstance(data, list)
 
+    def test_export_over_row_cap_aborts_without_exporting(self, sample_table: TableDefinition):
+        """A result set larger than the configured cap must be rejected (413), not exported."""
+        mixin = self._make_mixin()
+        with (
+            mock.patch("ckanext.tables.generics.get_export_max_rows", return_value=1),
+            mock.patch("ckanext.tables.generics.tk.abort") as mock_abort,
+            mock.patch.object(CSVExporter, "export") as mock_export,
+        ):
+            mock_abort.side_effect = Exception("413")
+            with pytest.raises(Exception, match="413"):
+                mixin._export(sample_table, "csv")
+
+        assert mock_abort.call_args[0][0] == 413
+        assert not mock_export.called
+
+    def test_export_at_row_cap_is_allowed(self, sample_table: TableDefinition):
+        """simple_data has exactly 3 rows — a cap of 3 must still allow the export."""
+        mixin = self._make_mixin()
+        with mock.patch("ckanext.tables.generics.get_export_max_rows", return_value=3):
+            response = mixin._export(sample_table, "csv")
+        assert "text/csv" in response.content_type
+
     def test_prepare_export_filename(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
         filename = mixin._prepare_export_filename(sample_table, CSVExporter)

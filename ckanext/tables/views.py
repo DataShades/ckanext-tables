@@ -89,6 +89,10 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         if bulk_action:
             return self._apply_bulk_action(table, bulk_action, rows)
         if refresh:
+            try:
+                tk.check_access("resource_update", {}, {"id": resource_id})
+            except tk.NotAuthorized:
+                return tk.abort(403, tk._("Not authorized to refresh this resource's cached data"))
             return self._refresh_data(table)
 
         return jsonify({"success": False, "error": "No action specified"})

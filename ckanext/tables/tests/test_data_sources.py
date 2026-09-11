@@ -1,3 +1,4 @@
+import contextlib
 import decimal
 import os
 from datetime import datetime  # noqa: DTZ001
@@ -27,7 +28,22 @@ from ckanext.tables.data_sources import (
 from ckanext.tables.types import FilterItem
 
 
-@pytest.mark.usefixtures("clear_cache", "clean_redis")
+@pytest.fixture
+def mocked_fetch_remote_file():
+    """Bypass the guarded-fetch layer with a fixed dummy local path.
+
+    These tests exercise CSV/XLSX/etc. parsing and caching by mocking the pandas
+    reader directly and must not depend on real DNS/network access to resolve
+    ``fetch_remote_file``'s SSRF/timeout/size checks against a live host.
+    """
+    with mock.patch(
+        "ckanext.tables.data_sources.fetch_remote_file",
+        return_value=contextlib.nullcontext("/tmp/mocked-source"),
+    ):
+        yield
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_fetch_remote_file")
 class TestCSVResourceDataSource:
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
     def test_fetch_and_parse(self, mock_read_csv):
@@ -471,6 +487,7 @@ class TestPandasDataSource:
         assert ds.serialize_value(object()) is not None
 
 
+@pytest.mark.usefixtures("mocked_fetch_remote_file")
 class TestUrlDataSourceErrorPaths:
     """All URL-based sources should return an empty DataFrame on errors."""
 

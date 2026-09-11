@@ -3,6 +3,7 @@ import re
 
 from ckan.plugins import toolkit as tk
 
+from ckanext.tables.config import get_max_page_size
 from ckanext.tables.types import FilterItem, QueryParams
 
 FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
@@ -14,9 +15,12 @@ def tables_build_params() -> QueryParams:
     all_filters = [FilterItem(f["field"], f["operator"], f["value"]) for f in filters]
     all_filters.extend(parse_tabulator_filters())
 
+    page = tk.request.args.get("page", 1, int)
+    size = tk.request.args.get("size", 10, int)
+
     return QueryParams(
-        page=tk.request.args.get("page", 1, int),
-        size=tk.request.args.get("size", 10, int),
+        page=max(1, page),
+        size=min(max(1, size), get_max_page_size()),
         filters=all_filters,
         sort_by=tk.request.args.get("sort[0][field]"),
         sort_order=tk.request.args.get("sort[0][dir]"),

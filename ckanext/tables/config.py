@@ -19,12 +19,16 @@ CONF_CACHE_TTL = "ckanext.tables.cache.ttl"
 CONF_FETCH_CONNECT_TIMEOUT = "ckanext.tables.fetch.connect_timeout"
 CONF_FETCH_READ_TIMEOUT = "ckanext.tables.fetch.read_timeout"
 CONF_FETCH_MAX_BYTES = "ckanext.tables.fetch.max_bytes"
+CONF_MAX_PAGE_SIZE = "ckanext.tables.pagination.max_page_size"
+CONF_EXPORT_MAX_ROWS = "ckanext.tables.export.max_rows"
 
 DEFAULT_CACHE_BACKEND = "feather"
 DEFAULT_CACHE_TTL = 3600
 DEFAULT_FETCH_CONNECT_TIMEOUT = 5
 DEFAULT_FETCH_READ_TIMEOUT = 30
 DEFAULT_FETCH_MAX_BYTES = 200 * 1024 * 1024  # 200 MB
+DEFAULT_MAX_PAGE_SIZE = 100
+DEFAULT_EXPORT_MAX_ROWS = 50_000
 
 # Directory permission bits that must *not* be set for a cache directory to
 # be considered private: group- or other-writable.
@@ -130,6 +134,16 @@ def get_fetch_max_bytes() -> int:
     Reads ``ckanext.tables.fetch.max_bytes``. Defaults to 200 MB.
     """
     return tk.config.get(CONF_FETCH_MAX_BYTES, DEFAULT_FETCH_MAX_BYTES)
+
+
+def get_max_page_size() -> int:
+    """Return the maximum number of rows a single AJAX page request may return."""
+    return tk.config.get(CONF_MAX_PAGE_SIZE, DEFAULT_MAX_PAGE_SIZE)
+
+
+def get_export_max_rows() -> int:
+    """Return the maximum number of rows a single export may contain."""
+    return tk.config.get(CONF_EXPORT_MAX_ROWS, DEFAULT_EXPORT_MAX_ROWS)
 
 
 def get_cache_backend() -> CacheBackend:

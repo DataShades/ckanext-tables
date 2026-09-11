@@ -74,3 +74,29 @@ class TestTablesBuildParams:
             params = tables_build_params()
             assert len(params.filters) == 1
             assert params.filters[0].field == "age"
+
+    def test_zero_size_is_clamped_up(self, app):
+        """?size=0 must not reach the ((total + size - 1) // size) division in _ajax_data."""
+        with app.flask_app.test_request_context("/?size=0"):
+            params = tables_build_params()
+            assert params.size == 1
+
+    def test_negative_page_and_size_are_clamped_up(self, app):
+        with app.flask_app.test_request_context("/?page=-5&size=-5"):
+            params = tables_build_params()
+            assert params.page == 1
+            assert params.size == 1
+
+    def test_oversized_size_is_clamped_down(self, app):
+        with app.flask_app.test_request_context("/?size=100000000"):
+            params = tables_build_params()
+            from ckanext.tables.config import get_max_page_size
+
+            assert params.size == get_max_page_size()
+
+    def test_size_at_max_page_size_is_unaffected(self, app):
+        from ckanext.tables.config import get_max_page_size
+
+        with app.flask_app.test_request_context(f"/?size={get_max_page_size()}"):
+            params = tables_build_params()
+            assert params.size == get_max_page_size()

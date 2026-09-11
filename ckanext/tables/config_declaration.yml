@@ -89,3 +89,30 @@ groups:
           both from the `Content-Length` response header and while streaming the body, so a
           server that lies about or omits `Content-Length` cannot bypass it. Defaults to 200 MB.
         example: 209715200
+
+  - annotation: Pagination and export limits
+    description: >
+      These options bound how much data a single request can pull through a table — both the
+      AJAX page-data endpoint and the export endpoints (CSV, TSV, JSON, NDJSON, YAML, XLSX, HTML,
+      PDF) — since request parameters like page size are controlled by the client, not the server.
+    options:
+      - key: ckanext.tables.pagination.max_page_size
+        default: 100
+        description: |
+          Maximum number of rows a single AJAX page request (`?size=...`) may return. Requests
+          asking for more are silently clamped to this value; a `size` of zero or less is
+          clamped up to 1. The default matches the largest option the built-in page-size
+          selector itself offers, so it only affects requests crafted outside the normal UI.
+        example: 100
+
+      - key: ckanext.tables.export.max_rows
+        default: 50000
+        description: |
+          Maximum number of rows a single export may contain. Every exporter fetches the full
+          *filtered* result set regardless of the current page — including the PDF exporter,
+          which renders it through Jinja and WeasyPrint synchronously in the request — so
+          without this limit an unfiltered or very large table could be exported, or rendered
+          to PDF, with no bound on rows, memory, or CPU time. Exporting more than this many rows
+          is refused (HTTP 413) rather than silently truncated; narrow the result set with
+          filters instead.
+        example: 50000
