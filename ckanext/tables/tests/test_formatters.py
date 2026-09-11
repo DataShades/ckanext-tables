@@ -1,4 +1,8 @@
+from unittest import mock
+
 import pytest
+
+import ckan.tests.factories as factories
 
 from ckanext.tables import formatters, table
 
@@ -171,3 +175,78 @@ class TestUserLinkFormatter:
 
     def test_empty_value_returns_empty(self):
         assert _fmt(formatters.UserLinkFormatter, "") == ""
+
+    def test_memoizes_repeated_lookups_of_the_same_user(self):
+        """A user id that recurs across rows must only be looked up once per table."""
+        user = factories.User()
+        tbl = _make_table()
+
+        with mock.patch.object(formatters.model.User, "get", wraps=formatters.model.User.get) as spy:
+            first = _fmt(formatters.UserLinkFormatter, user["id"], tbl=tbl)
+            second = _fmt(formatters.UserLinkFormatter, user["id"], tbl=tbl)
+
+        assert first == second
+        assert spy.call_count == 1
+
+    def test_memoizes_a_none_result_for_an_unknown_user(self):
+        tbl = _make_table()
+
+        with mock.patch.object(formatters.model.User, "get", wraps=formatters.model.User.get) as spy:
+            _fmt(formatters.UserLinkFormatter, "nonexistent-id", tbl=tbl)
+            _fmt(formatters.UserLinkFormatter, "nonexistent-id", tbl=tbl)
+
+        assert spy.call_count == 1
+
+    def test_separate_tables_do_not_share_the_cache(self):
+        user = factories.User()
+
+        with mock.patch.object(formatters.model.User, "get", wraps=formatters.model.User.get) as spy:
+            _fmt(formatters.UserLinkFormatter, user["id"], tbl=_make_table("t1"))
+            _fmt(formatters.UserLinkFormatter, user["id"], tbl=_make_table("t2"))
+
+        assert spy.call_count == 2
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestActionsFormatter:
+    def test_default_template_is_rendered_once_per_table_and_column(self):
+        """The bundled default template never varies by row -- cache its output."""
+        tbl = _make_table()
+        col = _make_col()
+
+        with mock.patch.object(formatters.tk, "render", return_value="<div>actions</div>") as mock_render:
+            first = _fmt(formatters.ActionsFormatter, None, col=col, tbl=tbl)
+            second = _fmt(formatters.ActionsFormatter, None, col=col, tbl=tbl)
+
+        assert first == second
+        assert mock_render.call_count == 1
+
+    def test_custom_template_is_rendered_every_time(self):
+        """A custom template might legitimately vary by row, so it's never cached."""
+        tbl = _make_table()
+        col = _make_col()
+        options = {"template": "tables/formatters/custom.html"}
+
+        with mock.patch.object(formatters.tk, "render", return_value="<div>x</div>") as mock_render:
+            _fmt(formatters.ActionsFormatter, None, options=options, col=col, tbl=tbl)
+            _fmt(formatters.ActionsFormatter, None, options=options, col=col, tbl=tbl)
+
+        assert mock_render.call_count == 2
+
+    def test_different_columns_are_cached_separately(self):
+        tbl = _make_table()
+
+        with mock.patch.object(formatters.tk, "render", return_value="<div>x</div>") as mock_render:
+            _fmt(formatters.ActionsFormatter, None, col=_make_col("a"), tbl=tbl)
+            _fmt(formatters.ActionsFormatter, None, col=_make_col("b"), tbl=tbl)
+
+        assert mock_render.call_count == 2
+
+    def test_separate_tables_do_not_share_the_cache(self):
+        col = _make_col()
+
+        with mock.patch.object(formatters.tk, "render", return_value="<div>x</div>") as mock_render:
+            _fmt(formatters.ActionsFormatter, None, col=col, tbl=_make_table("t1"))
+            _fmt(formatters.ActionsFormatter, None, col=col, tbl=_make_table("t2"))
+
+        assert mock_render.call_count == 2

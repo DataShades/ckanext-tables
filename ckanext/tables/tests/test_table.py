@@ -209,6 +209,52 @@ class TestTableDefinitionFormatters:
         data = tbl.get_data(QueryParams())
         assert data[0]["name"] == "A" * 10 + "..."
 
+    def test_returned_rows_are_never_aliased_to_the_data_source(self):
+        """ListDataSource returns its rows as direct references, not copies.
+
+        get_data() must always hand back independent dicts — with or without
+        formatters configured — so mutating the result can never corrupt the
+        data source's own storage.
+        """
+        source_rows = [{"id": 1, "name": "alice"}]
+        tbl = TableDefinition(
+            name="no_formatters",
+            data_source=ListDataSource(source_rows),
+            columns=[ColumnDefinition(field="id"), ColumnDefinition(field="name")],
+        )
+
+        data = tbl.get_data(QueryParams())
+        assert data[0] is not source_rows[0]
+
+        data[0]["name"] = "MUTATED"
+        assert source_rows[0]["name"] == "alice"
+
+    def test_formatting_does_not_mutate_the_original_row(self):
+        source_rows = [{"name": "alice"}]
+        tbl = TableDefinition(
+            name="with_formatters",
+            data_source=ListDataSource(source_rows),
+            columns=[ColumnDefinition(field="name", formatters=[(formatters.TextBoldFormatter, {})])],
+        )
+
+        data = tbl.get_data(QueryParams())
+
+        assert data[0]["name"] == "<strong>alice</strong>"
+        assert source_rows[0]["name"] == "alice"
+
+    def test_skips_formatter_work_entirely_when_no_column_has_one(self):
+        tbl = TableDefinition(
+            name="no_formatters",
+            data_source=ListDataSource([{"id": 1}]),
+            columns=[ColumnDefinition(field="id")],
+        )
+
+        with mock.patch.object(formatters.BaseFormatter, "__init__") as mock_init:
+            data = tbl.get_data(QueryParams())
+
+        assert not mock_init.called
+        assert data == [{"id": 1}]
+
 
 @pytest.mark.usefixtures("with_request_context", "clean_redis")
 class TestTableDefinitionCacheIntegration:

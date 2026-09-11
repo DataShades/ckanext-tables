@@ -81,6 +81,11 @@ class UserLinkFormatter(BaseFormatter):
     `user_show` calls for every row by using a placeholder.
     The `value` for this formatter should be a user ID.
 
+    Each distinct user id is looked up at most once per table render — the
+    lookup is memoised on the table instance — rather than re-querying a user
+    id that recurs across many rows on the same page (e.g. a "created by"
+    column where a handful of users own most of the rows).
+
     Options:
         - `maxlength` (int): Maximum length of the user's display name. Defaults to 20.
         - `avatar` (int): The size of the avatar placeholder in pixels. Defaults to 20.
@@ -89,7 +94,7 @@ class UserLinkFormatter(BaseFormatter):
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         if not value:
             return ""
-        user = model.User.get(value)
+        user = self._get_user(value)
         if not user:
             return str(value)
 
@@ -103,6 +108,14 @@ class UserLinkFormatter(BaseFormatter):
         icon = tk.h.snippet("user/snippets/placeholder.html", size=avatar_size, user_name=display_name)
         link = tk.h.link_to(display_name, tk.h.url_for("user.read", id=user.name))
         return tk.h.literal(f"{icon} {link}")
+
+    def _get_user(self, user_id: str) -> model.User | None:
+        cache = self.table._formatter_cache.setdefault("user_link_users", {})
+
+        if user_id not in cache:
+            cache[user_id] = model.User.get(user_id)
+
+        return cache[user_id]
 
 
 class BooleanFormatter(BaseFormatter):
@@ -159,8 +172,25 @@ class ActionsFormatter(BaseFormatter):
           Defaults to `tables/formatters/actions.html`.
     """
 
+    _DEFAULT_TEMPLATE = "tables/formatters/actions.html"
+
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
-        template = options.get("template", "tables/formatters/actions.html")
+        template = options.get("template", self._DEFAULT_TEMPLATE)
+
+        if template != self._DEFAULT_TEMPLATE:
+            # A custom template might legitimately render differently per row
+            # (e.g. reference `row`), so it's never cached — only the bundled
+            # default, which renders the same markup regardless of row, is.
+            return self._render(template)
+
+        cache = self.table._formatter_cache.setdefault("actions_formatter", {})
+
+        if self.column.field not in cache:
+            cache[self.column.field] = self._render(template)
+
+        return cache[self.column.field]
+
+    def _render(self, template: str) -> types.FormatterResult:
         return tk.literal(
             tk.render(
                 template,

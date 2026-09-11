@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import uuid
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -62,6 +61,12 @@ class TableDefinition:
             self._cache_ttl = 0
 
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
+
+        # Scratch space formatters may use to memoise per-render work (e.g. a
+        # lookup keyed by a value that recurs across rows on the same page) —
+        # lives and dies with this TableDefinition instance, so it never
+        # outlives the request that created it.
+        self._formatter_cache: dict[Any, Any] = {}
 
         if self.placeholder is None:
             self.placeholder = tk._("No data found")
@@ -134,7 +139,7 @@ class TableDefinition:
         return tk.render(self.table_template, extra_vars={"table": self, **kwargs})
 
     def get_data(self, params: types.QueryParams) -> list[Any]:
-        return [self._apply_formatters(dict(row)) for row in self.get_raw_data(params)]
+        return [self._apply_formatters(row) for row in self.get_raw_data(params)]
 
     def get_raw_data(self, params: types.QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
         if not paginate:
@@ -182,14 +187,27 @@ class TableDefinition:
         self._cache.set(self._count_cache_key(params), count, self._cache_ttl)
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
-        """Apply formatters to each cell in a row."""
-        formatted_row = copy.deepcopy(row)
+        """Apply formatters to each cell in a row.
+
+        Always returns a fresh top-level dict, independent of *row* —
+        ``ListDataSource`` in particular returns its rows as direct
+        references to its own storage, not copies, so the result must not
+        alias back to it. Formatters never mutate nested values, only
+        replace a whole cell's value via ``formatted_row[column.field] =
+        ...``, so a single shallow copy is enough — no need for the deep
+        copy this used to make on every single row, including rows in
+        tables with no formatters at all.
+        """
+        formatted_row = dict(row)
+
+        if not any(column.formatters for column in self.columns):
+            return formatted_row
 
         for column in self.columns:
-            cell_value = row.get(column.field)
-
             if not column.formatters:
                 continue
+
+            cell_value = row.get(column.field)
 
             for formatter_class, formatter_options in column.formatters:
                 cell_value = formatter_class(column, formatted_row, row, self).format(cell_value, formatter_options)
