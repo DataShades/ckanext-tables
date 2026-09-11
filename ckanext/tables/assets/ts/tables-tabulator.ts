@@ -418,7 +418,12 @@ ckan.module("tables-tabulator", function ($) {
             const action = target.dataset.action;
             const label = target.textContent?.trim() || "";
             if (!action) return;
-            this._confirmAction(label, () => this._onBulkActionConfirm(action, label));
+            const withConfirmation = target.dataset.withConfirmation !== "false";
+            if (withConfirmation) {
+                this._confirmAction(label, () => this._onBulkActionConfirm(action, label));
+            } else {
+                this._onBulkActionConfirm(action, label);
+            }
         },
 
         _onBulkActionConfirm: function (bulkAction: string, label: string): void {
@@ -436,7 +441,12 @@ ckan.module("tables-tabulator", function ($) {
             const action = target.dataset.action;
             const label = target.textContent?.trim() || "";
             if (!action) return;
-            this._confirmAction(label, () => this._onTableActionConfirm(action, label));
+            const withConfirmation = target.dataset.withConfirmation !== "false";
+            if (withConfirmation) {
+                this._confirmAction(label, () => this._onTableActionConfirm(action, label));
+            } else {
+                this._onTableActionConfirm(action, label);
+            }
         },
 
         _onTableActionConfirm: function (action: string, label: string): void {

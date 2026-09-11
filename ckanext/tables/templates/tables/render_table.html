@@ -45,7 +45,7 @@
                         {% for action in table.bulk_actions %}
                             <li>
                                 {% do action.attrs.update({'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
-                                <button data-action="{{ action.action }}" {{ attributes(action.attrs) }}>
+                                <button data-action="{{ action.action }}" data-with-confirmation="{{ 'true' if action.with_confirmation else 'false' }}" {{ attributes(action.attrs) }}>
                                     {% if action.icon %}
                                         <i class="{{ action.icon }} me-1"></i>
                                     {% endif %}
@@ -69,7 +69,7 @@
                         {% for action in table.table_actions %}
                             <li>
                                 {% do action.attrs.update({'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
-                                <button data-action="{{ action.action }}" {{ attributes(action.attrs) }}>
+                                <button data-action="{{ action.action }}" data-with-confirmation="{{ 'true' if action.with_confirmation else 'false' }}" {{ attributes(action.attrs) }}>
                                     {% if action.icon %}
                                         <i class="{{ action.icon }} me-1"></i>
                                     {% endif %}

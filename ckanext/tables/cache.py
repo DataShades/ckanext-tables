@@ -287,6 +287,9 @@ class CachedDataSourceMixin:
             ...
     """
 
+    cache_backend: CacheBackend
+    cache_ttl: int
+
     def get_cache_key(self) -> str:
         """Return a unique string key for this data source instance."""
         raise NotImplementedError

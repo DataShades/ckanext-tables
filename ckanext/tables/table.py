@@ -53,11 +53,15 @@ class TableDefinition:
     table_layout: str = "fitColumns"
 
     def __post_init__(self):
-        cacheable = isinstance(self.data_source, CachedDataSourceMixin)
+        if isinstance(self.data_source, CachedDataSourceMixin):
+            self._cache = self.data_source.cache_backend
+            self._cache_key = f"table:{self.name}"
+            self._cache_ttl = self.data_source.cache_ttl
+        else:
+            self._cache = None
+            self._cache_key = ""
+            self._cache_ttl = 0
 
-        self._cache = self.data_source.cache_backend if cacheable else None
-        self._cache_key = f"table:{self.name}" if cacheable else ""
-        self._cache_ttl = self.data_source.cache_ttl if cacheable else 0
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
 
         if self.placeholder is None:
@@ -313,6 +317,8 @@ class BulkActionDefinition:
         label: Display label for the action.
         callback: Function to be called when the action is triggered.
         icon: (Optional) Icon class for the action.
+        with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
+            Defaults to True, since a bulk action affects every selected row.
     """
 
     action: str
@@ -320,6 +326,7 @@ class BulkActionDefinition:
     callback: Callable[[list[types.Row]], types.ActionHandlerResult]
     icon: str | None = None
     attrs: dict[str, Any] = dataclass_field(default_factory=dict)
+    with_confirmation: bool = True
 
     def __call__(self, rows: list[types.Row]) -> types.ActionHandlerResult:
         return self.callback(rows)
@@ -334,6 +341,8 @@ class TableActionDefinition:
         label: Display label for the action.
         callback: Function to be called when the action is triggered.
         icon: (Optional) Icon class for the action.
+        with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
+            Defaults to True; set to False for a non-destructive actions.
     """
 
     action: str
@@ -341,6 +350,7 @@ class TableActionDefinition:
     callback: Callable[..., types.ActionHandlerResult]
     icon: str | None = None
     attrs: dict[str, Any] = dataclass_field(default_factory=dict)
+    with_confirmation: bool = True
 
     def __call__(self) -> types.ActionHandlerResult:
         return self.callback()
