@@ -1,4 +1,4 @@
-import os
+import json
 import time
 from unittest import mock
 
@@ -25,8 +25,12 @@ class TestCleanCacheCommand:
     def test_reports_removed_count(self, tmp_path):
         backend = FeatherCacheBackend(cache_dir=str(tmp_path))
         backend.set("stale", pd.DataFrame([{"a": 1}]), ttl=1)
-        old_mtime = time.time() - 10
-        os.utime(backend._meta_path("stale"), (old_mtime, old_mtime))
+        meta_path = backend._meta_path("stale")
+        with open(meta_path) as f:
+            meta = json.load(f)
+        meta["expires_at"] = time.time() - 10
+        with open(meta_path, "w") as f:
+            json.dump(meta, f)
 
         runner = CliRunner()
         with mock.patch("ckanext.tables.cli.get_cache_backend", return_value=backend):

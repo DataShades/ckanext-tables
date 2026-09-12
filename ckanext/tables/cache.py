@@ -8,11 +8,13 @@ import json
 import logging
 import os
 import pickle
+import tempfile
 import threading
 import time
 import uuid
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 
@@ -29,6 +31,10 @@ log = logging.getLogger(__name__)
 # at once (see _FileCacheBackend._memo) — bounds memory use across many
 # distinct cached tables rather than letting the in-process copy grow forever.
 _MEMO_MAX_ENTRIES = 32
+
+# How old a leftover _atomic_write ".tmp-*" file must be before clean_expired
+# treats it as abandoned (from a crashed write) rather than one still in progress.
+_STALE_TMP_FILE_AGE = 3600
 
 
 class CacheBackend(ABC):
@@ -245,6 +251,23 @@ class _FileCacheBackend(CacheBackend, ABC):
         key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
         return os.path.join(self._require_cache_dir(), f"{key_hash}.meta")
 
+    def _atomic_write(self, final_path: str, writer: Callable[[str], None]) -> None:
+        """Write via a same-directory temp file, then atomically replace *final_path*.
+
+        A concurrent ``get`` opens ``final_path`` directly, never the temp file, so it can
+        only ever see the previous complete version or the new complete version — never a
+        half-written one (``os.replace`` is atomic on POSIX within the same filesystem).
+        """
+        fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(final_path), prefix=".tmp-")
+        os.close(fd)
+        try:
+            writer(tmp_path)
+            os.replace(tmp_path, final_path)
+        except BaseException:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(tmp_path)
+            raise
+
     def get(self, key: str) -> Any:  # noqa: PLR0911
         if self.cache_dir is None:
             return None
@@ -256,10 +279,12 @@ class _FileCacheBackend(CacheBackend, ABC):
         except (OSError, json.JSONDecodeError):
             return None
 
-        meta_mtime = os.path.getmtime(meta_path)
-        if time.time() - meta_mtime >= meta.get("ttl", 0):
+        expires_at = meta.get("expires_at")
+        if expires_at is None or time.time() >= expires_at:
             # An entry that's never read again after expiring would otherwise sit
             # on disk forever (see clean_expired for entries that never get here).
+            # A missing expires_at (an entry from before this field existed, or a
+            # corrupted write) is likewise treated as expired rather than trusted.
             self.delete(key)
             return None
 
@@ -268,7 +293,7 @@ class _FileCacheBackend(CacheBackend, ABC):
 
         path = self._cache_path(key)
 
-        hit, value = self._memo_get(path, meta_mtime)
+        hit, value = self._memo_get(path, expires_at)
         if hit:
             return value
 
@@ -281,7 +306,7 @@ class _FileCacheBackend(CacheBackend, ABC):
             log.debug("Failed to read %s cache %s", self._file_extension, path, exc_info=True)
             return None
 
-        self._memo_set(path, meta_mtime, value)
+        self._memo_set(path, expires_at, value)
         return value
 
     def set(self, key: str, value: Any, ttl: int) -> None:
@@ -290,21 +315,29 @@ class _FileCacheBackend(CacheBackend, ABC):
 
         path = self._cache_path(key)
         meta_path = self._meta_path(key)
+        expires_at = time.time() + ttl
 
         try:
             if isinstance(value, (list, pd.DataFrame)):
-                self._write_data(value, path)
-                with open(meta_path, "w") as f:
-                    json.dump({"ttl": ttl}, f)
+                # Write the data file first and only then commit the meta file that
+                # points to it, so a reader that observes the new meta always finds a
+                # complete, matching data file — never a stale or half-written one.
+                self._atomic_write(path, lambda tmp: self._write_data(value, tmp))
+                self._atomic_write(meta_path, lambda tmp: self._write_meta(tmp, {"expires_at": expires_at}))
             else:
-                with open(meta_path, "w") as f:
-                    json.dump({"ttl": ttl, "scalar_value": value}, f)
+                self._atomic_write(
+                    meta_path, lambda tmp: self._write_meta(tmp, {"expires_at": expires_at, "scalar_value": value})
+                )
                 with contextlib.suppress(FileNotFoundError):
                     os.remove(path)
         except (OSError, ValueError, TypeError, pa.ArrowException):
             # ArrowTypeError (mixed-type object columns, e.g. from XLSX/CSV) is a
             # TypeError, not a ValueError, so it needs its own catch.
             log.warning("Failed to write %s cache %s", self._file_extension, path, exc_info=True)
+
+    def _write_meta(self, path: str, meta: dict[str, Any]) -> None:
+        with open(path, "w") as f:
+            json.dump(meta, f)
 
     def delete(self, key: str) -> None:
         if self.cache_dir is None:
@@ -349,17 +382,27 @@ class _FileCacheBackend(CacheBackend, ABC):
         now = time.time()
 
         for entry in entries:
+            # A ".tmp-*" file only exists if a write via _atomic_write crashed between
+            # creating it and the os.replace that would have consumed it — sweep it
+            # once it's old enough that it can't be a write still in progress.
+            if entry.name.startswith(".tmp-"):
+                with contextlib.suppress(OSError):
+                    if now - entry.stat().st_mtime >= _STALE_TMP_FILE_AGE:
+                        os.remove(entry.path)
+                        removed += 1
+                continue
+
             if not entry.name.endswith(".meta"):
                 continue
 
             try:
                 with open(entry.path) as f:
                     meta = json.load(f)
-                mtime = entry.stat().st_mtime
             except (OSError, json.JSONDecodeError):
                 continue
 
-            if now - mtime < meta.get("ttl", 0):
+            expires_at = meta.get("expires_at")
+            if expires_at is not None and now < expires_at:
                 continue
 
             key_hash = entry.name[: -len(".meta")]

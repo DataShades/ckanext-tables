@@ -20,6 +20,15 @@ from ckanext.tables.cache import (
 )
 
 
+def _expire(meta_path: str) -> None:
+    """Rewrite a file-backend cache entry's meta sidecar so it reads as already expired."""
+    with open(meta_path) as f:
+        meta = json.load(f)
+    meta["expires_at"] = time.time() - 10
+    with open(meta_path, "w") as f:
+        json.dump(meta, f)
+
+
 class TestTablesJSONEncoder:
     def _encode(self, value):
         return json.dumps(value, cls=_TablesJSONEncoder)
@@ -76,8 +85,7 @@ class TestPickleCacheBackend:
     def test_expired_returns_none(self, pickle_backend):
         pickle_backend.set("expiring", {"a": 1}, ttl=1)
         meta_path = pickle_backend._meta_path("expiring")
-        old_mtime = time.time() - 10
-        os.utime(meta_path, (old_mtime, old_mtime))
+        _expire(meta_path)
         assert pickle_backend.get("expiring") is None
 
     def test_delete(self, pickle_backend):
@@ -124,8 +132,7 @@ class TestParquetCacheBackend:
     def test_expired_returns_none(self, parquet_backend):
         parquet_backend.set("expiring", [{"x": 1}], ttl=1)
         meta_path = parquet_backend._meta_path("expiring")
-        old_mtime = time.time() - 10
-        os.utime(meta_path, (old_mtime, old_mtime))
+        _expire(meta_path)
         assert parquet_backend.get("expiring") is None
 
     def test_delete(self, parquet_backend):
@@ -180,8 +187,7 @@ class TestFeatherCacheBackend:
     def test_expired_returns_none(self, feather_backend):
         feather_backend.set("expiring", [{"x": 1}], ttl=1)
         meta_path = feather_backend._meta_path("expiring")
-        old_mtime = time.time() - 10
-        os.utime(meta_path, (old_mtime, old_mtime))
+        _expire(meta_path)
         assert feather_backend.get("expiring") is None
 
     def test_delete(self, feather_backend):
@@ -370,8 +376,7 @@ class TestFileCacheBackendInProcessMemo:
         feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=1)
         feather_backend.get("key1")  # warms the memo
 
-        old_mtime = time.time() - 10
-        os.utime(feather_backend._meta_path("key1"), (old_mtime, old_mtime))
+        _expire(feather_backend._meta_path("key1"))
 
         assert feather_backend.get("key1") is None
 
@@ -400,8 +405,7 @@ class TestFileCacheBackendExpiryCleanup:
         assert os.path.exists(data_path)
         assert os.path.exists(meta_path)
 
-        old_mtime = time.time() - 10
-        os.utime(meta_path, (old_mtime, old_mtime))
+        _expire(meta_path)
 
         assert feather_backend.get("key1") is None
         assert not os.path.exists(data_path)
@@ -411,8 +415,7 @@ class TestFileCacheBackendExpiryCleanup:
         feather_backend.set("fresh", pd.DataFrame([{"a": 1}]), ttl=3600)
         feather_backend.set("expired", pd.DataFrame([{"a": 2}]), ttl=1)
 
-        old_mtime = time.time() - 10
-        os.utime(feather_backend._meta_path("expired"), (old_mtime, old_mtime))
+        _expire(feather_backend._meta_path("expired"))
 
         removed = feather_backend.clean_expired()
 
@@ -423,8 +426,7 @@ class TestFileCacheBackendExpiryCleanup:
 
     def test_clean_expired_handles_a_scalar_entry(self, feather_backend):
         feather_backend.set("count", 42, ttl=1)
-        old_mtime = time.time() - 10
-        os.utime(feather_backend._meta_path("count"), (old_mtime, old_mtime))
+        _expire(feather_backend._meta_path("count"))
 
         assert feather_backend.clean_expired() == 1
         assert not os.path.exists(feather_backend._meta_path("count"))
@@ -438,8 +440,7 @@ class TestFileCacheBackendExpiryCleanup:
         cache_dir = str(tmp_path)
         pickle_backend = PickleCacheBackend(cache_dir=cache_dir)
         pickle_backend.set("old", [{"x": 1}], ttl=1)
-        old_mtime = time.time() - 10
-        os.utime(pickle_backend._meta_path("old"), (old_mtime, old_mtime))
+        _expire(pickle_backend._meta_path("old"))
         pkl_path = pickle_backend.get_cache_path("old")
         assert os.path.exists(pkl_path)
 
@@ -456,7 +457,46 @@ class TestFileCacheBackendExpiryCleanup:
 
         backend = FeatherCacheBackend(cache_dir=str(unsafe_dir))
         assert backend.cache_dir is None
-        assert backend.clean_expired() == 0
+
+
+class TestFileCacheBackendAtomicWrite:
+    """A concurrent reader must never see a half-written file or a mismatched pair (PERF-2)."""
+
+    def test_set_leaves_no_stray_tmp_file_on_success(self, feather_backend, tmp_path):
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=60)
+        assert [f for f in os.listdir(str(tmp_path)) if f.startswith(".tmp-")] == []
+
+    def test_failed_write_does_not_clobber_the_previous_value(self, feather_backend):
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=60)
+
+        with mock.patch.object(FeatherCacheBackend, "_write_df", side_effect=OSError("disk full")):
+            feather_backend.set("key1", pd.DataFrame([{"a": 99}]), ttl=60)
+
+        # The failed write's temp file was cleaned up, and never replaced the
+        # previous complete data/meta pair, so the old value is still served.
+        assert feather_backend.get("key1").to_dict(orient="records") == [{"a": 1}]
+
+    def test_clean_expired_sweeps_an_abandoned_tmp_file(self, feather_backend, tmp_path):
+        from ckanext.tables.cache import _STALE_TMP_FILE_AGE
+
+        stale_tmp = tmp_path / ".tmp-abandoned"
+        stale_tmp.write_text("partial")
+        old_time = time.time() - _STALE_TMP_FILE_AGE - 10
+        os.utime(str(stale_tmp), (old_time, old_time))
+
+        removed = feather_backend.clean_expired()
+
+        assert removed == 1
+        assert not stale_tmp.exists()
+
+    def test_clean_expired_keeps_a_fresh_tmp_file(self, feather_backend, tmp_path):
+        fresh_tmp = tmp_path / ".tmp-inprogress"
+        fresh_tmp.write_text("partial")
+
+        removed = feather_backend.clean_expired()
+
+        assert removed == 0
+        assert fresh_tmp.exists()
 
     def test_redis_backend_clean_expired_is_a_noop(self):
         assert RedisCacheBackend().clean_expired() == 0
