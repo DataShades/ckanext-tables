@@ -31,3 +31,5 @@ class PeopleTable(TableDefinition):
         """Only allow sysadmins to view this table."""
         tk.check_access("sysadmin", context)
 ```
+
+`GenericTableView` always calls `check_access()` with a bare `{}` — no `model`, `user`, or `session` pre-populated. Routing the check through `tk.check_access(...)`, as above, fills those in for you; reading the context directly (e.g. `context["user"]`) will not work.

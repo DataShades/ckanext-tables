@@ -20,6 +20,8 @@ class MyTable(t.TableDefinition):
         )
 ```
 
+CSV, TSV, and NDJSON stream their output row by row. The other exporters (JSON, XLSX, YAML, HTML, PDF) build the full result set in memory before returning it, so exporting a very large table in one of those formats uses proportionally more memory.
+
 Below you can see the source code for the base exporter class.
 
 ::: tables.exporters
@@ -72,6 +74,17 @@ Below is a list of the available built-in exporters along with a brief descripti
 ### HTML Exporter
 
 ::: tables.exporters.HTMLExporter
+    options:
+      show_source: true
+      show_bases: false
+
+---
+
+### PDF Exporter
+
+Requires the optional `weasyprint` dependency (`pip install ckanext-tables[pdf]`).
+
+::: tables.exporters.PDFExporter
     options:
       show_source: true
       show_bases: false

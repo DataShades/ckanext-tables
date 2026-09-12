@@ -9,6 +9,15 @@ See the [documentation](https://datashades.github.io/ckanext-tables/) for more i
 
 !["Rendered Table Example"](https://github.com/DataShades/ckanext-tables/blob/master/docs/image/usage_result.png)
 
+## Development
+
+The frontend TypeScript/SCSS is compiled and committed to the repo by hand — there is no build step in CI, so run these and commit the results whenever you change anything under `ckanext/tables/assets/`:
+```sh
+npm install
+npm run ts-build   # compiles + minifies the TS into tables-tabulator.js
+npm run build      # compiles SCSS into CSS
+```
+
 ## Tests
 
 To run the tests, do:

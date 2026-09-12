@@ -19,7 +19,6 @@ data_source = DatabaseDataSource(
         model.User.name,
         model.User.state,
     ).order_by(model.User.created.desc()),
-    model=model.User,
 )
 ```
 
