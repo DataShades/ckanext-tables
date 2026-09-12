@@ -1,12 +1,12 @@
 import logging
 from typing import Any
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response
 from flask.views import MethodView
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables.generics import AjaxTableMixin, ExportTableMixin
+from ckanext.tables.generics import TableDispatchMixin
 from ckanext.tables.helpers import tables_init_temporary_preview_table
 from ckanext.tables.table import TableDefinition
 
@@ -44,7 +44,7 @@ def _get_resource_and_view(resource_id: str, resource_view_id: str) -> tuple[dic
     return resource, resource_view
 
 
-class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
+class ResourceViewHandler(TableDispatchMixin, MethodView):
     """Handler for resource view AJAX requests."""
 
     def get_table_for_resource(self, resource_id: str, resource_view_id: str) -> TableDefinition:
@@ -73,13 +73,7 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
         """
         table = self.get_table_for_resource(resource_id, resource_view_id)
 
-        if exporter_name := tk.request.args.get("exporter"):
-            return self._export(table, exporter_name)
-
-        if tk.request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return self._ajax_data(table)
-
-        tk.abort(400, tk._("This endpoint only accepts AJAX requests"))
+        return self._dispatch_get(table)
 
     def post(self, resource_id: str, resource_view_id: str) -> Response:
         """Handle POST requests for resource view tables (actions, refresh).
@@ -92,28 +86,16 @@ class ResourceViewHandler(AjaxTableMixin, ExportTableMixin, MethodView):
             JSON response with action result
         """
         table = self.get_table_for_resource(resource_id, resource_view_id)
+        self._resource_id = resource_id
 
-        row_action = tk.request.form.get("row_action")
-        table_action = tk.request.form.get("table_action")
-        bulk_action = tk.request.form.get("bulk_action")
-        row = tk.request.form.get("row")
-        rows = tk.request.form.get("rows")
-        refresh = tk.request.form.get("refresh")
+        return self._dispatch_post(table)
 
-        if table_action:
-            return self._apply_table_action(table, table_action)
-        if row_action:
-            return self._apply_row_action(table, row_action, row)
-        if bulk_action:
-            return self._apply_bulk_action(table, bulk_action, rows)
-        if refresh:
-            try:
-                tk.check_access("resource_update", {}, {"id": resource_id})
-            except tk.NotAuthorized:
-                return tk.abort(403, tk._("Not authorized to refresh this resource's cached data"))
-            return self._refresh_data(table)
-
-        return jsonify({"success": False, "error": "No action specified"})
+    def _handle_refresh(self, table: TableDefinition) -> Response:
+        try:
+            tk.check_access("resource_update", {}, {"id": self._resource_id})
+        except tk.NotAuthorized:
+            return tk.abort(403, tk._("Not authorized to refresh this resource's cached data"))
+        return self._refresh_data(table)
 
 
 bp.add_url_rule(

@@ -117,7 +117,52 @@ class ExportTableMixin:
         return f"{table.name}-{timestamp}.{exporter.name}"
 
 
-class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
+class TableDispatchMixin(AjaxTableMixin, ExportTableMixin):
+    """Shared GET/POST request dispatch for table views.
+
+    Both ``ResourceViewHandler`` and ``GenericTableView`` route a GET to
+    export/AJAX/full-page rendering and a POST to one of the table/row/bulk
+    actions or a cache refresh in exactly the same order; this mixin is the
+    single place that ordering lives so the two views can't drift apart.
+    """
+
+    def _dispatch_get(self, table: TableDefinition) -> str | Response:
+        if exporter_name := request.args.get("exporter"):
+            return self._export(table, exporter_name)
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return self._ajax_data(table)
+
+        return self._render_full_page(table)
+
+    def _render_full_page(self, table: TableDefinition) -> str | Response:
+        """Fallback for a GET that is neither an export nor an AJAX call."""
+        return tk.abort(400, tk._("This endpoint only accepts AJAX requests"))
+
+    def _dispatch_post(self, table: TableDefinition) -> Response:
+        row_action = request.form.get("row_action")
+        table_action = request.form.get("table_action")
+        bulk_action = request.form.get("bulk_action")
+        row = request.form.get("row")
+        rows = request.form.get("rows")
+        refresh = request.form.get("refresh")
+
+        if table_action:
+            return self._apply_table_action(table, table_action)
+        if row_action:
+            return self._apply_row_action(table, row_action, row)
+        if bulk_action:
+            return self._apply_bulk_action(table, bulk_action, rows)
+        if refresh:
+            return self._handle_refresh(table)
+
+        return jsonify({"success": False, "error": "No action specified"})
+
+    def _handle_refresh(self, table: TableDefinition) -> Response:
+        return self._refresh_data(table)
+
+
+class GenericTableView(TableDispatchMixin, MethodView):
     """Unified view to render tables, serve AJAX, and export data."""
 
     def __init__(
@@ -138,14 +183,8 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
 
         return self._dispatch_get(table_instance)
 
-    def _dispatch_get(self, table_instance: TableDefinition) -> str | Response:
-        if exporter_name := request.args.get("exporter"):
-            return self._export(table_instance, exporter_name)
-
-        if tk.request.headers.get("X-Requested-With") == "XMLHttpRequest":
-            return self._ajax_data(table_instance)
-
-        return table_instance.render_table(
+    def _render_full_page(self, table: TableDefinition) -> str:
+        return table.render_table(
             breadcrumb_label=self.breadcrumb_label,
             page_title=self.page_title,
         )
@@ -157,25 +196,6 @@ class GenericTableView(AjaxTableMixin, ExportTableMixin, MethodView):
         table_instance = self.table()  # type: ignore
 
         return self._dispatch_post(table_instance)
-
-    def _dispatch_post(self, table_instance: TableDefinition) -> Response:
-        row_action = request.form.get("row_action")
-        table_action = request.form.get("table_action")
-        bulk_action = request.form.get("bulk_action")
-        row = request.form.get("row")
-        rows = request.form.get("rows")
-        refresh = request.form.get("refresh")
-
-        if table_action:
-            return self._apply_table_action(table_instance, table_action)
-        if row_action:
-            return self._apply_row_action(table_instance, row_action, row)
-        if bulk_action:
-            return self._apply_bulk_action(table_instance, bulk_action, rows)
-        if refresh:
-            return self._refresh_data(table_instance)
-
-        return jsonify({"success": False, "error": "No action specified"})
 
     def check_access(self) -> bool:
         try:
