@@ -5,7 +5,9 @@ import csv
 import decimal
 import json
 import logging
+import os
 import re
+import tempfile
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from itertools import islice
@@ -446,6 +448,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         self.url = url
         self.resource = resource
         self._source_path: str = ""
+        self._upload_storage: Any | None = None
         self.cache_backend = cache_backend if cache_backend is not None else get_cache_backend()
         self.cache_ttl = cache_ttl if cache_ttl is not None else get_cache_ttl()
 
@@ -461,6 +464,15 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
                 if self.resource.get("url_type") == "upload":
                     upload = uploader.get_resource_uploader(self.resource)
                     self._source_path = upload.get_path(self.resource["id"])
+
+                    # On CKAN 2.12+ with file-keeper storage, get_path() returns a
+                    # storage-relative Location, not a filesystem path — stash the
+                    # storage so _open_source() reads through its API instead of
+                    # handing that relative string straight to pandas.
+                    fk_upload_cls = getattr(uploader, "FKResourceUpload", None)
+                    if fk_upload_cls is not None and isinstance(upload, fk_upload_cls):
+                        self._upload_storage = upload.storage
+
                     return self._source_path
 
                 if self.resource.get("url"):
@@ -504,17 +516,59 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         """Yield a local filesystem path for the source.
 
         A remote http(s) URL is downloaded to a guarded temporary file first
-        (timeouts, size cap, SSRF checks — see :mod:`ckanext.tables.net`);
-        the temp file is removed once the caller is done with it. A local
-        path (resolved via the CKAN uploader) is yielded unchanged.
+        (timeouts, size cap, SSRF checks — see :mod:`ckanext.tables.net`); a
+        file-keeper-backed upload is read via its storage's real path when
+        that storage is on local disk, or streamed into a temporary file
+        otherwise (e.g. S3, where there's no local path to read from); a
+        plain local path (resolved via the legacy CKAN uploader) is yielded
+        unchanged. Any temp file created along the way is removed once the
+        caller is done.
         """
         source = self.get_source_path()
 
         if source.startswith(("http://", "https://")):
             with fetch_remote_file(source) as local_path:
                 yield local_path
+        elif self._upload_storage is not None:
+            with self._read_fk_upload(self._upload_storage, source) as local_path:
+                yield local_path
         else:
             yield source
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _read_fk_upload(storage: Any, location: str) -> Iterator[str]:
+        """Yield a local path for a file-keeper storage object.
+
+        ``storage.full_path()`` is a cheap, generic ``join(base, location)`` —
+        it doesn't confirm the storage is actually on local disk, so it's only
+        trusted when the result exists on disk; otherwise (e.g. an S3-backed
+        storage) fall back to streaming the content into a temp file.
+        """
+        # Resolve (and fully exit) this before yielding — a caller's exception while
+        # using the yielded path must propagate normally, not get swallowed here.
+        local_path = None
+        with contextlib.suppress(Exception):
+            candidate = storage.full_path(location)
+            if os.path.isfile(candidate):
+                local_path = candidate
+
+        if local_path is not None:
+            yield local_path
+            return
+
+        from ckan.lib import files  # noqa: PLC0415 — only importable on CKAN 2.12+
+
+        fd, tmp_path = tempfile.mkstemp(prefix="ckanext-tables-")
+
+        try:
+            with os.fdopen(fd, "wb") as tmp_file:
+                for chunk in storage.stream(files.FileData(location)):
+                    tmp_file.write(chunk)
+            yield tmp_path
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(tmp_path)
 
 
 class CsvUrlDataSource(BaseResourceDataSource):
