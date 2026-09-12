@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://github.io/ckanext-tables/usage/">
+        <link rel="canonical" href="https://datashades.github.io/ckanext-tables/usage/">
       
       
         <link rel="prev" href="../install/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../image/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1217,7 +1217,7 @@
 <li>Creating a view to display the table</li>
 </ol>
 <p>We're going to use a <strong>demo</strong> table definition called <code>PeopleTable</code> for demonstration purposes.</p>
-<p>It's a working example located in a separate extension and can be enabled alongside the tables extension. Just add <code>tables_demo</code> to your <code>ckan.plugins</code> configuration.</p>
+<p>It's a working example located in a separate extension and can be enabled alongside the tables extension. Just add <code>tables_demo</code> to your <code>ckan.plugins</code> configuration. It also requires the <code>faker</code> package (<code>pip install faker</code>) to generate its mock data.</p>
 <p>The demo table uses all the features of the tables extension, including data sources, formatters, all action types, and exporters. A minimal example could be much simpler, but this one demonstrates the full power of the extension.</p>
 <h2 id="defining-a-table">Defining a Table</h2>
 <p>First, create a table definition by inheriting from <code>TableDefinition</code>.</p>
@@ -1253,11 +1253,11 @@
 
     <span class="k">return</span> <span class="p">[</span>
         <span class="p">{</span>
-            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
-            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">first_name</span><span class="p">(),</span>
-            <span class="s2">&quot;surname&quot;</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">last_name</span><span class="p">(),</span>
-            <span class="s2">&quot;email&quot;</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">email</span><span class="p">(),</span>
-            <span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">date_time_this_decade</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+            <span class="s2">"id"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
+            <span class="s2">"name"</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">first_name</span><span class="p">(),</span>
+            <span class="s2">"surname"</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">last_name</span><span class="p">(),</span>
+            <span class="s2">"email"</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">email</span><span class="p">(),</span>
+            <span class="s2">"created"</span><span class="p">:</span> <span class="n">fake</span><span class="o">.</span><span class="n">date_time_this_decade</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
         <span class="p">}</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_records</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
     <span class="p">]</span>
@@ -1267,113 +1267,26 @@
 
 </div><hr />
 <p>Below is the full code of the <code>PeopleTable</code> definition:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">ckanext.tables.shared</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">t</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">ckanext.tables_demo.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_mock_data</span>
-
-<span class="n">DATA</span> <span class="o">=</span> <span class="n">generate_mock_data</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">PeopleTable</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">TableDefinition</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Demo table definition for the people table.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;people&quot;</span><span class="p">,</span>
-            <span class="n">data_source</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">ListDataSource</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">DATA</span><span class="p">),</span>
-            <span class="n">columns</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;ID&quot;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">90</span><span class="p">),</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="s2">&quot;name&quot;</span><span class="p">),</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="s2">&quot;surname&quot;</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Last Name&quot;</span><span class="p">),</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="s2">&quot;email&quot;</span><span class="p">),</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span>
-                    <span class="n">field</span><span class="o">=</span><span class="s2">&quot;created&quot;</span><span class="p">,</span>
-                    <span class="n">formatters</span><span class="o">=</span><span class="p">[(</span><span class="n">t</span><span class="o">.</span><span class="n">formatters</span><span class="o">.</span><span class="n">DateFormatter</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;date_format&quot;</span><span class="p">:</span> <span class="s2">&quot;</span><span class="si">%d</span><span class="s2"> %B %Y&quot;</span><span class="p">})],</span>
-                <span class="p">),</span>
-            <span class="p">],</span>
-            <span class="n">row_actions</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">RowActionDefinition</span><span class="p">(</span>
-                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;make_sysadmin&quot;</span><span class="p">,</span>
-                    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Promote to Sysadmin&quot;</span><span class="p">,</span>
-                    <span class="n">icon</span><span class="o">=</span><span class="s2">&quot;fa fa-user-graduate&quot;</span><span class="p">,</span>
-                    <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pseudo_actions</span><span class="p">,</span>
-                    <span class="n">with_confirmation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="p">),</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">RowActionDefinition</span><span class="p">(</span>
-                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;remove_user&quot;</span><span class="p">,</span>
-                    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Remove User&quot;</span><span class="p">,</span>
-                    <span class="n">icon</span><span class="o">=</span><span class="s2">&quot;fa fa-trash&quot;</span><span class="p">,</span>
-                    <span class="n">attrs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;class&quot;</span><span class="p">:</span> <span class="s2">&quot;text-danger&quot;</span><span class="p">},</span>
-                    <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remove_user</span><span class="p">,</span>
-                    <span class="n">with_confirmation</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                <span class="p">),</span>
-            <span class="p">],</span>
-            <span class="n">bulk_actions</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">BulkActionDefinition</span><span class="p">(</span>
-                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;remove_user&quot;</span><span class="p">,</span>
-                    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Remove Selected Users&quot;</span><span class="p">,</span>
-                    <span class="n">icon</span><span class="o">=</span><span class="s2">&quot;fa fa-trash&quot;</span><span class="p">,</span>
-                    <span class="n">attrs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;class&quot;</span><span class="p">:</span> <span class="s2">&quot;text-danger&quot;</span><span class="p">},</span>
-                    <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remove_users</span><span class="p">,</span>
-                <span class="p">),</span>
-            <span class="p">],</span>
-            <span class="n">table_actions</span><span class="o">=</span><span class="p">[</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">TableActionDefinition</span><span class="p">(</span>
-                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;recreate_users&quot;</span><span class="p">,</span>
-                    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Recreate Users&quot;</span><span class="p">,</span>
-                    <span class="n">icon</span><span class="o">=</span><span class="s2">&quot;fa fa-refresh&quot;</span><span class="p">,</span>
-                    <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">recreate_users</span><span class="p">,</span>
-                <span class="p">),</span>
-                <span class="n">t</span><span class="o">.</span><span class="n">TableActionDefinition</span><span class="p">(</span>
-                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;remove_all_users&quot;</span><span class="p">,</span>
-                    <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Remove All Users&quot;</span><span class="p">,</span>
-                    <span class="n">icon</span><span class="o">=</span><span class="s2">&quot;fa fa-trash&quot;</span><span class="p">,</span>
-                    <span class="n">attrs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;class&quot;</span><span class="p">:</span> <span class="s2">&quot;text-danger&quot;</span><span class="p">},</span>
-                    <span class="n">callback</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remove_all_users</span><span class="p">,</span>
-                <span class="p">),</span>
-            <span class="p">],</span>
-            <span class="n">exporters</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">ALL_EXPORTERS</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">remove_user</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">row</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">Row</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Callback to remove a user from the data source.&quot;&quot;&quot;</span>
-        <span class="n">DATA</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">DATA</span> <span class="k">if</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]]</span>
-        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;User removed.&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">pseudo_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">row</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">Row</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Action isn&#39;t implemented.&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">remove_users</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">Row</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Callback to remove a user from the data source.&quot;&quot;&quot;</span>
-        <span class="n">ids_to_remove</span> <span class="o">=</span> <span class="p">{</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">}</span>
-        <span class="n">DATA</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">DATA</span> <span class="k">if</span> <span class="n">r</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ids_to_remove</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Users removed.&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">remove_all_users</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Callback to remove all users from the data source.&quot;&quot;&quot;</span>
-        <span class="n">DATA</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;All users removed.&quot;</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">recreate_users</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Callback to recreate the mock users.&quot;&quot;&quot;</span>
-        <span class="n">DATA</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">generate_mock_data</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">(</span><span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;Users recreated.&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">--</span><span class="mi">8</span> <span class="o">&lt;</span> <span class="o">--</span><span class="s2">"ckanext/tables_demo/table.py"</span>
 </code></pre></div>
 <h3 id="using-formatters">Using Formatters</h3>
 <p>The tables extension provides several built-in formatters to change the way data is rendered in the table cells. You can apply one or more formatters to a column by specifying them in the <code>formatters</code> attribute of <code>ColumnDefinition</code>.</p>
 <p>For example, from the above <code>PeopleTable</code>, we are using the <code>datetime</code> formatter to format the <code>created</code> field. So this <code>2024-02-25T11:10:00Z</code> value will be displayed as <code>2024-02-25</code>.</p>
-<div class="highlight"><pre><span></span><code><span class="n">ColumnDefinition</span><span class="p">(</span>
-    <span class="n">field</span><span class="o">=</span><span class="s2">&quot;created&quot;</span><span class="p">,</span>
-    <span class="n">formatters</span><span class="o">=</span><span class="p">[(</span><span class="n">formatters</span><span class="o">.</span><span class="n">DateFormatter</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;date_format&quot;</span><span class="p">:</span> <span class="s2">&quot;%Y-%m-</span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">})],</span>
-    <span class="n">sortable</span><span class="o">=</span><span class="kc">True</span>
-<span class="p">),</span>
+<div class="highlight"><pre><span></span><code><span class="p">(</span>
+    <span class="n">ColumnDefinition</span><span class="p">(</span>
+        <span class="n">field</span><span class="o">=</span><span class="s2">"created"</span><span class="p">,</span> <span class="n">formatters</span><span class="o">=</span><span class="p">[(</span><span class="n">formatters</span><span class="o">.</span><span class="n">DateFormatter</span><span class="p">,</span> <span class="p">{</span><span class="s2">"date_format"</span><span class="p">:</span> <span class="s2">"%Y-%m-</span><span class="si">%d</span><span class="s2">"</span><span class="p">})],</span> <span class="n">sortable</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">),</span>
+<span class="p">)</span>
 </code></pre></div>
 <h3 id="using-exporters">Using Exporters</h3>
 <p>The tables extension also provides several built-in exporters to export the table data in different formats. You can specify the exporters to be used in the <code>exporters</code> attribute of the <code>TableDefinition</code>.</p>
 <p>In the above <code>PeopleTable</code>, we are using all the available exporters by specifying <code>t.ALL_EXPORTERS</code>. You can also specify individual exporters if you want to limit the available export options.</p>
-<div class="highlight"><pre><span></span><code><span class="n">exporters</span><span class="o">=</span><span class="p">[</span>
-    <span class="n">t</span><span class="o">.</span><span class="n">exporters</span><span class="o">.</span><span class="n">CSVExporter</span><span class="p">,</span>
-    <span class="n">t</span><span class="o">.</span><span class="n">exporters</span><span class="o">.</span><span class="n">TSVExporter</span><span class="p">,</span>
-<span class="p">],</span>
+<div class="highlight"><pre><span></span><code><span class="n">exporters</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="p">[</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">exporters</span><span class="o">.</span><span class="n">CSVExporter</span><span class="p">,</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">exporters</span><span class="o">.</span><span class="n">TSVExporter</span><span class="p">,</span>
+    <span class="p">],</span>
+<span class="p">)</span>
 </code></pre></div>
 <p>Obviously, you can write your own custom exporters as well. See the <a href="../exporters/">exporters</a> documentation for more information.</p>
 <h3 id="using-actions">Using Actions</h3>
@@ -1382,18 +1295,11 @@
 <p>Read more about actions in the <a href="../entities/actions/">actions</a> documentation.</p>
 <h2 id="creating-a-view">Creating a View</h2>
 <p>Once your table is defined, you can create a view to display it using the <code>GenericTableView</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Blueprint</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">ckanext.tables.shared</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenericTableView</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">ckanext.tables_demo.table</span><span class="w"> </span><span class="kn">import</span> <span class="n">PeopleTable</span>
-
-<span class="n">bp</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">&quot;tables_demo&quot;</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">,</span> <span class="n">url_prefix</span><span class="o">=</span><span class="s2">&quot;/tables-demo&quot;</span><span class="p">)</span>
-
-<span class="n">bp</span><span class="o">.</span><span class="n">add_url_rule</span><span class="p">(</span><span class="s2">&quot;/people&quot;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">GenericTableView</span><span class="o">.</span><span class="n">as_view</span><span class="p">(</span><span class="s2">&quot;people&quot;</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="n">PeopleTable</span><span class="p">))</span>
+<div class="highlight"><pre><span></span><code><span class="o">--</span><span class="mi">8</span> <span class="o">&lt;</span> <span class="o">--</span><span class="s2">"ckanext/tables_demo/views.py"</span>
 </code></pre></div>
 <p>As you can see, this view does not require any custom code to render the table. The <code>GenericTableView</code> takes care of everything.</p>
 <h2 id="results">Results</h2>
-<p>After completing the above steps, you can navigate to <code>/admin/people</code> in your CKAN instance to see the rendered table.</p>
+<p>After completing the above steps, you can navigate to <code>/tables-demo/people</code> in your CKAN instance to see the rendered table.</p>
 <p><img alt="&quot;Rendered Table Example&quot;" src="../image/usage_result.png" /></p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
@@ -1499,10 +1405,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

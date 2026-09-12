@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://github.io/ckanext-tables/resource_view/">
+        <link rel="canonical" href="https://datashades.github.io/ckanext-tables/resource_view/">
       
       
         <link rel="prev" href="../usage/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../image/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1169,36 +1169,46 @@
 </table>
 <p>If the resource has been pushed to the <strong>CKAN Datastore</strong> (i.e. its <code>datastore_active</code> flag is <code>True</code>), the <code>DataStoreDataSource</code> is used regardless of the format field, providing direct and efficient access to stored records without any caching overhead.</p>
 <h2 id="caching">Caching</h2>
-<p>For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is cached with a default TTL of <strong>600 seconds</strong> (10 minutes). The cache backend is configurable:</p>
+<p>For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is cached with a default TTL of <strong>3600 seconds</strong> (1 hour), configurable via <code>ckanext.tables.cache.ttl</code>. The cache backend is configurable:</p>
 <table>
 <thead>
 <tr>
 <th>Config value</th>
 <th>Backend</th>
-<th>Config key for extra options</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>pickle</code> <em>(default)</em></td>
+<td><code>feather</code> <em>(default)</em></td>
+<td>Disk-based feather (Arrow IPC) files</td>
+</tr>
+<tr>
+<td><code>parquet</code></td>
+<td>Disk-based parquet files</td>
+</tr>
+<tr>
+<td><code>pickle</code></td>
 <td>Disk-based pickle files</td>
-<td><code>ckanext.tables.cache.pickle.cache_dir</code></td>
 </tr>
 <tr>
 <td><code>redis</code></td>
 <td>CKAN's Redis connection</td>
-<td><em>(none — uses CKAN's Redis config)</em></td>
 </tr>
 </tbody>
 </table>
 <div class="highlight"><pre><span></span><code><span class="c1"># Switch to Redis</span>
 <span class="na">ckanext.tables.cache.backend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">redis</span>
 
-<span class="c1"># Or keep pickle and customise the cache directory</span>
-<span class="na">ckanext.tables.cache.backend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">pickle</span>
-<span class="na">ckanext.tables.cache.pickle.cache_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">/var/cache/ckanext-tables</span>
+<span class="c1"># Or keep the default feather backend and customise the cache directory</span>
+<span class="na">ckanext.tables.cache.backend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">feather</span>
+<span class="na">ckanext.tables.cache.cache_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">/var/cache/ckanext-tables</span>
 </code></pre></div>
 <p>The Datastore-backed view does <strong>not</strong> use caching — it queries the Datastore API directly on every request.</p>
+<p>An expired entry is deleted the next time it's read, but one that's never read again after expiring (a removed or renamed resource, for example) would otherwise stay on disk indefinitely. For the file-based backends, run the following periodically (e.g. from a cron job) to sweep away anything past its TTL:</p>
+<div class="highlight"><pre><span></span><code>ckan<span class="w"> </span>-c<span class="w"> </span>/etc/ckan/default/ckan.ini<span class="w"> </span>tables<span class="w"> </span>clean-cache
+</code></pre></div>
+<p>The Redis backend already expires and removes its own keys, so this command is a no-op there.</p>
+<p>The <strong>Refresh</strong> button in the table's UI invalidates the cached data for that table, so the next load re-fetches and re-parses the file from its source URL.</p>
 <h2 id="view-configuration">View Configuration</h2>
 <p>When a CKAN administrator creates a <em>Tables View</em> manually, an optional <strong>File URL</strong> field is available in the view configuration form. If filled in, the data is fetched from that URL instead of the resource's own URL. This is useful when:</p>
 <ul>
@@ -1314,10 +1324,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://github.io/ckanext-tables/helpers/">
+        <link rel="canonical" href="https://datashades.github.io/ckanext-tables/helpers/">
       
       
         <link rel="prev" href="../generics/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../image/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1174,7 +1174,7 @@
 
 
 
-  <div class="doc doc-children">
+<div class="doc doc-children">
 
 
 
@@ -1237,21 +1237,21 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ckanext/tables/helpers.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">44</span>
-<span class="normal">45</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">45</span>
 <span class="normal">46</span>
 <span class="normal">47</span>
 <span class="normal">48</span>
 <span class="normal">49</span>
 <span class="normal">50</span>
-<span class="normal">51</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_get_columns_visibility_from_request</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the column visibility settings from the request arguments.</span>
+<span class="normal">51</span>
+<span class="normal">52</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_get_columns_visibility_from_request</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Get the column visibility settings from the request arguments.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A dictionary mapping column field names to their visibility state (True/False).</span>
 <span class="sd">        Only hidden columns are included in the dictionary with False value.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">&quot;hidden_column&quot;</span><span class="p">),</span> <span class="kc">False</span><span class="p">)</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">"hidden_column"</span><span class="p">),</span> <span class="kc">False</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1298,8 +1298,7 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ckanext/tables/helpers.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">24</span>
-<span class="normal">25</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">25</span>
 <span class="normal">26</span>
 <span class="normal">27</span>
 <span class="normal">28</span>
@@ -1315,15 +1314,16 @@
 <span class="normal">38</span>
 <span class="normal">39</span>
 <span class="normal">40</span>
-<span class="normal">41</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_get_filters_from_request</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">FilterItem</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the filters from the request arguments.</span>
+<span class="normal">41</span>
+<span class="normal">42</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_get_filters_from_request</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">FilterItem</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Get the filters from the request arguments.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A dictionary of filters</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">fields</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">&quot;field&quot;</span><span class="p">)</span>
-    <span class="n">operators</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">&quot;operator&quot;</span><span class="p">)</span>
-    <span class="n">values</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">&quot;value&quot;</span><span class="p">)</span>
+<span class="sd">    """</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">"field"</span><span class="p">)</span>
+    <span class="n">operators</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">"operator"</span><span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">args</span><span class="o">.</span><span class="n">getlist</span><span class="p">(</span><span class="s2">"value"</span><span class="p">)</span>
 
     <span class="n">filters</span> <span class="o">=</span> <span class="p">[]</span>
 
@@ -1343,7 +1343,7 @@
 
 
 <h2 id="tables.helpers.tables_guess_data_source" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">tables_guess_data_source</span><span class="p">(</span><span class="n">resource</span><span class="p">,</span> <span class="n">resource_view</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">tables_guess_data_source</span><span class="p">(</span><span class="n">resource</span><span class="p">,</span> <span class="n">resource_view</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 </h2>
 
@@ -1391,7 +1391,11 @@ resource format).</p>
               <p>
                   <span class="doc-param-annotation">
                     <b>TYPE:</b>
-                      <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+                      <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
+                  </span>
+                  <span class="doc-param-default">
+                    <b>DEFAULT:</b>
+                      <code>None</code>
                   </span>
               </p>
             </td>
@@ -1426,9 +1430,7 @@ resource format).</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ckanext/tables/helpers.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 88</span>
-<span class="normal"> 89</span>
-<span class="normal"> 90</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 90</span>
 <span class="normal"> 91</span>
 <span class="normal"> 92</span>
 <span class="normal"> 93</span>
@@ -1470,11 +1472,14 @@ resource format).</p>
 <span class="normal">129</span>
 <span class="normal">130</span>
 <span class="normal">131</span>
-<span class="normal">132</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_guess_data_source</span><span class="p">(</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span>
+<span class="normal">135</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_guess_data_source</span><span class="p">(</span>
     <span class="n">resource</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
-    <span class="n">resource_view</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">resource_view</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">BaseDataSource</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Guess the appropriate data source for a resource.</span>
+<span class="w">    </span><span class="sd">"""Guess the appropriate data source for a resource.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        resource: The resource dictionary.</span>
@@ -1485,36 +1490,37 @@ resource format).</p>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        An instantiated data source ready to use.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">file_url</span> <span class="o">=</span> <span class="n">resource_view</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;file_url&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+<span class="sd">    """</span>
+    <span class="n">file_url</span> <span class="o">=</span> <span class="p">(</span><span class="n">resource_view</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"file_url"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;datastore_active&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">file_url</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">DataStoreDataSource</span><span class="p">(</span><span class="n">resource_id</span><span class="o">=</span><span class="n">resource</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">file_url</span> <span class="ow">and</span> <span class="n">resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"datastore_active"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">p</span><span class="o">.</span><span class="n">plugin_loaded</span><span class="p">(</span><span class="s2">"datastore"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">DataStoreDataSource</span><span class="p">(</span><span class="n">resource_id</span><span class="o">=</span><span class="n">resource</span><span class="p">[</span><span class="s2">"id"</span><span class="p">])</span>
 
     <span class="k">if</span> <span class="n">file_url</span><span class="p">:</span>
         <span class="n">url</span> <span class="o">=</span> <span class="n">file_url</span>
-        <span class="n">fmt</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">file_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;?&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">fmt</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">file_url</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"?"</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">url</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;url&quot;</span><span class="p">)</span>
-        <span class="n">fmt</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;format&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">)</span>
+        <span class="n">fmt</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"format"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
 
     <span class="n">cache_backend</span> <span class="o">=</span> <span class="n">get_cache_backend</span><span class="p">()</span>
     <span class="n">data_sources</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;csv&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">CsvUrlDataSource</span><span class="p">,</span>
-        <span class="s2">&quot;xlsx&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">XlsxUrlDataSource</span><span class="p">,</span>
-        <span class="s2">&quot;orc&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">OrcUrlDataSource</span><span class="p">,</span>
-        <span class="s2">&quot;parquet&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">ParquetUrlDataSource</span><span class="p">,</span>
-        <span class="s2">&quot;feather&quot;</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">FeatherUrlDataSource</span><span class="p">,</span>
+        <span class="s2">"csv"</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">CsvUrlDataSource</span><span class="p">,</span>
+        <span class="s2">"xlsx"</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">XlsxUrlDataSource</span><span class="p">,</span>
+        <span class="s2">"orc"</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">OrcUrlDataSource</span><span class="p">,</span>
+        <span class="s2">"parquet"</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">ParquetUrlDataSource</span><span class="p">,</span>
+        <span class="s2">"feather"</span><span class="p">:</span> <span class="n">t</span><span class="o">.</span><span class="n">FeatherUrlDataSource</span><span class="p">,</span>
     <span class="p">}</span>
 
     <span class="n">data_source_class</span> <span class="o">=</span> <span class="n">data_sources</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">fmt</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">data_source_class</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">file_url</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">data_source_class</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_backend</span><span class="o">=</span><span class="n">cache_backend</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">data_source_class</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">,</span> <span class="n">resource</span><span class="o">=</span><span class="n">resource</span><span class="p">,</span> <span class="n">cache_backend</span><span class="o">=</span><span class="n">cache_backend</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">data_source_class</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unsupported format: </span><span class="si">{</span><span class="n">fmt</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported format: </span><span class="si">{</span><span class="n">fmt</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># noqa: TRY003</span>
+    <span class="k">if</span> <span class="n">file_url</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">data_source_class</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_backend</span><span class="o">=</span><span class="n">cache_backend</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">data_source_class</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">url</span><span class="p">,</span> <span class="n">resource</span><span class="o">=</span><span class="n">resource</span><span class="p">,</span> <span class="n">cache_backend</span><span class="o">=</span><span class="n">cache_backend</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -1565,7 +1571,7 @@ resource format).</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Optional resource view dictionary. When it contains a
+                <p>The resource view dictionary. When it contains a
 <code>file_url</code> key that URL is used instead of the resource URL and
 the format is inferred from its file extension.</p>
               </div>
@@ -1607,8 +1613,7 @@ the format is inferred from its file extension.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ckanext/tables/helpers.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">58</span>
-<span class="normal">59</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">59</span>
 <span class="normal">60</span>
 <span class="normal">61</span>
 <span class="normal">62</span>
@@ -1634,33 +1639,36 @@ the format is inferred from its file extension.</p>
 <span class="normal">82</span>
 <span class="normal">83</span>
 <span class="normal">84</span>
-<span class="normal">85</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_init_temporary_preview_table</span><span class="p">(</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_init_temporary_preview_table</span><span class="p">(</span>
     <span class="n">resource</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">resource_view</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">t</span><span class="o">.</span><span class="n">TableDefinition</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Initialize a temporary preview table for a given resource.</span>
+<span class="w">    </span><span class="sd">"""Initialize a temporary preview table for a given resource.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        resource: The resource dictionary containing the URL and format of the data.</span>
-<span class="sd">        resource_view: Optional resource view dictionary. When it contains a</span>
+<span class="sd">        resource_view: The resource view dictionary. When it contains a</span>
 <span class="sd">            ``file_url`` key that URL is used instead of the resource URL and</span>
 <span class="sd">            the format is inferred from its file extension.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        A TableDefinition object representing the initialized temporary preview table.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="n">data_source</span> <span class="o">=</span> <span class="n">tk</span><span class="o">.</span><span class="n">h</span><span class="o">.</span><span class="n">tables_guess_data_source</span><span class="p">(</span><span class="n">resource</span><span class="p">,</span> <span class="n">resource_view</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">TableDefinition</span><span class="p">(</span>
-        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;preview resource </span><span class="si">{</span><span class="n">resource</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"preview_resource_</span><span class="si">{</span><span class="n">resource</span><span class="p">[</span><span class="s1">'id'</span><span class="p">]</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">resource_view</span><span class="p">[</span><span class="s1">'id'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
         <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
         <span class="n">exporters</span><span class="o">=</span><span class="n">t</span><span class="o">.</span><span class="n">ALL_EXPORTERS</span><span class="p">,</span>
         <span class="n">ajax_url</span><span class="o">=</span><span class="n">tk</span><span class="o">.</span><span class="n">url_for</span><span class="p">(</span>
-            <span class="s2">&quot;tables.resource_table_ajax&quot;</span><span class="p">,</span>
-            <span class="n">resource_id</span><span class="o">=</span><span class="n">resource</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
-            <span class="n">resource_view_id</span><span class="o">=</span><span class="n">resource_view</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">],</span>
+            <span class="s2">"tables.resource_table_ajax"</span><span class="p">,</span>
+            <span class="n">resource_id</span><span class="o">=</span><span class="n">resource</span><span class="p">[</span><span class="s2">"id"</span><span class="p">],</span>
+            <span class="n">resource_view_id</span><span class="o">=</span><span class="n">resource_view</span><span class="p">[</span><span class="s2">"id"</span><span class="p">],</span>
         <span class="p">),</span>
-        <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="n">col</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">get_columns</span><span class="p">()],</span>
+        <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">ColumnDefinition</span><span class="p">(</span><span class="n">field</span><span class="o">=</span><span class="n">col</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="n">col</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">get_columns</span><span class="p">()],</span>
+        <span class="n">table_layout</span><span class="o">=</span><span class="s2">"fitDataStretch"</span><span class="p">,</span>
     <span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
@@ -1736,8 +1744,7 @@ the format is inferred from its file extension.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>ckanext/tables/helpers.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">12</span>
-<span class="normal">13</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">13</span>
 <span class="normal">14</span>
 <span class="normal">15</span>
 <span class="normal">16</span>
@@ -1745,15 +1752,16 @@ the format is inferred from its file extension.</p>
 <span class="normal">18</span>
 <span class="normal">19</span>
 <span class="normal">20</span>
-<span class="normal">21</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_json_dumps</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert a value to a JSON string.</span>
+<span class="normal">21</span>
+<span class="normal">22</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">tables_json_dumps</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Convert a value to a JSON string.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        value: The value to convert to a JSON string</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        The JSON string</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
     <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
@@ -1865,10 +1873,10 @@ the format is inferred from its file extension.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

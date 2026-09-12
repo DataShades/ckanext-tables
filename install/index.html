@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://github.io/ckanext-tables/install/">
+        <link rel="canonical" href="https://datashades.github.io/ckanext-tables/install/">
       
       
         <link rel="prev" href="..">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../image/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1123,15 +1123,15 @@
 </thead>
 <tbody>
 <tr>
-<td>2.9 and earlier</td>
+<td>2.10 and earlier</td>
 <td>no</td>
 </tr>
 <tr>
-<td>2.10</td>
+<td>2.11</td>
 <td>yes</td>
 </tr>
 <tr>
-<td>2.11</td>
+<td>2.12</td>
 <td>yes</td>
 </tr>
 <tr>
@@ -1161,8 +1161,10 @@
 do:</p>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/DataShades/ckanext-tables.git
 <span class="nb">cd</span><span class="w"> </span>ckanext-tables
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">&#39;.[docs,test]&#39;</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.[docs,test,dev]'</span>
+pre-commit<span class="w"> </span>install
 </code></pre></div>
+<p><code>pre-commit install</code> sets up git hooks that run <code>ruff</code> and <code>pyright</code> before each commit — the same checks CI runs.</p>
 
 
 
@@ -1260,10 +1262,10 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>

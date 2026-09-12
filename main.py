@@ -8,9 +8,7 @@ def define_env(env: object) -> None:
 
     @env.macro
     def render_config_options():
-        with open(
-            Path(env.project_dir) / "ckanext" / "tables" / "config_declaration.yml"
-        ) as f:
+        with open(Path(env.project_dir) / "ckanext" / "tables" / "config_declaration.yml") as f:
             data = yaml.safe_load(f)
 
         markdown = ""
@@ -36,11 +34,18 @@ def define_env(env: object) -> None:
         markdown = ""
 
         key = opt.get("key", "")
-        default = opt.get("default", "None")
         example = opt.get("example", "")
         desc = opt.get("description", "").strip()
         dtype = opt.get("type", "string")
         allowed_values = opt.get("allowed_values", [])
+
+        # An option with no `default` is computed at runtime rather than applied by
+        # CKAN's config declaration as a literal value (see the comment next to
+        # `ckanext.tables.cache.cache_dir`); `placeholder` documents what that computed
+        # value looks like without CKAN ever treating it as the real default.
+        has_default = "default" in opt
+        default_label = "Default" if has_default else "Computed default"
+        default_value = opt["default"] if has_default else opt.get("placeholder", "None")
 
         markdown += f"### `{key}`\n\n"
 
@@ -50,7 +55,7 @@ def define_env(env: object) -> None:
         markdown += "| | |\n"
         markdown += "|---|---|\n"
         markdown += f"| **Type** | `{dtype}` |\n"
-        markdown += f"| **Default** | `{default}` |\n"
+        markdown += f"| **{default_label}** | `{default_value}` |\n"
 
         if allowed_values:
             values_str = ", ".join(f"`{v}`" for v in allowed_values)

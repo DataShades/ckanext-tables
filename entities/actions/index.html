@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://github.io/ckanext-tables/entities/actions/">
+        <link rel="canonical" href="https://datashades.github.io/ckanext-tables/entities/actions/">
       
       
         <link rel="prev" href="../column/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../image/favicon.ico">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -29,7 +29,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.618322db.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -1135,11 +1135,11 @@
 
 
 <h1 id="action-definitions">Action Definitions</h1>
-<p>Actions are operations that can be performed on table data There are 3 types of actions: bulk actions, table actions, and row actions.</p>
+<p>Actions are operations that can be performed on table data. There are 3 types of actions: bulk actions, table actions, and row actions.</p>
 <ol>
 <li><strong>Bulk Actions</strong>: Actions that can be performed on multiple selected rows. Selected rows are passed to the action callback, allowing for operations on multiple items at once.</li>
 <li><strong>Table Actions</strong>: Actions that can be performed on the table as a whole. It doesn't have an access to the row data, so it's typically used for operations that affect the entire table, e.g. cleaning the table data.</li>
-<li><strong>Row Actions</strong>: Actions that can be performed on individual rows. These actions are acce</li>
+<li><strong>Row Actions</strong>: Actions that can be performed on individual rows. These actions are accessible via a per-row menu and receive the row's data in the action callback.</li>
 </ol>
 <p>Each action callback returns an <code>ActionHandlerResult</code> object, below you can see its definition:</p>
 
@@ -1254,14 +1254,14 @@
 <span class="normal">31</span>
 <span class="normal">32</span>
 <span class="normal">33</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">ActionHandlerResult</span><span class="p">(</span><span class="n">TypedDict</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Represents the result of an action handler.</span>
+<span class="w">    </span><span class="sd">"""Represents the result of an action handler.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        success: Indicates whether the action was successful.</span>
 <span class="sd">        error: (Optional) Error message if the action failed.</span>
 <span class="sd">        redirect: (Optional) URL to redirect to after the action.</span>
 <span class="sd">        message: (Optional) Informational message about the action result.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">success</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">error</span><span class="p">:</span> <span class="n">NotRequired</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span>
@@ -1272,7 +1272,7 @@
 
 
 
-  <div class="doc doc-children">
+<div class="doc doc-children">
 
 
 
@@ -1359,7 +1359,7 @@
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="list">list</span>[<span title="ckanext.tables.types.Row">Row</span>]], <span title="ckanext.tables.types.ActionHandlerResult">ActionHandlerResult</span>]</code>
+                      <code><span title="ckanext.tables.types.BulkActionHandler">BulkActionHandler</span></code>
                   </span>
               </p>
             </td>
@@ -1378,6 +1378,21 @@
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="tables.table.BulkActionDefinition.with_confirmation">with_confirmation</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>(Optional) Whether to show a confirmation dialog before executing the action.
+Defaults to True, since a bulk action affects every selected row.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1390,40 +1405,46 @@
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>ckanext/tables/table.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">310</span>
-<span class="normal">311</span>
-<span class="normal">312</span>
-<span class="normal">313</span>
-<span class="normal">314</span>
-<span class="normal">315</span>
-<span class="normal">316</span>
-<span class="normal">317</span>
-<span class="normal">318</span>
-<span class="normal">319</span>
-<span class="normal">320</span>
-<span class="normal">321</span>
-<span class="normal">322</span>
-<span class="normal">323</span>
-<span class="normal">324</span>
-<span class="normal">325</span>
-<span class="normal">326</span>
-<span class="normal">327</span>
-<span class="normal">328</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">346</span>
+<span class="normal">347</span>
+<span class="normal">348</span>
+<span class="normal">349</span>
+<span class="normal">350</span>
+<span class="normal">351</span>
+<span class="normal">352</span>
+<span class="normal">353</span>
+<span class="normal">354</span>
+<span class="normal">355</span>
+<span class="normal">356</span>
+<span class="normal">357</span>
+<span class="normal">358</span>
+<span class="normal">359</span>
+<span class="normal">360</span>
+<span class="normal">361</span>
+<span class="normal">362</span>
+<span class="normal">363</span>
+<span class="normal">364</span>
+<span class="normal">365</span>
+<span class="normal">366</span>
+<span class="normal">367</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">BulkActionDefinition</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Defines an action that can be performed on multiple rows.</span>
+<span class="w">    </span><span class="sd">"""Defines an action that can be performed on multiple rows.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        action: Unique identifier for the action.</span>
 <span class="sd">        label: Display label for the action.</span>
 <span class="sd">        callback: Function to be called when the action is triggered.</span>
 <span class="sd">        icon: (Optional) Icon class for the action.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">        with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.</span>
+<span class="sd">            Defaults to True, since a bulk action affects every selected row.</span>
+<span class="sd">    """</span>
 
     <span class="n">action</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">Row</span><span class="p">]],</span> <span class="n">types</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">]</span>
+    <span class="n">callback</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">BulkActionHandler</span>
     <span class="n">icon</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">attrs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataclass_field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">with_confirmation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">Row</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">callback</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
@@ -1432,7 +1453,7 @@
 
 
 
-  <div class="doc doc-children">
+<div class="doc doc-children">
 
 
 
@@ -1519,7 +1540,7 @@
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="collections.abc.Callable">Callable</span>[..., <span title="ckanext.tables.types.ActionHandlerResult">ActionHandlerResult</span>]</code>
+                      <code><span title="ckanext.tables.types.TableActionHandler">TableActionHandler</span></code>
                   </span>
               </p>
             </td>
@@ -1538,6 +1559,21 @@
               </p>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="tables.table.TableActionDefinition.with_confirmation">with_confirmation</span></code></td>
+            <td class="doc-attribute-details">
+              <div class="doc-md-description">
+                <p>(Optional) Whether to show a confirmation dialog before executing the action.
+Defaults to True; set to False for a non-destructive actions.</p>
+              </div>
+              <p>
+                  <span class="doc-attribute-annotation">
+                    <b>TYPE:</b>
+                      <code><span title="bool">bool</span></code>
+                  </span>
+              </p>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1550,40 +1586,46 @@
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>ckanext/tables/table.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">331</span>
-<span class="normal">332</span>
-<span class="normal">333</span>
-<span class="normal">334</span>
-<span class="normal">335</span>
-<span class="normal">336</span>
-<span class="normal">337</span>
-<span class="normal">338</span>
-<span class="normal">339</span>
-<span class="normal">340</span>
-<span class="normal">341</span>
-<span class="normal">342</span>
-<span class="normal">343</span>
-<span class="normal">344</span>
-<span class="normal">345</span>
-<span class="normal">346</span>
-<span class="normal">347</span>
-<span class="normal">348</span>
-<span class="normal">349</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">370</span>
+<span class="normal">371</span>
+<span class="normal">372</span>
+<span class="normal">373</span>
+<span class="normal">374</span>
+<span class="normal">375</span>
+<span class="normal">376</span>
+<span class="normal">377</span>
+<span class="normal">378</span>
+<span class="normal">379</span>
+<span class="normal">380</span>
+<span class="normal">381</span>
+<span class="normal">382</span>
+<span class="normal">383</span>
+<span class="normal">384</span>
+<span class="normal">385</span>
+<span class="normal">386</span>
+<span class="normal">387</span>
+<span class="normal">388</span>
+<span class="normal">389</span>
+<span class="normal">390</span>
+<span class="normal">391</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">TableActionDefinition</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Defines an action that can be performed on the table itself.</span>
+<span class="w">    </span><span class="sd">"""Defines an action that can be performed on the table itself.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        action: Unique identifier for the action.</span>
 <span class="sd">        label: Display label for the action.</span>
 <span class="sd">        callback: Function to be called when the action is triggered.</span>
 <span class="sd">        icon: (Optional) Icon class for the action.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">        with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.</span>
+<span class="sd">            Defaults to True; set to False for a non-destructive actions.</span>
+<span class="sd">    """</span>
 
     <span class="n">action</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">types</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">]</span>
+    <span class="n">callback</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TableActionHandler</span>
     <span class="n">icon</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">attrs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataclass_field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">with_confirmation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">callback</span><span class="p">()</span>
@@ -1592,7 +1634,7 @@
 
 
 
-  <div class="doc doc-children">
+<div class="doc doc-children">
 
 
 
@@ -1679,7 +1721,7 @@
               <p>
                   <span class="doc-attribute-annotation">
                     <b>TYPE:</b>
-                      <code><span title="collections.abc.Callable">Callable</span>[[<span title="ckanext.tables.types.Row">Row</span>], <span title="ckanext.tables.types.ActionHandlerResult">ActionHandlerResult</span>]</code>
+                      <code><span title="ckanext.tables.types.RowActionHandler">RowActionHandler</span></code>
                   </span>
               </p>
             </td>
@@ -1724,29 +1766,29 @@
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>ckanext/tables/table.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">352</span>
-<span class="normal">353</span>
-<span class="normal">354</span>
-<span class="normal">355</span>
-<span class="normal">356</span>
-<span class="normal">357</span>
-<span class="normal">358</span>
-<span class="normal">359</span>
-<span class="normal">360</span>
-<span class="normal">361</span>
-<span class="normal">362</span>
-<span class="normal">363</span>
-<span class="normal">364</span>
-<span class="normal">365</span>
-<span class="normal">366</span>
-<span class="normal">367</span>
-<span class="normal">368</span>
-<span class="normal">369</span>
-<span class="normal">370</span>
-<span class="normal">371</span>
-<span class="normal">372</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">394</span>
+<span class="normal">395</span>
+<span class="normal">396</span>
+<span class="normal">397</span>
+<span class="normal">398</span>
+<span class="normal">399</span>
+<span class="normal">400</span>
+<span class="normal">401</span>
+<span class="normal">402</span>
+<span class="normal">403</span>
+<span class="normal">404</span>
+<span class="normal">405</span>
+<span class="normal">406</span>
+<span class="normal">407</span>
+<span class="normal">408</span>
+<span class="normal">409</span>
+<span class="normal">410</span>
+<span class="normal">411</span>
+<span class="normal">412</span>
+<span class="normal">413</span>
+<span class="normal">414</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">RowActionDefinition</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Defines an action that can be performed on a row.</span>
+<span class="w">    </span><span class="sd">"""Defines an action that can be performed on a row.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        action: Unique identifier for the action.</span>
@@ -1754,11 +1796,11 @@
 <span class="sd">        callback: Function to be called when the action is triggered.</span>
 <span class="sd">        icon: (Optional) Icon class for the action.</span>
 <span class="sd">        with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="n">action</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
-    <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">types</span><span class="o">.</span><span class="n">Row</span><span class="p">],</span> <span class="n">types</span><span class="o">.</span><span class="n">ActionHandlerResult</span><span class="p">]</span>
+    <span class="n">callback</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">RowActionHandler</span>
     <span class="n">icon</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">attrs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataclass_field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
     <span class="n">with_confirmation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
@@ -1770,7 +1812,7 @@
 
 
 
-  <div class="doc doc-children">
+<div class="doc doc-children">
 
 
 
@@ -1885,10 +1927,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.footer", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.select", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
