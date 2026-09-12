@@ -51,3 +51,21 @@ def tables_get_columns_visibility_from_request() -> dict[str, bool]:
 
 def tables_generate_unique_id() -> str:
     return str(uuid.uuid4())
+
+
+def tables_column_actions_field() -> str:
+    """Return the synthetic field name used for the row-actions column.
+
+    Lets templates recognise/exclude it without duplicating the constant.
+    """
+    return t.COLUMN_ACTIONS_FIELD
+
+
+def tables_filter_operators() -> list[dict[str, str]]:
+    """Return the filter-operator dropdown options, with translated labels.
+
+    Single source for ``value``/``operator`` in every filter UI, translated
+    here (render time) rather than baked into the ``FILTER_OPERATORS``
+    constant at import time.
+    """
+    return [{"value": value, "label": tk._(label)} for value, label in t.FILTER_OPERATORS]

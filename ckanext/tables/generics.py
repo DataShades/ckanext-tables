@@ -92,11 +92,14 @@ class ExportTableMixin:
         exporter = table.get_exporter(exporter_name)
 
         if not exporter:
-            return tk.abort(404, tk._(f"Exporter {exporter_name} not found"))
+            message = tk._("Exporter %(name)s not found") % {"name": exporter_name}
+            return tk.abort(404, message)
 
         if not exporter.is_available():
             log.warning("Exporter %s is unavailable: a required dependency is not installed", exporter_name)
-            message = tk._(f"{exporter.label} export is not available: a required dependency is not installed.")
+            message = tk._("%(label)s export is not available: a required dependency is not installed.") % {
+                "label": exporter.label
+            }
             return tk.abort(501, message)
 
         params = tables_build_params()
@@ -104,10 +107,10 @@ class ExportTableMixin:
         max_rows = get_export_max_rows()
 
         if total > max_rows:
-            return tk.abort(
-                413,
-                tk._(f"Cannot export {total} rows: the maximum is {max_rows}. Add filters to narrow the result set."),
-            )
+            message = tk._(
+                "Cannot export %(total)d rows: the maximum is %(max_rows)d. Add filters to narrow the result set."
+            ) % {"total": total, "max_rows": max_rows}
+            return tk.abort(413, message)
 
         filename = self._prepare_export_filename(table, exporter)
 
@@ -173,11 +176,20 @@ class GenericTableView(TableDispatchMixin, MethodView):
     def __init__(
         self,
         table: type[TableDefinition],
-        breadcrumb_label: str = "Table",
+        breadcrumb_label: str | None = None,
         page_title: str = "",
     ):
+        """Set up the view.
+
+        Args:
+            table: The table definition class to render.
+            breadcrumb_label: Already-translated label shown in the breadcrumb (the
+                template renders it as-is, so pass the result of your own ``tk._(...)``
+                call if it needs translating). Defaults to a translated "Table".
+            page_title: Already-translated page title shown above the table.
+        """
         self.table = table
-        self.breadcrumb_label = breadcrumb_label
+        self.breadcrumb_label = breadcrumb_label if breadcrumb_label is not None else tk._("Table")
         self.page_title = page_title
 
     def get(self) -> str | Response:

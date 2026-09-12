@@ -47,3 +47,14 @@ class FilterItem:
     field: str
     operator: str
     value: Any
+
+
+FILTER_OPERATORS: list[tuple[str, str]] = [
+    ("=", "Equals"),
+    ("!=", "Not equals"),
+    (">", "Greater than"),
+    (">=", "Greater than or equal to"),
+    ("<", "Less than"),
+    ("<=", "Less than or equal to"),
+    ("like", "Like"),
+]

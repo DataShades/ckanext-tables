@@ -12,16 +12,8 @@
         </select>
 
         <select name="operator-{{ unique_id }}" class="form-select filter-operator w-50">
-            {% for label, value in {
-                "Equals": "=",
-                "Not equals": "!=",
-                "Greater than": ">",
-                "Greater than or equal to": ">=",
-                "Less than": "<",
-                "Less than or equal to": "<=",
-                "Like": "like"
-            }.items() %}
-                <option value="{{ value }}" {{ "selected" if value == operator }}>{{ label }}</option>
+            {% for op in h.tables_filter_operators() %}
+                <option value="{{ op.value }}" {{ "selected" if op.value == operator }}>{{ op.label }}</option>
             {% endfor %}
         </select>
 

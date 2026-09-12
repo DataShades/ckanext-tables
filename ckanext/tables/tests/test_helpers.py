@@ -1,9 +1,15 @@
+import pytest
+
 from ckanext.tables.helpers import (
+    tables_column_actions_field,
+    tables_filter_operators,
     tables_generate_unique_id,
     tables_get_columns_visibility_from_request,
     tables_get_filters_from_request,
     tables_json_dumps,
 )
+from ckanext.tables.table import COLUMN_ACTIONS_FIELD
+from ckanext.tables.types import FILTER_OPERATORS
 
 
 class TestTablesJsonDumps:
@@ -81,3 +87,19 @@ class TestColumnsVisibility:
         with app.flask_app.test_request_context(qs):
             result = tables_get_columns_visibility_from_request()
             assert result == {"name": False, "age": False}
+
+
+class TestTablesColumnActionsField:
+    def test_matches_the_table_module_constant(self):
+        assert tables_column_actions_field() == COLUMN_ACTIONS_FIELD
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestTablesFilterOperators:
+    def test_values_match_the_canonical_list(self):
+        result = tables_filter_operators()
+        assert [op["value"] for op in result] == [value for value, _label in FILTER_OPERATORS]
+
+    def test_labels_are_translated_strings(self):
+        result = tables_filter_operators()
+        assert all(isinstance(op["label"], str) and op["label"] for op in result)

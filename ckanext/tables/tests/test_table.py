@@ -294,9 +294,6 @@ class TestTableDefinitionCacheIntegration:
         tbl = TableDefinition(name="cached_tbl", data_source=ds)
         tbl.refresh_data()  # should not raise even if cache is empty
 
-    def test_table_without_cache_returns_none_count(self, simple_table):
-        assert simple_table._get_cached_count(QueryParams()) is None
-
     def test_count_caching_returns_consistent_value(self, simple_data):
         from ckanext.tables.cache import RedisCacheBackend
         from ckanext.tables.data_sources import CsvUrlDataSource
@@ -312,26 +309,6 @@ class TestTableDefinitionCacheIntegration:
         tbl = TableDefinition(name="count_cache_tbl", data_source=ds)
         params = QueryParams()
         assert tbl.get_total_count(params) == tbl.get_total_count(params)
-
-    def test_count_cache_key_ignores_page_size_and_sort(self, simple_table):
-        # The count only depends on filters (see get_total_count), so page/size/sort
-        # must not affect the cache key — otherwise every page or sort change with a
-        # filter present re-counts and leaves an unread, expired cache entry.
-        base = QueryParams(page=1, size=10, sort_by=None, sort_order=None, filters=[FilterItem("x", "=", "1")])
-        other = QueryParams(page=3, size=50, sort_by="x", sort_order="desc", filters=[FilterItem("x", "=", "1")])
-        assert simple_table._count_cache_key(base) == simple_table._count_cache_key(other)
-
-    def test_count_cache_key_stable_across_filter_value_types(self, simple_table):
-        # Equal filters with "30" vs 30 should not produce different keys.
-        str_params = QueryParams(filters=[FilterItem("age", "=", "30")])
-        int_params = QueryParams(filters=[FilterItem("age", "=", 30)])
-        assert simple_table._count_cache_key(str_params) == simple_table._count_cache_key(int_params)
-
-    def test_count_cache_key_differs_by_filter(self, simple_table):
-        no_filter = simple_table._count_cache_key(QueryParams())
-        with_filter = simple_table._count_cache_key(QueryParams(filters=[FilterItem("age", "=", 30)]))
-        other_filter = simple_table._count_cache_key(QueryParams(filters=[FilterItem("age", "=", 31)]))
-        assert no_filter != with_filter != other_filter
 
     def test_refresh_data_invalidates_the_dataframe(self, simple_data, tmp_path):
         # refresh_data() used to delete "table:<name>", a key the DataFrame was never
@@ -386,11 +363,11 @@ class TestTableDefinitionCacheIntegration:
         params = QueryParams(filters=[FilterItem("age", "=", 30)])
         tbl.get_total_count(params)  # populates a filtered count entry
 
-        assert tbl._get_cached_count(params) is not None
+        assert ds.get_cached_count(params.filters) is not None
 
         tbl.refresh_data()
 
-        assert tbl._get_cached_count(params) is None
+        assert ds.get_cached_count(params.filters) is None
 
 
 @pytest.mark.ckan_config("ckan.plugins", "tables")

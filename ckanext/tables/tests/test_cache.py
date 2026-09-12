@@ -20,6 +20,7 @@ from ckanext.tables.cache import (
     _TablesJSONEncoder,
     get_cache_backend,
 )
+from ckanext.tables.types import FilterItem
 
 
 def _expire(meta_path: str) -> None:
@@ -526,6 +527,59 @@ class TestInvalidateCacheEntry:
 
         assert second_gen is not None
         assert second_gen != first_gen
+
+
+class _FakeCachedDataSource(cache.CachedDataSourceMixin):
+    """Minimal concrete data source for exercising the mixin's count-cache logic."""
+
+    def __init__(self, backend: cache.CacheBackend, key: str = "fake-key", ttl: int = 60):
+        self.cache_backend = backend
+        self.cache_ttl = ttl
+        self._key = key
+
+    def get_cache_key(self) -> str:
+        return self._key
+
+
+class TestCachedDataSourceMixinCounts:
+    def test_get_cached_count_is_none_on_a_miss(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        assert ds.get_cached_count([]) is None
+
+    def test_set_then_get_returns_the_cached_value(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        ds.set_cached_count([], 3)
+        assert ds.get_cached_count([]) == 3
+
+    def test_count_cache_key_ignores_page_size_and_sort(self, feather_backend):
+        # get_total_count only ever passes filters (see TableDefinition.get_total_count),
+        # so nothing here needs to be sensitive to page/size/sort.
+        ds = _FakeCachedDataSource(feather_backend)
+        filters = [FilterItem("x", "=", "1")]
+        assert ds._count_cache_key(filters) == ds._count_cache_key(filters)
+
+    def test_count_cache_key_stable_across_filter_value_types(self, feather_backend):
+        # Equal filters with "30" vs 30 should not produce different keys.
+        ds = _FakeCachedDataSource(feather_backend)
+        str_key = ds._count_cache_key([FilterItem("age", "=", "30")])
+        int_key = ds._count_cache_key([FilterItem("age", "=", 30)])
+        assert str_key == int_key
+
+    def test_count_cache_key_differs_by_filter(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        no_filter = ds._count_cache_key([])
+        with_filter = ds._count_cache_key([FilterItem("age", "=", 30)])
+        other_filter = ds._count_cache_key([FilterItem("age", "=", 31)])
+        assert no_filter != with_filter != other_filter
+
+    def test_invalidate_orphans_previously_cached_counts(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        ds.set_cached_count([], 3)
+        assert ds.get_cached_count([]) is not None
+
+        ds.invalidate()
+
+        assert ds.get_cached_count([]) is None
 
 
 class TestGetCacheBackend:

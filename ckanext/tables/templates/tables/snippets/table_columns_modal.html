@@ -25,7 +25,7 @@
 
                 <div id="columns-container" style="max-height: 300px; overflow: auto" class="list-group list-group-flush overflow-y-auto">
                     {% for column in table.columns %}
-                        {% if column.field != '__table_actions' %}
+                        {% if column.field != h.tables_column_actions_field() %}
                             <label class="list-group-item d-flex align-items-center gap-2">
                                 <input
                                     type="checkbox"

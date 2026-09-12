@@ -16,6 +16,8 @@ class TestTablesPlugin:
         assert hasattr(tk.h, "tables_get_filters_from_request")
         assert hasattr(tk.h, "tables_get_columns_visibility_from_request")
         assert hasattr(tk.h, "tables_generate_unique_id")
+        assert hasattr(tk.h, "tables_column_actions_field")
+        assert hasattr(tk.h, "tables_filter_operators")
 
     def test_can_view_csv(self):
         plugin = TablesPlugin()

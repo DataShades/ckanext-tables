@@ -14,6 +14,7 @@ from .data_sources import (
 from .exporters import ALL_EXPORTERS
 from .generics import GenericTableView
 from .table import (
+    COLUMN_ACTIONS_FIELD,
     BulkActionDefinition,
     ColumnDefinition,
     RowActionDefinition,
@@ -21,6 +22,7 @@ from .table import (
     TableDefinition,
 )
 from .types import (
+    FILTER_OPERATORS,
     ActionHandlerResult,
     BulkActionHandler,
     FilterItem,
@@ -64,6 +66,8 @@ __all__ = [
     "Value",
     "tables_build_params",
     "ALL_EXPORTERS",
+    "COLUMN_ACTIONS_FIELD",
+    "FILTER_OPERATORS",
     "CacheBackend",
     "FeatherCacheBackend",
     "ParquetCacheBackend",

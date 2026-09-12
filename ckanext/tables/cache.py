@@ -25,6 +25,7 @@ import ckan.plugins.toolkit as tk
 from ckan.lib.redis import connect_to_redis
 
 from ckanext.tables.config import CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND, get_cache_dir
+from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
 
@@ -579,16 +580,42 @@ class CachedDataSourceMixin:
         """Remove this data source's cached DataFrame and orphan every count derived from it."""
         invalidate_cache_entry(self.cache_backend, self.get_cache_key(), self.cache_ttl)
 
+    def get_cached_count(self, filters: list[FilterItem]) -> int | None:
+        """Return the cached row count for *filters*, or ``None`` on a cache miss."""
+        result = self.cache_backend.get(self._count_cache_key(filters))
+        return int(result) if result is not None else None
+
+    def set_cached_count(self, filters: list[FilterItem], count: int) -> None:
+        """Cache *count* for *filters* under the current generation."""
+        self.cache_backend.set(self._count_cache_key(filters), count, self.cache_ttl)
+
+    def _generation(self) -> str:
+        """Return the current cache generation, bumped by ``invalidate()`` to orphan old counts."""
+        generation = self.cache_backend.get(f"{self.get_cache_key()}:gen")
+        return generation if isinstance(generation, str) else "0"
+
+    def _count_cache_key(self, filters: list[FilterItem]) -> str:
+        """Return the cache sub-key for a given set of filters (count ignores page/size/sort)."""
+        key = self.get_cache_key()
+        generation = self._generation()
+
+        if not filters:
+            return f"{key}:count:{generation}"
+
+        filters_key = "|".join(f"{f.field}:{f.operator}:{f.value}" for f in filters)
+        return f"{key}:count:{generation}:{filters_key}"
+
 
 def invalidate_cache_entry(cache_backend: CacheBackend, key: str, ttl: int) -> None:
     """Delete *key* and make every count cached against it unreachable.
 
     A count is cached per distinct filter combination a user has applied (see
-    ``TableDefinition._count_cache_key``) — an unbounded set that can't be
-    enumerated and deleted directly. Bumping a generation token stored under
-    ``f"{key}:gen"`` instead means any count computed *after* this call uses a
-    new key, so a stale one is never served again; the orphaned old entries
-    are simply left to expire via their own TTL, like any other expired entry.
+    ``CachedDataSourceMixin._count_cache_key``) — an unbounded set that can't
+    be enumerated and deleted directly. Bumping a generation token stored
+    under ``f"{key}:gen"`` instead means any count computed *after* this call
+    uses a new key, so a stale one is never served again; the orphaned old
+    entries are simply left to expire via their own TTL, like any other
+    expired entry.
     """
     cache_backend.delete(key)
     cache_backend.set(f"{key}:gen", uuid.uuid4().hex, ttl)

@@ -53,15 +53,6 @@ class TableDefinition:
     table_layout: str = "fitColumns"
 
     def __post_init__(self):
-        if isinstance(self.data_source, CachedDataSourceMixin):
-            self._cache = self.data_source.cache_backend
-            self._cache_key = self.data_source.get_cache_key()
-            self._cache_ttl = self.data_source.cache_ttl
-        else:
-            self._cache = None
-            self._cache_key = ""
-            self._cache_ttl = 0
-
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
 
         # Scratch space formatters may use to memoise per-render work (e.g. a
@@ -156,52 +147,20 @@ class TableDefinition:
         )
 
     def get_total_count(self, params: types.QueryParams) -> int:
-        cached = self._get_cached_count(params)
+        cached_source = self.data_source if isinstance(self.data_source, CachedDataSourceMixin) else None
 
-        if cached is not None:
-            return cached
+        if cached_source is not None:
+            cached = cached_source.get_cached_count(params.filters)
+            if cached is not None:
+                return cached
 
         # for total count we only apply filter, without sort and pagination
         count = self.data_source.filter(params.filters).count()
 
-        self._set_cached_count(params, count)
+        if cached_source is not None:
+            cached_source.set_cached_count(params.filters, count)
 
         return count
-
-    def _generation(self) -> str:
-        """Return the current cache generation, bumped by refresh_data() to orphan old counts."""
-        if self._cache is None:
-            return "0"
-
-        generation = self._cache.get(f"{self._cache_key}:gen")
-        return generation if isinstance(generation, str) else "0"
-
-    def _count_cache_key(self, params: types.QueryParams) -> str:
-        """Return the cache sub-key for a given set of filters (count ignores page/size/sort)."""
-        generation = self._generation()
-
-        if not params.filters:
-            return f"{self._cache_key}:count:{generation}"
-
-        filters_key = "|".join(f"{f.field}:{f.operator}:{f.value}" for f in params.filters)
-        return f"{self._cache_key}:count:{generation}:{filters_key}"
-
-    def _get_cached_count(self, params: types.QueryParams) -> int | None:
-        if self._cache is None:
-            return None
-
-        result = self._cache.get(self._count_cache_key(params))
-
-        if result is not None:
-            return int(result)
-
-        return None
-
-    def _set_cached_count(self, params: types.QueryParams, count: int) -> None:
-        if self._cache is None:
-            return
-
-        self._cache.set(self._count_cache_key(params), count, self._cache_ttl)
 
     def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
         """Apply formatters to each cell in a row.

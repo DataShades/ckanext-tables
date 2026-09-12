@@ -15,8 +15,11 @@ The `GenericTableView` is a Flask `MethodView` that automatically renders any re
 ### Constructor Parameters
 
 - **`table`** (`type[TableDefinition]`, required): The table definition class to be rendered.
-- **`breadcrumb_label`** (`str`, optional): Label shown in breadcrumbs. Defaults to "Table"
-- **`page_title`** (`str`, optional): Page title shown in the browser/header. Defaults to empty string
+- **`breadcrumb_label`** (`str`, optional): Label shown in breadcrumbs. The template renders it
+  as-is, so pass an already-translated string (e.g. the result of your own `tk._(...)` call).
+  Defaults to a translated "Table".
+- **`page_title`** (`str`, optional): Page title shown in the browser/header. Also rendered as-is
+  — translate it yourself before passing it in. Defaults to empty string.
 
 ### Access Control
 

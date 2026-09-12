@@ -425,6 +425,16 @@ class PandasDataSource(BaseDataSource):
         return str(val)
 
 
+def resource_cache_key(resource_id: str) -> str:
+    """Return the cache key a resource's cached DataFrame is stored under.
+
+    Shared with ``plugin.py``'s ``before_resource_update``/``before_resource_delete``
+    hooks so cache invalidation always targets the same key ``get_cache_key()``
+    below writes under, without hand-copying the ``"resource-"`` prefix.
+    """
+    return f"resource-{resource_id}"
+
+
 class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     """A data source that loads resource data from a file or URL.
 
@@ -462,7 +472,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         self.cache_ttl = cache_ttl if cache_ttl is not None else get_cache_ttl()
 
     def get_cache_key(self) -> str:
-        return f"resource-{self.resource['id']}" if self.resource else f"url-{self.url}"
+        return resource_cache_key(self.resource["id"]) if self.resource else f"url-{self.url}"
 
     def get_source_path(self) -> str:
         if self._source_path:

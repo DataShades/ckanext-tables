@@ -249,7 +249,7 @@ class PDFExporter(ExporterBase):
         # pip-installed and still raise OSError on import if those system
         # libraries are missing.
         try:
-            importlib.import_module("weasyprint")
+            import weasyprint  # noqa: F401, PLC0415  # pyright: ignore[reportUnusedImport]
         except (ImportError, OSError):
             return False
 

@@ -12,7 +12,7 @@ namespace ckan {
     export var pubsub: any;
     export var module: (name: string, initializer: ($: any) => any) => any;
     export var i18n: {
-        _: (msgid: string) => string;
+        _: (msgid: string, values?: Record<string, string | number>) => string;
     };
     export var tablesToast: (options: { message: string; type?: string; title?: string, stacking?: boolean }) => void;
     export var tablesConfirm: (options: { message: string; onConfirm: () => void }) => void;
@@ -182,7 +182,7 @@ ckan.module("tables-tabulator", function ($) {
 
         _confirmAction: function (label: string, callback: () => void): void {
             ckan.tablesConfirm({
-                message: ckan.i18n._(`Are you sure you want to perform this action: ${label}?`),
+                message: ckan.i18n._("Are you sure you want to perform this action: %(label)s?", { label }),
                 onConfirm: callback,
             });
         },
@@ -199,7 +199,7 @@ ckan.module("tables-tabulator", function ($) {
             const form = new FormData();
             form.append("row_action", action.name);
             form.append("row", JSON.stringify(row.getData()));
-            this._sendActionRequest(form, ckan.i18n._(`Row action completed: ${action.label}`));
+            this._sendActionRequest(form, ckan.i18n._("Row action completed: %(label)s", { label: action.label }));
         },
 
         _sendActionRequest: function (form: FormData, successMessage: string): Promise<void> {
@@ -436,7 +436,7 @@ ckan.module("tables-tabulator", function ($) {
             const form = new FormData();
             form.append("bulk_action", bulkAction);
             form.append("rows", JSON.stringify(data));
-            this._sendActionRequest(form, ckan.i18n._(`Bulk action completed: ${label}`));
+            this._sendActionRequest(form, ckan.i18n._("Bulk action completed: %(label)s", { label }));
         },
 
         _onApplyTableAction: function (e: Event): void {
@@ -455,7 +455,7 @@ ckan.module("tables-tabulator", function ($) {
         _onTableActionConfirm: function (action: string, label: string): void {
             const form = new FormData();
             form.append("table_action", action);
-            this._sendActionRequest(form, ckan.i18n._(`Table action completed: ${label}`));
+            this._sendActionRequest(form, ckan.i18n._("Table action completed: %(label)s", { label }));
         },
 
         _onTableExportClick: async function (e: Event): Promise<void> {
@@ -480,7 +480,7 @@ ckan.module("tables-tabulator", function ($) {
                     url.searchParams.set(`sort[0][dir]`, s.dir);
                 });
 
-                this._showToast(ckan.i18n._(`${target.innerText} export started.`));
+                this._showToast(ckan.i18n._("%(name)s export started.", { name: target.innerText }));
 
                 const targetUrl = new URL(this.sandbox.client.url(this.options.config.ajaxURL), window.location.origin);
                 url.searchParams.forEach((value, key) => {
@@ -501,9 +501,13 @@ ckan.module("tables-tabulator", function ($) {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(a.href);
 
-                this._showToast(ckan.i18n._(`${target.innerText} export completed.`), "default", false);
+                this._showToast(ckan.i18n._("%(name)s export completed.", { name: target.innerText }), "default", false);
             } catch (error) {
-                this._showToast(ckan.i18n._(`${target.innerText} export failed. Please try again.`), "danger", false);
+                this._showToast(
+                    ckan.i18n._("%(name)s export failed. Please try again.", { name: target.innerText }),
+                    "danger",
+                    false
+                );
                 console.error('Export error:', error);
             } finally {
                 exportButtons.forEach((btn) => (btn.disabled = false));

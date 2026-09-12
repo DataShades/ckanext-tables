@@ -28,7 +28,7 @@ from ckanext.tables.data_sources import (
     XlsxUrlDataSource,
     _sniff_csv_delimiter,
 )
-from ckanext.tables.types import FilterItem
+from ckanext.tables.types import FILTER_OPERATORS, FilterItem
 
 
 @pytest.fixture
@@ -815,3 +815,26 @@ class TestDatabaseDataSource:
         ds = DatabaseDataSource(select(model.Package))
         result = ds.filter([]).all()
         assert len(result) == 10
+
+
+class TestFilterOperatorsMatchCanonicalList:
+    """The filter-operator dropdown is built solely from types.FILTER_OPERATORS.
+
+    See helpers.tables_filter_operators — every operator listed there must be
+    understood by both concrete data sources, otherwise it renders as a
+    selectable option that silently filters nothing.
+    """
+
+    def test_database_data_source_supports_every_operator(self):
+        stmt = select(model.User)
+        ds = DatabaseDataSource(stmt)
+        col = stmt.selected_columns.name  # a string column supports every operator, including "like"
+
+        for value, _label in FILTER_OPERATORS:
+            assert ds.build_filter(col, value, "test") is not None, value
+
+    def test_list_data_source_supports_every_operator(self):
+        ds = ListDataSource([])
+
+        for value, _label in FILTER_OPERATORS:
+            assert ds.build_filter("field", value, "test") is not None, value
