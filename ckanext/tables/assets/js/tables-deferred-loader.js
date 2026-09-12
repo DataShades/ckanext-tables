@@ -10,14 +10,19 @@ ckan.module("tables-deferred-loader", function ($, _) {
         },
 
         _htmx_initialize_tables: function (event) {
-            var el = event.detail.target.querySelector(".tabulator-container");
+            var target = event.detail.target;
+            var containers = target.matches && target.matches(".tabulator-container")
+                ? [target]
+                : target.querySelectorAll(".tabulator-container");
 
-            if (el.getAttribute("dm-initialized")) {
-                return;
-            }
+            containers.forEach(function (el) {
+                if (el.getAttribute("dm-initialized")) {
+                    return;
+                }
 
-            ckan.module.initializeElement(el);
-            el.setAttribute("dm-initialized", true)
+                ckan.module.initializeElement(el);
+                el.setAttribute("dm-initialized", true)
+            });
         }
     };
 });

@@ -510,14 +510,18 @@ ckan.module("tables-tabulator", function ($) {
             fetch(this.sandbox.client.url(this.options.config.ajaxURL), {
                 method: "POST",
                 body: form,
+                headers: { "X-CSRFToken": this._getCSRFToken() },
             })
-                .then((_) => {
-                    this._refreshData().then(() => {
+                .then((resp) => {
+                    if (!resp.ok) {
+                        throw new Error(ckan.i18n._("Failed to refresh table data."));
+                    }
+                    return this._refreshData().then(() => {
                         this._showToast(ckan.i18n._("Table data refreshed successfully."));
-                        this.tableRefreshBtn.removeAttribute("disabled");
                     });
                 })
-                .catch((error) => this._showToast(error.message, "danger"));
+                .catch((error) => this._showToast(error.message, "danger"))
+                .finally(() => this.tableRefreshBtn.removeAttribute("disabled"));
         },
 
         _refreshData: function (): Promise<void> {
@@ -528,6 +532,8 @@ ckan.module("tables-tabulator", function ($) {
             const tableEl = this.el[0] as HTMLElement;
 
             tableEl.querySelectorAll<HTMLElement>(".tabulator-col[tabulator-field]").forEach((colEl) => {
+                if (colEl.querySelector(".btn-header-filter-toggle")) return;
+
                 const filterInput = colEl.querySelector<HTMLInputElement>(".tabulator-header-filter input");
                 if (!filterInput) return;
 

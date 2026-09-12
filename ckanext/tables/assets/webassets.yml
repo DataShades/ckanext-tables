@@ -17,7 +17,6 @@ tables-js:
 tables-css:
   output: ckanext-tables/%(version)s-tables.css
   contents:
-    - css/vendor/tabulator.min.css
     - css/vendor/tabulator-theme.min.css
 
     - css/style.css
