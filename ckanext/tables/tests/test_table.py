@@ -138,11 +138,15 @@ class TestTableDefinitionActions:
         row_actions = [RowActionDefinition(action="view", label="View", callback=lambda row: {"success": True})]
 
         TableDefinition(
-            name="row_act_tbl_1", data_source=ListDataSource(simple_data), columns=shared_columns,
+            name="row_act_tbl_1",
+            data_source=ListDataSource(simple_data),
+            columns=shared_columns,
             row_actions=row_actions,
         )
         TableDefinition(
-            name="row_act_tbl_2", data_source=ListDataSource(simple_data), columns=shared_columns,
+            name="row_act_tbl_2",
+            data_source=ListDataSource(simple_data),
+            columns=shared_columns,
             row_actions=row_actions,
         )
 

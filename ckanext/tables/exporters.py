@@ -244,7 +244,16 @@ class PDFExporter(ExporterBase):
 
     @classmethod
     def is_available(cls) -> bool:
-        return importlib.util.find_spec("weasyprint") is not None
+        # A plain find_spec check isn't enough: WeasyPrint loads its native
+        # Pango/Cairo/GObject libraries via ctypes at import time, so it can be
+        # pip-installed and still raise OSError on import if those system
+        # libraries are missing.
+        try:
+            importlib.import_module("weasyprint")
+        except (ImportError, OSError):
+            return False
+
+        return True
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
@@ -256,3 +265,15 @@ class PDFExporter(ExporterBase):
         # reuse HTML exporter template for PDF generation
         html_content = HTMLExporter.export(table, params).decode("utf-8")
         return HTML(string=html_content).write_pdf() or b""
+
+
+ALL_EXPORTERS = [
+    CSVExporter,
+    JSONExporter,
+    XLSXExporter,
+    TSVExporter,
+    YAMLExporter,
+    NDJSONExporter,
+    HTMLExporter,
+    PDFExporter,
+]

@@ -11,6 +11,7 @@ from .data_sources import (
     ParquetUrlDataSource,
     XlsxUrlDataSource,
 )
+from .exporters import ALL_EXPORTERS
 from .generics import GenericTableView
 from .table import (
     BulkActionDefinition,
@@ -33,16 +34,6 @@ from .types import (
 )
 from .utils import tables_build_params
 
-ALL_EXPORTERS = [
-    exporters.CSVExporter,
-    exporters.JSONExporter,
-    exporters.XLSXExporter,
-    exporters.TSVExporter,
-    exporters.YAMLExporter,
-    exporters.NDJSONExporter,
-    exporters.HTMLExporter,
-    exporters.PDFExporter,
-]
 __all__ = [
     "RowActionDefinition",
     "ActionHandlerResult",

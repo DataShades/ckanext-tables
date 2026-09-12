@@ -1,3 +1,4 @@
+import builtins
 import csv
 import json
 from io import StringIO
@@ -183,6 +184,13 @@ class TestHTMLExporter:
         assert HTMLExporter.mime_type == "text/html"
 
 
+def _require_weasyprint():
+    try:
+        import weasyprint  # noqa: F401, PLC0415
+    except (ImportError, OSError) as exc:
+        pytest.skip(f"weasyprint is not usable: {exc}")
+
+
 class TestPDFExporter:
     def test_export_without_weasyprint_raises(self, simple_table, params):
         with mock.patch.dict("sys.modules", {"weasyprint": None}), pytest.raises(ImportError):
@@ -192,13 +200,26 @@ class TestPDFExporter:
         with mock.patch.dict("sys.modules", {"weasyprint": None}):
             assert PDFExporter.is_available() is False
 
+    def test_is_available_false_when_native_libs_missing(self):
+        # WeasyPrint can be pip-installed and still raise OSError (not
+        # ImportError) on import when its native libs aren't on the system.
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "weasyprint":
+                raise OSError("cannot load library 'libgobject-2.0-0'")
+            return real_import(name, *args, **kwargs)
+
+        with mock.patch("builtins.__import__", side_effect=fake_import):
+            assert PDFExporter.is_available() is False
+
     def test_is_available_true_with_weasyprint(self):
-        pytest.importorskip("weasyprint")
+        _require_weasyprint()
         assert PDFExporter.is_available() is True
 
     @pytest.mark.usefixtures("with_request_context")
     def test_export_returns_real_pdf_bytes(self, simple_table, params):
-        pytest.importorskip("weasyprint")
+        _require_weasyprint()
         result = PDFExporter.export(simple_table, params)
         assert isinstance(result, bytes)
         assert result.startswith(b"%PDF-")

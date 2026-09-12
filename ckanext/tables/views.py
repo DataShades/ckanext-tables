@@ -7,8 +7,8 @@ from flask.views import MethodView
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables.generics import TableDispatchMixin
-from ckanext.tables.helpers import tables_init_temporary_preview_table
 from ckanext.tables.table import TableDefinition
+from ckanext.tables.utils import tables_init_temporary_preview_table
 
 log = logging.getLogger(__name__)
 
