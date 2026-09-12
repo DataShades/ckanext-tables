@@ -18,6 +18,8 @@ from ckanext.tables.utils import tables_build_params
 
 log = logging.getLogger(__name__)
 
+_GENERIC_ACTION_ERROR = tk._("An unexpected error occurred while performing this action.")
+
 
 class AjaxTableMixin:
     """Provides AJAX data loading and action handling."""
@@ -40,9 +42,9 @@ class AjaxTableMixin:
 
         try:
             result = table_action()
-        except Exception as e:
+        except Exception:
             log.exception("Error during table action %s", action)
-            return jsonify({"success": False, "errors": str(e)})
+            return jsonify({"success": False, "errors": _GENERIC_ACTION_ERROR})
         return jsonify(result)
 
     def _apply_row_action(self, table: TableDefinition, action: str, row: str | None) -> Response:
@@ -52,9 +54,9 @@ class AjaxTableMixin:
 
         try:
             result = row_action_func(json.loads(row))
-        except Exception as e:
+        except Exception:
             log.exception("Error during row action %s", action)
-            return jsonify({"success": False, "error": str(e)})
+            return jsonify({"success": False, "error": _GENERIC_ACTION_ERROR})
 
         return jsonify(ActionHandlerResult(**result))
 
@@ -73,9 +75,9 @@ class AjaxTableMixin:
 
         try:
             result = bulk_action_func(rows_list)
-        except Exception as e:
+        except Exception:
             log.exception("Error during bulk action %s", action)
-            return jsonify({"success": False, "error": str(e)})
+            return jsonify({"success": False, "error": _GENERIC_ACTION_ERROR})
 
         return jsonify(ActionHandlerResult(**result))
 

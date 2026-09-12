@@ -64,19 +64,21 @@
       return console.error("Confirm: Modal already exists.");
     }
 
+    // title/message/button text can carry server or user-controlled content, so they're
+    // set via textContent below, not interpolated here like the trusted opts.icon.
     const modalHTML = `
       <div class="modal fade" id="${select.modal.slice(1)}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog ${opts.centered ? 'modal-dialog-centered' : ''} ${opts.scrollable ? 'modal-dialog-scrollable' : ''} ${opts.fullscreen ? 'modal-fullscreen' : ''}">
           <div class="modal-content">
             <div class="modal-header ${style.main}">
-              ${opts.icon}
-              <h3 class="modal-title">${opts.title}</h3>
+              <span class="modal-icon">${opts.icon}</span>
+              <h3 class="modal-title"></h3>
               <button type="button" class="btn-close ${style.btnClose}" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">${opts.message}</div>
+            <div class="modal-body"></div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-light btn-cancel" id="${select.cancelBtn.slice(1)}">${opts.cancelText}</button>
-              <button type="button" class="btn ${style.confirm}" id="${select.confirmBtn.slice(1)}">${opts.confirmText}</button>
+              <button type="button" class="btn btn-light btn-cancel" id="${select.cancelBtn.slice(1)}"></button>
+              <button type="button" class="btn ${style.confirm}" id="${select.confirmBtn.slice(1)}"></button>
             </div>
           </div>
         </div>
@@ -86,6 +88,10 @@
     document.body.insertAdjacentHTML("beforeend", modalHTML);
 
     const modalEl = document.getElementById(select.modal.slice(1));
+    modalEl.querySelector(".modal-title").textContent = opts.title;
+    modalEl.querySelector(".modal-body").textContent = opts.message;
+    modalEl.querySelector(select.cancelBtn).textContent = opts.cancelText;
+    modalEl.querySelector(select.confirmBtn).textContent = opts.confirmText;
     const modal = new bootstrap.Modal(modalEl, {
       backdrop: opts.backdrop, keyboard: opts.keyboard
     });

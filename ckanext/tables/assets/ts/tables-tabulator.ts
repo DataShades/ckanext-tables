@@ -179,7 +179,7 @@ ckan.module("tables-tabulator", function ($) {
 
         _confirmAction: function (label: string, callback: () => void): void {
             ckan.tablesConfirm({
-                message: ckan.i18n._(`Are you sure you want to perform this action: <b>${label}</b>?`),
+                message: ckan.i18n._(`Are you sure you want to perform this action: ${label}?`),
                 onConfirm: callback,
             });
         },
@@ -196,7 +196,7 @@ ckan.module("tables-tabulator", function ($) {
             const form = new FormData();
             form.append("row_action", action.name);
             form.append("row", JSON.stringify(row.getData()));
-            this._sendActionRequest(form, ckan.i18n._(`Row action completed: <b>${action.label}</b>`));
+            this._sendActionRequest(form, ckan.i18n._(`Row action completed: ${action.label}`));
         },
 
         _sendActionRequest: function (form: FormData, successMessage: string): Promise<void> {
@@ -433,7 +433,7 @@ ckan.module("tables-tabulator", function ($) {
             const form = new FormData();
             form.append("bulk_action", bulkAction);
             form.append("rows", JSON.stringify(data));
-            this._sendActionRequest(form, ckan.i18n._(`Bulk action completed: <b>${label}</b>`));
+            this._sendActionRequest(form, ckan.i18n._(`Bulk action completed: ${label}`));
         },
 
         _onApplyTableAction: function (e: Event): void {
@@ -452,7 +452,7 @@ ckan.module("tables-tabulator", function ($) {
         _onTableActionConfirm: function (action: string, label: string): void {
             const form = new FormData();
             form.append("table_action", action);
-            this._sendActionRequest(form, ckan.i18n._(`Table action completed: <b>${label}</b>`));
+            this._sendActionRequest(form, ckan.i18n._(`Table action completed: ${label}`));
         },
 
         _onTableExportClick: async function (e: Event): Promise<void> {

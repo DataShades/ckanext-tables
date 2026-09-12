@@ -100,12 +100,15 @@ class TestAjaxTableMixin:
         assert data["success"] is True
 
     def test_apply_table_action_exception(self, sample_table: TableDefinition):
+        # The raw exception message must never reach the client — it can embed
+        # user-controlled data and is rendered on the page as-is by the frontend.
         mixin = self._make_mixin()
         with mock.patch("ckanext.tables.generics.log"):
             response = mixin._apply_table_action(sample_table, "fail_action")
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
-        assert "boom" in str(data.get("errors", ""))
+        assert "boom" not in str(data.get("errors", ""))
+        assert data.get("errors")
 
     def test_apply_row_action_not_found(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
@@ -137,6 +140,8 @@ class TestAjaxTableMixin:
             response = mixin._apply_row_action(sample_table, "fail_row", '{"name": "Alice"}')
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
+        assert "row boom" not in str(data.get("error", ""))
+        assert data.get("error")
 
     def test_apply_bulk_action_not_found(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
@@ -162,6 +167,8 @@ class TestAjaxTableMixin:
             response = mixin._apply_bulk_action(sample_table, "bulk_fail", '[{"name": "Alice"}]')
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
+        assert "bulk boom" not in str(data.get("error", ""))
+        assert data.get("error")
 
     # --- refresh ---
 
