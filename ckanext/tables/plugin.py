@@ -5,8 +5,8 @@ import ckan.plugins.toolkit as tk
 from ckan import types
 from ckan.common import CKANConfig
 
-from ckanext.tables.cache import invalidate_cache_entry
-from ckanext.tables.config import get_cache_backend, get_cache_ttl
+from ckanext.tables.cache import get_cache_backend, invalidate_cache_entry
+from ckanext.tables.config import get_cache_ttl
 from ckanext.tables.logic.schema import get_preview_schema
 
 

@@ -1,6 +1,6 @@
 # this is a namespace package
 try:
-    import pkg_resources
+    import pkg_resources  # pyright: ignore[reportMissingImports]
 
     pkg_resources.declare_namespace(__name__)
 except ImportError:

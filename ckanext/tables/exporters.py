@@ -1,4 +1,9 @@
+# pyright: reportImportCycles=false
+# table.py imports ExporterBase for real; the TYPE_CHECKING-only import below
+# is what pyright flags as a "cycle" — it walks TYPE_CHECKING blocks too, even
+# though this never creates a real circular import at runtime.
 import csv
+import importlib.util
 import json
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -125,18 +130,14 @@ class XLSXExporter(ExporterBase):
 
     @classmethod
     def is_available(cls) -> bool:
-        try:
-            import openpyxl  # noqa: F401, PLC0415
-        except ImportError:
-            return False
-        return True
+        return importlib.util.find_spec("openpyxl") is not None
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
         if not cls.is_available():
             raise ImportError("openpyxl is required for XLSX export but is not installed.")
 
-        from openpyxl import Workbook  # noqa: PLC0415
+        from openpyxl import Workbook  # noqa: PLC0415 # pyright: ignore [reportMissingModuleSource]
 
         wb = Workbook()
         ws = wb.active
@@ -243,18 +244,14 @@ class PDFExporter(ExporterBase):
 
     @classmethod
     def is_available(cls) -> bool:
-        try:
-            import weasyprint  # noqa: F401, PLC0415
-        except ImportError:
-            return False
-        return True
+        return importlib.util.find_spec("weasyprint") is not None
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
         if not cls.is_available():
             raise ImportError("WeasyPrint is required for PDF export but is not installed.")
 
-        from weasyprint import HTML  # noqa: PLC0415
+        from weasyprint import HTML  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
         # reuse HTML exporter template for PDF generation
         html_content = HTMLExporter.export(table, params).decode("utf-8")

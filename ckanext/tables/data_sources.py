@@ -22,15 +22,15 @@ from pyarrow import feather, orc
 from sqlalchemy import Boolean, DateTime, Integer
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.sql import Select, func, select
-from sqlalchemy.sql.elements import BinaryExpression, ClauseElement, ColumnElement
+from sqlalchemy.sql.elements import ColumnElement
 from typing_extensions import Self
 
 import ckan.plugins.toolkit as tk
 from ckan import model
 from ckan.lib import uploader
 
-from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin
-from ckanext.tables.config import get_cache_backend, get_cache_ttl
+from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin, get_cache_backend
+from ckanext.tables.config import get_cache_ttl
 from ckanext.tables.net import fetch_remote_file
 from ckanext.tables.types import FilterItem
 
@@ -79,7 +79,7 @@ class DatabaseDataSource(BaseDataSource):
         stmt: The SQLAlchemy statement to use as the data source
     """
 
-    def __init__(self, stmt: Select):
+    def __init__(self, stmt: Select[Any]):
         self.base_stmt = stmt
         self.stmt = stmt
 
@@ -98,7 +98,7 @@ class DatabaseDataSource(BaseDataSource):
 
         return self
 
-    def build_filter(self, column: ColumnElement, operator: str, value: str) -> BinaryExpression | ClauseElement | None:
+    def build_filter(self, column: ColumnElement[Any], operator: str, value: str) -> ColumnElement[bool] | None:
         try:
             if isinstance(column.type, Boolean):
                 casted_value = str(value).lower() in ("true", "1", "yes", "y")
@@ -113,7 +113,7 @@ class DatabaseDataSource(BaseDataSource):
 
         operators: dict[
             str,
-            Callable[[ColumnElement, Any], BinaryExpression | ClauseElement | None],
+            Callable[[ColumnElement[Any], Any], ColumnElement[bool] | None],
         ] = {
             "=": lambda col, val: col == val,
             "<": lambda col, val: col < val,
@@ -150,7 +150,7 @@ class DatabaseDataSource(BaseDataSource):
         return self
 
     def all(self) -> list[dict[str, Any]]:
-        return [self.serialize_row(row) for row in model.Session.execute(self.stmt).mappings().all()]  # type: ignore
+        return [self.serialize_row(row) for row in model.Session.execute(self.stmt).mappings().all()]
 
     def serialize_row(self, row: RowMapping) -> dict[str, Any]:
         return dict(row)
@@ -296,7 +296,10 @@ class PandasDataSource(BaseDataSource):
         if self._df is None:
             self._df = self.fetch_dataframe()
 
-            if isinstance(self, CachedDataSourceMixin) and self._df is not None and not self._df.empty:
+            # Defensive: fetch_dataframe() is a public override point, so a misbehaving
+            # subclass could violate its own "-> pd.DataFrame" contract at runtime.
+            is_loaded = self._df is not None and not self._df.empty  # pyright: ignore[reportUnnecessaryComparison]
+            if isinstance(self, CachedDataSourceMixin) and is_loaded:
                 try:
                     self.cache_backend.set(
                         self.get_cache_key(),
@@ -322,7 +325,10 @@ class PandasDataSource(BaseDataSource):
         df = self._filtered_df
 
         for filter_item in filters:
-            if filter_item.field not in df.columns:
+            # pandas' own __getitem__ overloads are imprecise enough that pyright infers
+            # a DataFrame | Series | ndarray union for df from the reassignments below —
+            # this is correct at runtime, verified directly against pandas' own behaviour.
+            if filter_item.field not in df.columns:  # pyright: ignore[reportAttributeAccessIssue]
                 continue
 
             try:
@@ -349,13 +355,16 @@ class PandasDataSource(BaseDataSource):
                 elif op == ">=":
                     df = df[series >= val]
                 elif op == "like":
-                    # Cast series to str so LIKE works on numeric columns too.
-                    # Use filter_item.value (the original string) to avoid float repr like "157.0".
-                    df = df[series.astype(str).str.contains(str(filter_item.value), case=False, na=False)]
+                    # Cast series to str so LIKE works on numeric columns too. Use
+                    # filter_item.value (the original string) to avoid float repr like "157.0".
+                    str_series = series.astype(str)
+                    value = str(filter_item.value)
+                    str_accessor = str_series.str  # pyright: ignore[reportAttributeAccessIssue]
+                    df = df[str_accessor.contains(value, case=False, na=False)]
             except (ValueError, TypeError):
                 log.debug("Failed to apply filter %s", filter_item, exc_info=True)
 
-        self._filtered_df = df
+        self._filtered_df = df  # pyright: ignore[reportAttributeAccessIssue]
         return self
 
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
@@ -386,7 +395,7 @@ class PandasDataSource(BaseDataSource):
         df = self._filtered_df.astype(object).where(self._filtered_df.notnull(), None)
 
         records = df.to_dict(orient="records")
-        return [self.serialize_value(record) for record in records]  # type: ignore
+        return [self.serialize_value(record) for record in records]
 
     def count(self) -> int:
         return len(self._filtered_df) if self._filtered_df is not None else 0
@@ -471,7 +480,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
                     # handing that relative string straight to pandas.
                     fk_upload_cls = getattr(uploader, "FKResourceUpload", None)
                     if fk_upload_cls is not None and isinstance(upload, fk_upload_cls):
-                        self._upload_storage = upload.storage
+                        self._upload_storage = getattr(upload, "storage", None)
 
                     return self._source_path
 
@@ -563,7 +572,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
 
         try:
             with os.fdopen(fd, "wb") as tmp_file:
-                for chunk in storage.stream(files.FileData(location)):
+                for chunk in storage.stream(files.FileData(files.Location(location))):
                     tmp_file.write(chunk)
             yield tmp_path
         finally:

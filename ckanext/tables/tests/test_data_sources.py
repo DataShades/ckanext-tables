@@ -175,8 +175,11 @@ class TestCSVResourceDataSource:
 
     @pytest.mark.usefixtures("clean_db")
     def test_fetch_dataframe_from_uploaded_resource(self, package, sysadmin, create_with_upload):
-        """End-to-end: the actual uploaded content must be readable, whichever
-        uploader backend this environment uses (legacy filesystem or file-keeper)."""
+        """End-to-end test of an uploaded resource.
+
+        The actual uploaded content must be readable, whichever uploader
+        backend this environment uses (legacy filesystem or file-keeper).
+        """
         resource = create_with_upload(b"name,age\nAlice,30\nBob,25\n", "test.csv", package_id=package["id"])
 
         ds = CsvUrlDataSource(resource=resource)
@@ -187,9 +190,11 @@ class TestCSVResourceDataSource:
         assert data[1]["name"] == "Bob"
 
     def test_open_source_reads_local_file_keeper_storage_directly(self, tmp_path):
-        """When the file-keeper storage is on local disk, read its real path
-        directly (via full_path()) instead of copying the content through a
-        second temp file."""
+        """Local file-keeper storage should be read directly, not copied.
+
+        When the storage is on local disk, use its real path (via full_path())
+        instead of copying the content through a second temp file.
+        """
         real_file = tmp_path / "data.csv"
         real_file.write_text("name,age\nAlice,30\n")
 
@@ -202,17 +207,21 @@ class TestCSVResourceDataSource:
 
         ds = CsvUrlDataSource(resource={"id": "res-1", "url_type": "upload"})
 
-        with mock.patch("ckanext.tables.data_sources.uploader.get_resource_uploader", return_value=fake_upload):
-            with ds._open_source() as path:
-                assert path == str(real_file)
+        with (
+            mock.patch("ckanext.tables.data_sources.uploader.get_resource_uploader", return_value=fake_upload),
+            ds._open_source() as path,
+        ):
+            assert path == str(real_file)
 
         assert not fake_storage.stream.called
 
     def test_open_source_streams_non_local_file_keeper_storage(self):
-        """A file-keeper-backed upload with no real local path (e.g. S3) — or
-        whose get_path() is a storage-relative Location full_path() can't
-        resolve to a real file — must be streamed through the storage API
-        into a temp file instead of handing that relative string to pandas."""
+        """Non-local file-keeper storage must be streamed into a temp file.
+
+        A file-keeper-backed upload with no real local path (e.g. S3), or whose
+        get_path() full_path() can't resolve to a real file, must be streamed
+        through the storage API instead of handing a relative string to pandas.
+        """
         fake_storage = mock.Mock()
         fake_storage.full_path.side_effect = Exception("no local path for this storage")
         fake_storage.stream.return_value = [b"name,age\n", b"Alice,30\n"]
@@ -223,11 +232,13 @@ class TestCSVResourceDataSource:
 
         ds = CsvUrlDataSource(resource={"id": "res-1", "url_type": "upload"})
 
-        with mock.patch("ckanext.tables.data_sources.uploader.get_resource_uploader", return_value=fake_upload):
-            with ds._open_source() as path:
-                with open(path, "rb") as f:
-                    content = f.read()
-                assert os.path.exists(path)
+        with (
+            mock.patch("ckanext.tables.data_sources.uploader.get_resource_uploader", return_value=fake_upload),
+            ds._open_source() as path,
+        ):
+            with open(path, "rb") as f:
+                content = f.read()
+            assert os.path.exists(path)
 
         assert content == b"name,age\nAlice,30\n"
         assert not os.path.exists(path)  # cleaned up once the context exits

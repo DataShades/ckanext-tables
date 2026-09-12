@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.7
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  # pyright needs this project's real environment (CKAN and its dependencies
+  # actually installed) to resolve imports meaningfully, not an isolated
+  # pre-commit env, so it runs via the already-activated interpreter on PATH.
+  # A bare "python" resolves differently (and wrongly) through pyright's own
+  # lookup than through the shell's — pass the resolved absolute path instead.
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: bash -c 'npx pyright --pythonpath="$(command -v python)"'
+        language: system
+        types: [python]
+        pass_filenames: false

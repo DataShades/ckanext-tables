@@ -21,9 +21,10 @@ from typing import Any
 import pandas as pd
 import pyarrow as pa
 
+import ckan.plugins.toolkit as tk
 from ckan.lib.redis import connect_to_redis
 
-from ckanext.tables.config import get_cache_dir
+from ckanext.tables.config import CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND, get_cache_dir
 
 log = logging.getLogger(__name__)
 
@@ -148,8 +149,8 @@ class RedisCacheBackend(CacheBackend):
 
     def delete(self, key: str) -> None:
         with connect_to_redis() as conn:
-            conn.delete(self._full_key(key))  # type: ignore
-            conn.delete(self._version_key(key))  # type: ignore
+            conn.delete(self._full_key(key))
+            conn.delete(self._version_key(key))
 
         self._memo_delete(self._full_key(key))
 
@@ -190,7 +191,7 @@ class _FileCacheBackend(CacheBackend, ABC):
 
     # Shared across every instance of every subclass within this process —
     # deliberately a class attribute rather than set in __init__, since a fresh
-    # backend instance is constructed per request (see config.get_cache_backend),
+    # backend instance is constructed per request (see get_cache_backend() below),
     # and the whole point is for the memo to outlive any single instance. Keyed by
     # the resolved cache file path (already unique per directory/key/extension) to
     # a (meta file mtime, deserialised value) pair; a request that re-reads the
@@ -354,7 +355,7 @@ class _FileCacheBackend(CacheBackend, ABC):
         """Public accessor for the cache file path (useful in tests)."""
         return self._cache_path(key)
 
-    def clean_expired(self) -> int: # noqa: C901
+    def clean_expired(self) -> int:  # noqa: C901
         """Delete every expired cache entry in this directory, of any format.
 
         ``get`` already deletes an entry the next time it's read past its TTL,
@@ -482,6 +483,46 @@ class FeatherCacheBackend(_DataFrameFileCacheBackend):
 
     def _write_df(self, df: pd.DataFrame, path: str) -> None:
         df.to_feather(path)
+
+
+def get_cache_backend() -> CacheBackend:
+    """Return a CacheBackend instance based on the configured backend.
+
+    Reads ``ckanext.tables.cache.backend`` and returns the appropriate
+    backend instance.
+
+    Supported values:
+
+    * ``"pickle"`` — disk-based pickle cache, path controlled by
+      ``ckanext.tables.cache.cache_dir``.
+    * ``"redis"`` — CKAN's Redis connection (requires Redis to be configured).
+    * ``"parquet"`` — disk-based parquet cache, path controlled by
+      ``ckanext.tables.cache.cache_dir``.
+    * ``"feather"``  *(default)* — disk-based feather (Arrow IPC) cache, path controlled by
+      ``ckanext.tables.cache.cache_dir``.
+
+    Unknown values fall back to ``"feather"`` with a warning.
+    """
+    backend = tk.config.get(CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND).strip().lower()
+
+    if backend == "redis":
+        return RedisCacheBackend()
+
+    if backend == "parquet":
+        return ParquetCacheBackend()
+
+    if backend == "pickle":
+        return PickleCacheBackend()
+
+    if backend != DEFAULT_CACHE_BACKEND:
+        log.warning(
+            "Unknown %s value %r — falling back to %r.",
+            CONF_CACHE_BACKEND,
+            backend,
+            DEFAULT_CACHE_BACKEND,
+        )
+
+    return FeatherCacheBackend()
 
 
 class CachedDataSourceMixin:

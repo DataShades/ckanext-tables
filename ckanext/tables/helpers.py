@@ -7,7 +7,7 @@ import ckan.plugins as p
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables import shared as t
-from ckanext.tables.config import get_cache_backend
+from ckanext.tables.cache import get_cache_backend
 
 
 def tables_json_dumps(value: Any) -> str:
@@ -58,13 +58,13 @@ def tables_generate_unique_id() -> str:
 
 def tables_init_temporary_preview_table(
     resource: dict[str, Any],
-    resource_view: dict[str, Any] | None = None,
+    resource_view: dict[str, Any],
 ) -> t.TableDefinition:
     """Initialize a temporary preview table for a given resource.
 
     Args:
         resource: The resource dictionary containing the URL and format of the data.
-        resource_view: Optional resource view dictionary. When it contains a
+        resource_view: The resource view dictionary. When it contains a
             ``file_url`` key that URL is used instead of the resource URL and
             the format is inferred from its file extension.
 

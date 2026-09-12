@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ckan.plugins.toolkit as tk
 from ckan.types import Context
@@ -11,7 +11,9 @@ from ckan.types import Context
 from ckanext.tables import formatters, types
 from ckanext.tables.cache import CachedDataSourceMixin
 from ckanext.tables.data_sources import BaseDataSource
-from ckanext.tables.exporters import ExporterBase
+
+if TYPE_CHECKING:
+    from ckanext.tables.exporters import ExporterBase
 
 COLUMN_ACTIONS_FIELD = "__table_actions"
 
@@ -256,6 +258,10 @@ class TableDefinition:
 
     def get_exporter(self, name: str) -> type[ExporterBase] | None:
         return next((e for e in self.exporters if e.name == name), None)
+
+    def get_formatter_cache(self, namespace: str) -> dict[Any, Any]:
+        """Return this table's per-render formatter scratch space for *namespace*."""
+        return self._formatter_cache.setdefault(namespace, {})
 
     def refresh_data(self) -> None:
         if isinstance(self.data_source, CachedDataSourceMixin):

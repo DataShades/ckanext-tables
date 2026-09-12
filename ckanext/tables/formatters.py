@@ -1,14 +1,22 @@
 from __future__ import annotations
 
+# pyright: reportImportCycles=false
+# table.py imports `formatters` for real; the TYPE_CHECKING-only import below
+# is what pyright flags as a "cycle" — it walks TYPE_CHECKING blocks too, even
+# though this never creates a real circular import at runtime.
 import abc
 import datetime
 import uuid
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from ckan import model
 from ckan.plugins import toolkit as tk
 
-from ckanext.tables import table, types
+from ckanext.tables import types
+
+if TYPE_CHECKING:
+    from ckanext.tables import table
 
 
 class BaseFormatter(abc.ABC):
@@ -110,7 +118,7 @@ class UserLinkFormatter(BaseFormatter):
         return tk.h.literal(f"{icon} {link}")
 
     def _get_user(self, user_id: str) -> model.User | None:
-        cache = self.table._formatter_cache.setdefault("user_link_users", {})
+        cache = self.table.get_formatter_cache("user_link_users")
 
         if user_id not in cache:
             cache[user_id] = model.User.get(user_id)
@@ -183,7 +191,7 @@ class ActionsFormatter(BaseFormatter):
             # default, which renders the same markup regardless of row, is.
             return self._render(template)
 
-        cache = self.table._formatter_cache.setdefault("actions_formatter", {})
+        cache = self.table.get_formatter_cache("actions_formatter")
 
         if self.column.field not in cache:
             cache[self.column.field] = self._render(template)

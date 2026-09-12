@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from ckanext.tables.config import get_cache_backend
+from ckanext.tables.cache import get_cache_backend
 
 __all__ = ["tables"]
 

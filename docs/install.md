@@ -39,5 +39,8 @@ do:
 ```sh
 git clone https://github.com/DataShades/ckanext-tables.git
 cd ckanext-tables
-pip install -e '.[docs,test]'
+pip install -e '.[docs,test,dev]'
+pre-commit install
 ```
+
+`pre-commit install` sets up git hooks that run `ruff` and `pyright` before each commit — the same checks CI runs.

@@ -4,12 +4,8 @@ import logging
 import os
 import stat
 import tempfile
-from typing import TYPE_CHECKING
 
 import ckan.plugins.toolkit as tk
-
-if TYPE_CHECKING:
-    from ckanext.tables.cache import CacheBackend
 
 log = logging.getLogger(__name__)
 
@@ -144,51 +140,3 @@ def get_max_page_size() -> int:
 def get_export_max_rows() -> int:
     """Return the maximum number of rows a single export may contain."""
     return tk.config.get(CONF_EXPORT_MAX_ROWS, DEFAULT_EXPORT_MAX_ROWS)
-
-
-def get_cache_backend() -> CacheBackend:
-    """Return a CacheBackend instance based on the configured backend.
-
-    Reads ``ckanext.tables.cache.backend`` and returns the appropriate
-    backend instance.
-
-    Supported values:
-
-    * ``"pickle"`` — disk-based pickle cache, path controlled by
-      ``ckanext.tables.cache.cache_dir``.
-    * ``"redis"`` — CKAN's Redis connection (requires Redis to be configured).
-    * ``"parquet"`` — disk-based parquet cache, path controlled by
-      ``ckanext.tables.cache.cache_dir``.
-    * ``"feather"``  *(default)* — disk-based feather (Arrow IPC) cache, path controlled by
-      ``ckanext.tables.cache.cache_dir``.
-
-    Unknown values fall back to ``"feather"`` with a warning.
-    """
-    # Deferred import to avoid a circular dependency (cache.py imports config.py).
-    from ckanext.tables.shared import (  # noqa: PLC0415
-        FeatherCacheBackend,
-        ParquetCacheBackend,
-        PickleCacheBackend,
-        RedisCacheBackend,
-    )
-
-    backend = tk.config.get(CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND).strip().lower()
-
-    if backend == "redis":
-        return RedisCacheBackend()
-
-    if backend == "parquet":
-        return ParquetCacheBackend()
-
-    if backend == "pickle":
-        return PickleCacheBackend()
-
-    if backend != DEFAULT_CACHE_BACKEND:
-        log.warning(
-            "Unknown %s value %r — falling back to %r.",
-            CONF_CACHE_BACKEND,
-            backend,
-            DEFAULT_CACHE_BACKEND,
-        )
-
-    return FeatherCacheBackend()

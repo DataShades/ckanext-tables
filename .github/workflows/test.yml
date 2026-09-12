@@ -50,7 +50,12 @@ jobs:
 
       - name: Install requirements
         # Install any extra requirements your extension has here (dev requirements, other extensions etc)
-        run: pip install -e '.[test]'
+        run: pip install -e '.[test,xlsx,pdf]'
+
+      - name: Type check
+        run: |
+          pip install pyright
+          pyright --pythonpath="$(command -v python)"
 
       - name: Setup extension
         run: |
