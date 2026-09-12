@@ -279,7 +279,7 @@ class PandasDataSource(BaseDataSource):
                         self._df,
                         self.cache_ttl,
                     )
-                except OSError:
+                except (OSError, ValueError, TypeError):
                     log.warning("Failed to write DataFrame to cache", exc_info=True)
 
         self._filtered_df = self._df

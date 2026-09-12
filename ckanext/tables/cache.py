@@ -16,6 +16,7 @@ from datetime import date, datetime
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 
 from ckan.lib.redis import connect_to_redis
 
@@ -256,7 +257,9 @@ class _FileCacheBackend(CacheBackend, ABC):
                     json.dump({"ttl": ttl, "scalar_value": value}, f)
                 with contextlib.suppress(FileNotFoundError):
                     os.remove(path)
-        except (OSError, ValueError):
+        except (OSError, ValueError, TypeError, pa.ArrowException):
+            # ArrowTypeError (mixed-type object columns, e.g. from XLSX/CSV) is a
+            # TypeError, not a ValueError, so it needs its own catch.
             log.warning("Failed to write %s cache %s", self._file_extension, path, exc_info=True)
 
     def delete(self, key: str) -> None:

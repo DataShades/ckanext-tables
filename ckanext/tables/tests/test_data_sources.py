@@ -13,7 +13,7 @@ import ckan.tests.factories as factories
 import ckan.tests.helpers as helpers
 from ckan import model
 
-from ckanext.tables.cache import PickleCacheBackend, RedisCacheBackend
+from ckanext.tables.cache import FeatherCacheBackend, PickleCacheBackend, RedisCacheBackend
 from ckanext.tables.data_sources import (
     CsvUrlDataSource,
     DatabaseDataSource,
@@ -119,6 +119,23 @@ class TestCSVResourceDataSource:
 
         assert len(data) == 2
         assert data[0]["name"] == "Hacker"
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    def test_caching_feather_mixed_type_column_does_not_500(self, mock_read_csv, tmp_path):
+        # A CSV column pandas leaves as `object` with mixed Python types (numbers
+        # and text) makes pyarrow raise ArrowTypeError on the Feather write. The
+        # request must still succeed, just without caching (COR-2).
+        mock_read_csv.return_value = pd.DataFrame({"mixed": [1, "two", 3.0]})
+
+        ds = CsvUrlDataSource(
+            "http://example.com/mixed.csv",
+            cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path)),
+        )
+
+        data = ds.filter([]).all()
+
+        assert len(data) == 3
+        assert ds.cache_backend.get(ds.get_cache_key()) is None
 
     @pytest.mark.usefixtures("clean_db")
     def test_get_source_path_upload(self, package, sysadmin, create_with_upload):

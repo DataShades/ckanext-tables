@@ -158,6 +158,14 @@ class TestParquetCacheBackend:
             f.write(b"notparquet!!!")
         assert parquet_backend.get("key") is None
 
+    def test_set_swallows_arrow_type_error_on_mixed_type_column(self, parquet_backend):
+        # A column with mixed Python types (e.g. numbers and text, as pandas
+        # leaves it for XLSX/CSV input) makes pyarrow raise ArrowTypeError,
+        # which must not propagate out of set() (COR-2).
+        df = pd.DataFrame({"mixed": [1, "two", 3.0]})
+        parquet_backend.set("bad", df, ttl=60)
+        assert parquet_backend.get("bad") is None
+
 
 class TestFeatherCacheBackend:
     def test_set_and_get(self, feather_backend):
@@ -205,6 +213,13 @@ class TestFeatherCacheBackend:
         with open(path, "wb") as f:
             f.write(b"notfeather!!!")
         assert feather_backend.get("key") is None
+
+    def test_set_swallows_arrow_type_error_on_mixed_type_column(self, feather_backend):
+        # Feather is the default backend, so an uncaught ArrowTypeError here
+        # would 500 every request for the affected resource (COR-2).
+        df = pd.DataFrame({"mixed": [1, "two", 3.0]})
+        feather_backend.set("bad", df, ttl=60)
+        assert feather_backend.get("bad") is None
 
 
 @pytest.mark.usefixtures("clean_redis")
