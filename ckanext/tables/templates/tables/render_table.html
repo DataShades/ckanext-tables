@@ -43,8 +43,8 @@
                     <ul class="dropdown-menu" id="bulk-actions-menu">
                         {% for action in table.bulk_actions %}
                             <li>
-                                {% do action.attrs.update({'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
-                                <button data-action="{{ action.action }}" data-with-confirmation="{{ 'true' if action.with_confirmation else 'false' }}" {{ attributes(action.attrs) }}>
+                                {% set action_attrs = dict(action.attrs, **{'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
+                                <button data-action="{{ action.action }}" data-with-confirmation="{{ 'true' if action.with_confirmation else 'false' }}" {{ attributes(action_attrs) }}>
                                     {% if action.icon %}
                                         <i class="{{ action.icon }} me-1"></i>
                                     {% endif %}
@@ -67,8 +67,8 @@
                     <ul class="dropdown-menu" id="table-actions-menu">
                         {% for action in table.table_actions %}
                             <li>
-                                {% do action.attrs.update({'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
-                                <button data-action="{{ action.action }}" data-with-confirmation="{{ 'true' if action.with_confirmation else 'false' }}" {{ attributes(action.attrs) }}>
+                                {% set action_attrs = dict(action.attrs, **{'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
+                                <button data-action="{{ action.action }}" data-with-confirmation="{{ 'true' if action.with_confirmation else 'false' }}" {{ attributes(action_attrs) }}>
                                     {% if action.icon %}
                                         <i class="{{ action.icon }} me-1"></i>
                                     {% endif %}

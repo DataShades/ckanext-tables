@@ -74,7 +74,8 @@ class TableDefinition:
             self.placeholder = tk._("No data found")
 
         if self.row_actions:
-            self.columns.append(
+            self.columns = [
+                *self.columns,
                 ColumnDefinition(
                     field=COLUMN_ACTIONS_FIELD,
                     title="",
@@ -85,7 +86,7 @@ class TableDefinition:
                     resizable=False,
                     width=50,
                 ),
-            )
+            ]
 
     def get_tabulator_config(self) -> dict[str, Any]:
         columns = [col.to_dict() for col in self.columns]

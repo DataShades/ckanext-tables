@@ -2,6 +2,8 @@ from unittest import mock
 
 import pytest
 
+import ckan.plugins.toolkit as tk
+
 from ckanext.tables import formatters
 from ckanext.tables.data_sources import ListDataSource
 from ckanext.tables.table import (
@@ -128,6 +130,23 @@ class TestTableDefinitionActions:
             row_actions=[RowActionDefinition(action="view", label="View", callback=lambda row: {"success": True})],
         )
         assert "__table_actions" in [col.field for col in tbl.columns]
+
+    def test_row_actions_does_not_mutate_a_shared_columns_list(self, simple_data):
+        # A module-level columns list (the natural pattern for a table subclass) must
+        # not gain another __table_actions column every time the table is instantiated.
+        shared_columns = [ColumnDefinition(field="id")]
+        row_actions = [RowActionDefinition(action="view", label="View", callback=lambda row: {"success": True})]
+
+        TableDefinition(
+            name="row_act_tbl_1", data_source=ListDataSource(simple_data), columns=shared_columns,
+            row_actions=row_actions,
+        )
+        TableDefinition(
+            name="row_act_tbl_2", data_source=ListDataSource(simple_data), columns=shared_columns,
+            row_actions=row_actions,
+        )
+
+        assert shared_columns == [ColumnDefinition(field="id")]
 
     def test_get_row_action_found(self, simple_table):
         action = RowActionDefinition(action="edit", label="Edit", callback=lambda row: {"success": True})
@@ -368,3 +387,37 @@ class TestTableDefinitionCacheIntegration:
         tbl.refresh_data()
 
         assert tbl._get_cached_count(params) is None
+
+
+@pytest.mark.ckan_config("ckan.plugins", "tables")
+@pytest.mark.usefixtures("with_plugins", "with_request_context")
+class TestRenderTableActionDropdowns:
+    def _render(self, tbl):
+        return tk.render("tables/render_table.html", extra_vars={"table": tbl})
+
+    def test_bulk_action_class_does_not_grow_across_renders(self, simple_data):
+        action = BulkActionDefinition(action="delete", label="Delete", callback=lambda rows: {"success": True})
+        tbl = TableDefinition(name="bulk_tbl", data_source=ListDataSource(simple_data), bulk_actions=[action])
+
+        for _ in range(3):
+            self._render(tbl)
+
+        assert action.attrs.get("class", "") == ""
+
+    def test_table_action_class_does_not_grow_across_renders(self, simple_data):
+        action = TableActionDefinition(action="refresh", label="Refresh", callback=lambda: {"success": True})
+        tbl = TableDefinition(name="table_act_tbl", data_source=ListDataSource(simple_data), table_actions=[action])
+
+        for _ in range(3):
+            self._render(tbl)
+
+        assert action.attrs.get("class", "") == ""
+
+    def test_rendered_button_still_gets_the_dropdown_item_class(self, simple_data):
+        action = BulkActionDefinition(action="delete", label="Delete", callback=lambda rows: {"success": True})
+        tbl = TableDefinition(name="bulk_tbl", data_source=ListDataSource(simple_data), bulk_actions=[action])
+
+        html = self._render(tbl)
+
+        assert 'class="dropdown-item"' in html
+        assert "dropdown-item dropdown-item" not in html
