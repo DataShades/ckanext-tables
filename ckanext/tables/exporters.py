@@ -1,6 +1,5 @@
 import csv
 import json
-import logging
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from io import BytesIO
@@ -13,9 +12,6 @@ import ckan.plugins.toolkit as tk
 if TYPE_CHECKING:
     from ckanext.tables.table import ColumnDefinition, TableDefinition
     from ckanext.tables.types import QueryParams
-
-
-log = logging.getLogger(__name__)
 
 
 class _Echo:
@@ -35,6 +31,17 @@ class ExporterBase:
     name: str
     label: str
     mime_type: str
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Whether this exporter's dependencies are installed.
+
+        Checked by the view *before* building the response — export() runs inside a
+        streamed generator body by the time it would raise, which is too late to
+        change the response's status code (headers are already committed by then).
+        Override for an exporter with an optional dependency.
+        """
+        return True
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
@@ -117,12 +124,19 @@ class XLSXExporter(ExporterBase):
     mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     @classmethod
-    def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
+    def is_available(cls) -> bool:
         try:
-            from openpyxl import Workbook  # noqa: PLC0415
+            import openpyxl  # noqa: F401, PLC0415
         except ImportError:
-            log.warning("openpyxl is required for XLSX export but is not installed.")
-            return b""
+            return False
+        return True
+
+    @classmethod
+    def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
+        if not cls.is_available():
+            raise ImportError("openpyxl is required for XLSX export but is not installed.")
+
+        from openpyxl import Workbook  # noqa: PLC0415
 
         wb = Workbook()
         ws = wb.active
@@ -228,12 +242,19 @@ class PDFExporter(ExporterBase):
     mime_type = "application/pdf"
 
     @classmethod
-    def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
+    def is_available(cls) -> bool:
         try:
-            from weasyprint import HTML  # noqa: PLC0415
+            import weasyprint  # noqa: F401, PLC0415
         except ImportError:
-            log.warning("WeasyPrint is required for PDF export but is not installed.")
-            return b""
+            return False
+        return True
+
+    @classmethod
+    def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
+        if not cls.is_available():
+            raise ImportError("WeasyPrint is required for PDF export but is not installed.")
+
+        from weasyprint import HTML  # noqa: PLC0415
 
         # reuse HTML exporter template for PDF generation
         html_content = HTMLExporter.export(table, params).decode("utf-8")

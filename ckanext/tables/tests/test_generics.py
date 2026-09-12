@@ -6,7 +6,7 @@ import pytest
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables.data_sources import ListDataSource
-from ckanext.tables.exporters import CSVExporter, JSONExporter
+from ckanext.tables.exporters import CSVExporter, JSONExporter, XLSXExporter
 from ckanext.tables.generics import AjaxTableMixin, ExportTableMixin, GenericTableView
 from ckanext.tables.table import (
     BulkActionDefinition,
@@ -28,7 +28,7 @@ def sample_table(simple_data: list[dict[str, str | int]]) -> TableDefinition:
             ColumnDefinition(field="name", title="Name"),
             ColumnDefinition(field="age", title="Age"),
         ],
-        exporters=[CSVExporter, JSONExporter],
+        exporters=[CSVExporter, JSONExporter, XLSXExporter],
         table_actions=[
             TableActionDefinition(
                 action="my_action",
@@ -200,6 +200,21 @@ class TestExportTableMixin:
             mock_abort.side_effect = Exception("404")
             with pytest.raises(Exception, match="404"):
                 mixin._export(sample_table, "nonexistent_exporter")
+
+    def test_export_missing_dependency_aborts_501(self, sample_table: TableDefinition):
+        # Must be checked before the streamed Response is built — by the time
+        # export() would raise inside the generator body, headers (and the 200
+        # status) are already committed and can no longer be changed.
+        mixin = self._make_mixin()
+        with (
+            mock.patch.object(XLSXExporter, "is_available", return_value=False),
+            mock.patch("ckanext.tables.generics.tk.abort") as mock_abort,
+        ):
+            mock_abort.side_effect = Exception("501")
+            with pytest.raises(Exception, match="501"):
+                mixin._export(sample_table, "xlsx")
+
+        assert mock_abort.call_args[0][0] == 501
 
     def test_export_csv(self, sample_table: TableDefinition):
         mixin = self._make_mixin()

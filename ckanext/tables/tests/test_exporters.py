@@ -10,6 +10,7 @@ from ckanext.tables.exporters import (
     CSVExporter,
     JSONExporter,
     NDJSONExporter,
+    PDFExporter,
     TSVExporter,
     XLSXExporter,
     YAMLExporter,
@@ -136,13 +137,39 @@ class TestXLSXExporter:
         assert isinstance(result, bytes)
         assert len(result) > 0
 
-    def test_export_without_openpyxl_returns_empty(self, simple_table, params):
+    def test_export_without_openpyxl_raises(self, simple_table, params):
+        # A missing optional dependency must not silently produce a 0-byte "export" —
+        # the caller (ExportTableMixin._export) needs a real signal to return 501.
+        with mock.patch.dict("sys.modules", {"openpyxl": None}), pytest.raises(ImportError):
+            XLSXExporter.export(simple_table, params)
+
+    def test_is_available_false_without_openpyxl(self):
         with mock.patch.dict("sys.modules", {"openpyxl": None}):
-            result = XLSXExporter.export(simple_table, params)
-            assert result == b""
+            assert XLSXExporter.is_available() is False
+
+    def test_is_available_true_with_openpyxl(self):
+        pytest.importorskip("openpyxl")
+        assert XLSXExporter.is_available() is True
 
     def test_exporter_attributes(self):
         assert XLSXExporter.name == "xlsx"
+
+
+class TestPDFExporter:
+    def test_export_without_weasyprint_raises(self, simple_table, params):
+        with mock.patch.dict("sys.modules", {"weasyprint": None}), pytest.raises(ImportError):
+            PDFExporter.export(simple_table, params)
+
+    def test_is_available_false_without_weasyprint(self):
+        with mock.patch.dict("sys.modules", {"weasyprint": None}):
+            assert PDFExporter.is_available() is False
+
+    def test_is_available_true_with_weasyprint(self):
+        pytest.importorskip("weasyprint")
+        assert PDFExporter.is_available() is True
+
+    def test_exporter_attributes(self):
+        assert PDFExporter.name == "pdf"
 
 
 class TestGetTableColumns:

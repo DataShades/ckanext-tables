@@ -40,6 +40,9 @@ declare var Tabulator: any;
 declare var htmx: {
     process: (element: HTMLElement) => void;
 };
+declare var bootstrap: {
+    Dropdown: { getInstance: (el: Element | null) => { hide: () => void } | null };
+};
 
 ckan.module("tables-tabulator", function ($) {
     "use strict";
@@ -460,7 +463,13 @@ ckan.module("tables-tabulator", function ($) {
             const exporter = target.dataset.exporter;
             if (!exporter) return;
 
-            this.tableExportersMenu.previousElementSibling?.setAttribute("disabled", "true");
+            const toggle = this.tableExportersMenu.previousElementSibling;
+            // Must close before disabling the toggle — Dropdown.hide() no-ops on a disabled element.
+            bootstrap.Dropdown.getInstance(toggle)?.hide();
+
+            const exportButtons = Array.from(this.tableExportersMenu.querySelectorAll("button")) as HTMLButtonElement[];
+            exportButtons.forEach((btn) => (btn.disabled = true));
+            toggle?.setAttribute("disabled", "true");
 
             try {
                 const url = new URL(window.location.href);
@@ -497,7 +506,8 @@ ckan.module("tables-tabulator", function ($) {
                 this._showToast(ckan.i18n._(`${target.innerText} export failed. Please try again.`), "danger", false);
                 console.error('Export error:', error);
             } finally {
-                this.tableExportersMenu.previousElementSibling?.removeAttribute("disabled");
+                exportButtons.forEach((btn) => (btn.disabled = false));
+                toggle?.removeAttribute("disabled");
             }
         },
 

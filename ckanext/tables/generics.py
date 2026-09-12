@@ -94,6 +94,11 @@ class ExportTableMixin:
         if not exporter:
             return tk.abort(404, tk._(f"Exporter {exporter_name} not found"))
 
+        if not exporter.is_available():
+            log.warning("Exporter %s is unavailable: a required dependency is not installed", exporter_name)
+            message = tk._(f"{exporter.label} export is not available: a required dependency is not installed.")
+            return tk.abort(501, message)
+
         params = tables_build_params()
         total = table.get_total_count(params)
         max_rows = get_export_max_rows()
