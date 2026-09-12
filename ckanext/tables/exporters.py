@@ -137,7 +137,7 @@ class XLSXExporter(ExporterBase):
         if not cls.is_available():
             raise ImportError("openpyxl is required for XLSX export but is not installed.")
 
-        from openpyxl import Workbook  # noqa: PLC0415 # pyright: ignore [reportMissingModuleSource]
+        from openpyxl import Workbook  # noqa: PLC0415
 
         wb = Workbook()
         ws = wb.active
@@ -251,7 +251,7 @@ class PDFExporter(ExporterBase):
         if not cls.is_available():
             raise ImportError("WeasyPrint is required for PDF export but is not installed.")
 
-        from weasyprint import HTML  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+        from weasyprint import HTML  # noqa: PLC0415
 
         # reuse HTML exporter template for PDF generation
         html_content = HTMLExporter.export(table, params).decode("utf-8")

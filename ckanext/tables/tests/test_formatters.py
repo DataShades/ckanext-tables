@@ -163,6 +163,15 @@ class TestDateFormatter:
         result = _fmt(formatters.DateFormatter, dt, {"date_format": "%Y-%m-%d"})
         assert "2024-03-25" in result
 
+    def test_format_iso_string(self):
+        # The demo (and most real data sources) hand this an ISO string, not a
+        # datetime object — CKAN's render_datetime parses it either way.
+        result = _fmt(formatters.DateFormatter, "2024-03-25T14:30:00", {"date_format": "%Y-%m-%d"})
+        assert "2024-03-25" in result
+
+    def test_malformed_string_returns_empty_rather_than_raising(self):
+        assert _fmt(formatters.DateFormatter, "not a date", {"date_format": "%Y-%m-%d"}) == ""
+
 
 @pytest.mark.usefixtures("with_request_context", "clean_db")
 class TestUserLinkFormatter:
@@ -250,3 +259,56 @@ class TestActionsFormatter:
             _fmt(formatters.ActionsFormatter, None, col=col, tbl=_make_table("t2"))
 
         assert mock_render.call_count == 2
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestJsonDisplayFormatter:
+    def test_dict_rendered_as_json(self):
+        result = _fmt(formatters.JsonDisplayFormatter, {"a": 1, "b": [2, 3]})
+        assert '"a": 1' in result
+        assert '"b": [' in result
+
+    def test_list_rendered_as_json(self):
+        result = _fmt(formatters.JsonDisplayFormatter, [1, "two", None])
+        assert "two" in result
+
+    def test_none(self):
+        result = _fmt(formatters.JsonDisplayFormatter, None)
+        assert "null" in result
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestDialogModalFormatter:
+    def test_none_returns_empty(self):
+        assert _fmt(formatters.DialogModalFormatter, None) == ""
+
+    def test_short_string_shown_inline_without_a_modal(self):
+        result = _fmt(formatters.DialogModalFormatter, "short", {"max_length": 100})
+        assert "dialog" not in result.lower()
+        assert "short" in result
+
+    def test_long_string_gets_a_modal(self):
+        result = _fmt(formatters.DialogModalFormatter, "a" * 200, {"max_length": 10})
+        assert "<dialog" in result
+
+    def test_custom_modal_title(self):
+        result = _fmt(
+            formatters.DialogModalFormatter,
+            "a" * 200,
+            {"max_length": 10, "modal_title": "Row Details"},
+        )
+        assert "Row Details" in result
+
+    # Non-string, non-falsy values (an int/float/bool cell) used to raise
+    # TypeError from the template's `value | length` check.
+    def test_non_string_int_does_not_raise(self):
+        result = _fmt(formatters.DialogModalFormatter, 424242424242, {"max_length": 5})
+        assert "<dialog" in result
+
+    def test_non_string_float_does_not_raise(self):
+        result = _fmt(formatters.DialogModalFormatter, 3.14159265, {"max_length": 100})
+        assert "3.14" in result
+
+    def test_non_string_bool_does_not_raise(self):
+        result = _fmt(formatters.DialogModalFormatter, True, {"max_length": 100})
+        assert "True" in result

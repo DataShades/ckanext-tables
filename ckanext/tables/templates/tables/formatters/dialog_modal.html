@@ -1,6 +1,6 @@
-{% if value | length > max_length %}
+{% if value | string | length > max_length %}
     <div class="d-flex">
-        <span> {{ value | truncate(max_length) }} </span>
+        <span> {{ value | string | truncate(max_length) }} </span>
         <button class="btn btn-light btn-sm"
             aria-label="{{ _('View Details') }}"
             onclick="document.getElementById('{{ modal_id }}').showModal()"> <i class="fa fa-up-right-from-square"></i>

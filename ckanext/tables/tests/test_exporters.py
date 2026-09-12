@@ -8,6 +8,7 @@ import pytest
 from ckanext.tables.data_sources import ListDataSource
 from ckanext.tables.exporters import (
     CSVExporter,
+    HTMLExporter,
     JSONExporter,
     NDJSONExporter,
     PDFExporter,
@@ -155,6 +156,33 @@ class TestXLSXExporter:
         assert XLSXExporter.name == "xlsx"
 
 
+@pytest.mark.usefixtures("with_request_context")
+class TestHTMLExporter:
+    def test_export_returns_bytes(self, simple_table, params):
+        result = HTMLExporter.export(simple_table, params)
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    def test_export_contains_headers_and_data(self, simple_table, params):
+        result = HTMLExporter.export(simple_table, params).decode("utf-8")
+        assert "Name" in result
+        assert "Alice" in result
+
+    def test_export_escapes_hostile_cell_values(self, simple_data):
+        data_source = ListDataSource([{"name": "<script>alert(1)</script>", "age": 1, "score": 1}])
+        tbl = TableDefinition(
+            name="hostile",
+            data_source=data_source,
+            columns=[ColumnDefinition(field="name"), ColumnDefinition(field="age"), ColumnDefinition(field="score")],
+        )
+        result = HTMLExporter.export(tbl, QueryParams()).decode("utf-8")
+        assert "<script>alert(1)</script>" not in result
+
+    def test_exporter_attributes(self):
+        assert HTMLExporter.name == "html"
+        assert HTMLExporter.mime_type == "text/html"
+
+
 class TestPDFExporter:
     def test_export_without_weasyprint_raises(self, simple_table, params):
         with mock.patch.dict("sys.modules", {"weasyprint": None}), pytest.raises(ImportError):
@@ -167,6 +195,13 @@ class TestPDFExporter:
     def test_is_available_true_with_weasyprint(self):
         pytest.importorskip("weasyprint")
         assert PDFExporter.is_available() is True
+
+    @pytest.mark.usefixtures("with_request_context")
+    def test_export_returns_real_pdf_bytes(self, simple_table, params):
+        pytest.importorskip("weasyprint")
+        result = PDFExporter.export(simple_table, params)
+        assert isinstance(result, bytes)
+        assert result.startswith(b"%PDF-")
 
     def test_exporter_attributes(self):
         assert PDFExporter.name == "pdf"

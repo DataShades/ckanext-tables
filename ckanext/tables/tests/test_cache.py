@@ -11,12 +11,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from ckanext.tables import cache
 from ckanext.tables.cache import (
     FeatherCacheBackend,
     ParquetCacheBackend,
     PickleCacheBackend,
     RedisCacheBackend,
     _TablesJSONEncoder,
+    get_cache_backend,
 )
 
 
@@ -524,3 +526,41 @@ class TestInvalidateCacheEntry:
 
         assert second_gen is not None
         assert second_gen != first_gen
+
+
+class TestGetCacheBackend:
+    """get_cache_backend() selects a backend class from the configured name."""
+
+    def test_default_is_feather(self):
+        with mock.patch.object(cache.tk, "config", {}):
+            assert isinstance(get_cache_backend(), FeatherCacheBackend)
+
+    def test_redis(self):
+        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "redis"}):
+            assert isinstance(get_cache_backend(), RedisCacheBackend)
+
+    def test_parquet(self):
+        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "parquet"}):
+            assert isinstance(get_cache_backend(), ParquetCacheBackend)
+
+    def test_pickle(self):
+        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "pickle"}):
+            assert isinstance(get_cache_backend(), PickleCacheBackend)
+
+    def test_feather_explicit(self):
+        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "feather"}):
+            assert isinstance(get_cache_backend(), FeatherCacheBackend)
+
+    def test_case_and_whitespace_insensitive(self):
+        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "  REDIS  "}):
+            assert isinstance(get_cache_backend(), RedisCacheBackend)
+
+    def test_unknown_value_falls_back_to_feather_with_a_warning(self):
+        with (
+            mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "not-a-real-backend"}),
+            mock.patch.object(cache, "log") as mock_log,
+        ):
+            backend = get_cache_backend()
+
+        assert isinstance(backend, FeatherCacheBackend)
+        mock_log.warning.assert_called_once()
