@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import select
 
+import ckan.plugins.toolkit as tk
 import ckan.tests.factories as factories
 import ckan.tests.helpers as helpers
 from ckan import model
@@ -124,7 +125,7 @@ class TestCSVResourceDataSource:
     def test_caching_feather_mixed_type_column_does_not_500(self, mock_read_csv, tmp_path):
         # A CSV column pandas leaves as `object` with mixed Python types (numbers
         # and text) makes pyarrow raise ArrowTypeError on the Feather write. The
-        # request must still succeed, just without caching (COR-2).
+        # request must still succeed, just without caching.
         mock_read_csv.return_value = pd.DataFrame({"mixed": [1, "two", 3.0]})
 
         ds = CsvUrlDataSource(
@@ -190,8 +191,27 @@ class TestCSVResourceDataSource:
         assert path == "http://fallback.com/data.csv"
 
     def test_get_source_path_fallback_on_error(self):
+        # resource={} is falsy, so the try/except that's supposed to log-and-fall-back
+        # is never entered — this only exercises the "if self.url" branch.
         ds = CsvUrlDataSource(resource={}, url="http://fallback.com/data.csv")
         path = ds.get_source_path()
+
+        assert path == "http://fallback.com/data.csv"
+
+    def test_get_source_path_falls_back_when_uploader_raises(self):
+        # A truthy resource whose uploader raises must hit the except block and fall
+        # back to the provided url — it used to always raise AttributeError instead,
+        # since it referenced self.resource_id, which this class never defines.
+        ds = CsvUrlDataSource(
+            resource={"id": "res-1", "url_type": "upload"},
+            url="http://fallback.com/data.csv",
+        )
+
+        with mock.patch(
+            "ckanext.tables.data_sources.uploader.get_resource_uploader",
+            side_effect=tk.ValidationError("Invalid storage path"),
+        ):
+            path = ds.get_source_path()
 
         assert path == "http://fallback.com/data.csv"
 

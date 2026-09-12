@@ -448,7 +448,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
             except (OSError, TypeError, tk.ValidationError, tk.ObjectNotFound):
                 log.warning(
                     "Failed to resolve path for resource %s, falling back to provided url",
-                    self.resource_id,
+                    self.resource.get("id"),
                     exc_info=True,
                 )
 

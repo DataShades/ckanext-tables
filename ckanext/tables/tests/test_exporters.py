@@ -47,7 +47,7 @@ class TestCSVExporter:
 
     def test_export_stream_yields_one_chunk_per_row(self, simple_table, params):
         # header + 3 data rows from simple_table, each its own chunk — proves rows are
-        # produced incrementally rather than built into one buffer first (PERF-4).
+        # produced incrementally rather than built into one buffer first.
         chunks = list(CSVExporter.export_stream(simple_table, params))
         assert len(chunks) == 4
         assert all(isinstance(c, bytes) for c in chunks)

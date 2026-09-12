@@ -293,13 +293,13 @@ class TestTableDefinitionCacheIntegration:
     def test_count_cache_key_ignores_page_size_and_sort(self, simple_table):
         # The count only depends on filters (see get_total_count), so page/size/sort
         # must not affect the cache key — otherwise every page or sort change with a
-        # filter present re-counts and leaves an unread, expired cache entry (COR-4).
+        # filter present re-counts and leaves an unread, expired cache entry.
         base = QueryParams(page=1, size=10, sort_by=None, sort_order=None, filters=[FilterItem("x", "=", "1")])
         other = QueryParams(page=3, size=50, sort_by="x", sort_order="desc", filters=[FilterItem("x", "=", "1")])
         assert simple_table._count_cache_key(base) == simple_table._count_cache_key(other)
 
     def test_count_cache_key_stable_across_filter_value_types(self, simple_table):
-        # Equal filters with "30" vs 30 should not produce different keys (COR-4).
+        # Equal filters with "30" vs 30 should not produce different keys.
         str_params = QueryParams(filters=[FilterItem("age", "=", "30")])
         int_params = QueryParams(filters=[FilterItem("age", "=", 30)])
         assert simple_table._count_cache_key(str_params) == simple_table._count_cache_key(int_params)
@@ -313,7 +313,7 @@ class TestTableDefinitionCacheIntegration:
     def test_refresh_data_invalidates_the_dataframe(self, simple_data, tmp_path):
         # refresh_data() used to delete "table:<name>", a key the DataFrame was never
         # cached under (it's cached under the data source's own get_cache_key()) — a
-        # complete no-op that left the Refresh button doing nothing (COR-3).
+        # complete no-op that left the Refresh button doing nothing.
         import contextlib
 
         from ckanext.tables.cache import PickleCacheBackend
@@ -345,7 +345,7 @@ class TestTableDefinitionCacheIntegration:
 
     def test_refresh_data_invalidates_cached_counts(self, simple_data, tmp_path):
         # A filtered count used to survive refresh_data() indefinitely — only the
-        # unfiltered ":count" key was ever cleared (COR-3).
+        # unfiltered ":count" key was ever cleared.
         from ckanext.tables.cache import PickleCacheBackend
         from ckanext.tables.data_sources import CsvUrlDataSource
 

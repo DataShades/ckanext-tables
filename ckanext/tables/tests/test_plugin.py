@@ -96,7 +96,7 @@ class TestTablesPlugin:
 @pytest.mark.ckan_config("ckan.plugins", "tables")
 @pytest.mark.usefixtures("with_plugins", "with_request_context")
 class TestResourceControllerHooks:
-    """before_resource_update/delete must invalidate both the DataFrame and its counts (COR-3)."""
+    """before_resource_update/delete must invalidate both the DataFrame and its counts."""
 
     def test_before_resource_update_invalidates_on_new_upload(self, tmp_path):
         backend = PickleCacheBackend(cache_dir=str(tmp_path))

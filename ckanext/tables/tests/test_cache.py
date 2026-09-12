@@ -168,7 +168,7 @@ class TestParquetCacheBackend:
     def test_set_swallows_arrow_type_error_on_mixed_type_column(self, parquet_backend):
         # A column with mixed Python types (e.g. numbers and text, as pandas
         # leaves it for XLSX/CSV input) makes pyarrow raise ArrowTypeError,
-        # which must not propagate out of set() (COR-2).
+        # which must not propagate out of set().
         df = pd.DataFrame({"mixed": [1, "two", 3.0]})
         parquet_backend.set("bad", df, ttl=60)
         assert parquet_backend.get("bad") is None
@@ -222,7 +222,7 @@ class TestFeatherCacheBackend:
 
     def test_set_swallows_arrow_type_error_on_mixed_type_column(self, feather_backend):
         # Feather is the default backend, so an uncaught ArrowTypeError here
-        # would 500 every request for the affected resource (COR-2).
+        # would 500 every request for the affected resource.
         df = pd.DataFrame({"mixed": [1, "two", 3.0]})
         feather_backend.set("bad", df, ttl=60)
         assert feather_backend.get("bad") is None
@@ -259,7 +259,7 @@ class TestRedisCacheBackend:
 
     def test_get_memoises_after_first_fetch(self):
         # A repeat get() for an unchanged value should skip json.loads on the
-        # (potentially large) payload, not just return the same result (PERF-1).
+        # (potentially large) payload, not just return the same result.
         backend = RedisCacheBackend()
         backend.set("memo_key", {"x": 1}, ttl=60)
 
@@ -460,7 +460,7 @@ class TestFileCacheBackendExpiryCleanup:
 
 
 class TestFileCacheBackendAtomicWrite:
-    """A concurrent reader must never see a half-written file or a mismatched pair (PERF-2)."""
+    """A concurrent reader must never see a half-written file or a mismatched pair."""
 
     def test_set_leaves_no_stray_tmp_file_on_success(self, feather_backend, tmp_path):
         feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=60)
@@ -503,7 +503,7 @@ class TestFileCacheBackendAtomicWrite:
 
 
 class TestInvalidateCacheEntry:
-    """invalidate_cache_entry deletes the data key and bumps a generation token (COR-3)."""
+    """invalidate_cache_entry deletes the data key and bumps a generation token."""
 
     def test_deletes_the_key(self, feather_backend):
         from ckanext.tables.cache import invalidate_cache_entry
