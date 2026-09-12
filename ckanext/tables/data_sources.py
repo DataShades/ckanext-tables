@@ -85,6 +85,9 @@ class DatabaseDataSource(BaseDataSource):
         self.stmt = self.base_stmt
 
         for filter_item in filters:
+            if not hasattr(self.stmt.selected_columns, filter_item.field):
+                continue
+
             col = getattr(self.stmt.selected_columns, filter_item.field)
             expr = self.build_filter(col, filter_item.operator, filter_item.value)
 
@@ -96,7 +99,7 @@ class DatabaseDataSource(BaseDataSource):
     def build_filter(self, column: ColumnElement, operator: str, value: str) -> BinaryExpression | ClauseElement | None:
         try:
             if isinstance(column.type, Boolean):
-                casted_value = value.lower() in ("true", "1", "yes", "y")
+                casted_value = str(value).lower() in ("true", "1", "yes", "y")
             elif isinstance(column.type, Integer):
                 casted_value = int(value)
             elif isinstance(column.type, DateTime):
@@ -696,7 +699,9 @@ class DataStoreDataSource(BaseDataSource):
         try:
             result = tk.get_action("datastore_search")({}, data_dict)
             return result.get("records", [])
-        except (tk.ObjectNotFound, tk.NotAuthorized):
+        except (tk.ObjectNotFound, tk.NotAuthorized, tk.ValidationError):
+            # ValidationError covers an invalid sort/filter field name — both come
+            # straight from unvalidated request params (see filter()/sort() above).
             return []
 
     def count(self) -> int:
@@ -716,7 +721,7 @@ class DataStoreDataSource(BaseDataSource):
         try:
             result = tk.get_action("datastore_search")({}, data_dict)
             return result.get("total", 0)
-        except (tk.ObjectNotFound, tk.NotAuthorized):
+        except (tk.ObjectNotFound, tk.NotAuthorized, tk.ValidationError):
             return 0
 
     def get_columns(self) -> list[str]:

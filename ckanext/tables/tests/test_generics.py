@@ -155,6 +155,13 @@ class TestAjaxTableMixin:
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
 
+    def test_apply_bulk_action_malformed_rows_does_not_500(self, sample_table: TableDefinition):
+        mixin = self._make_mixin()
+        with mock.patch("ckanext.tables.generics.log"):
+            response = mixin._apply_bulk_action(sample_table, "bulk_delete", "not valid json")
+        data = json.loads(response.get_data(as_text=True))
+        assert data["success"] is False
+
     def test_apply_bulk_action_success(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
         response = mixin._apply_bulk_action(sample_table, "bulk_delete", '[{"name": "Alice"}]')

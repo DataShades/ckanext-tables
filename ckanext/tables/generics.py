@@ -71,9 +71,8 @@ class AjaxTableMixin:
                 }
             )
 
-        rows_list = json.loads(rows)
-
         try:
+            rows_list = json.loads(rows)
             result = bulk_action_func(rows_list)
         except Exception:
             log.exception("Error during bulk action %s", action)

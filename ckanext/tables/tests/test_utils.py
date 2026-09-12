@@ -1,7 +1,37 @@
 import json
 import urllib.parse
 
-from ckanext.tables.utils import parse_tabulator_filters, tables_build_params
+from ckanext.tables.utils import parse_json_filters, parse_tabulator_filters, tables_build_params
+
+
+class TestParseJsonFilters:
+    """A malformed ``filters`` query param must not turn into a 500."""
+
+    def test_valid_filters(self):
+        raw = json.dumps([{"field": "age", "operator": "=", "value": "30"}])
+        result = parse_json_filters(raw)
+        assert len(result) == 1
+        assert result[0].field == "age"
+
+    def test_malformed_json_returns_empty(self):
+        assert parse_json_filters("not json") == []
+
+    def test_non_list_json_returns_empty(self):
+        assert parse_json_filters(json.dumps({"field": "age"})) == []
+        assert parse_json_filters(json.dumps("age")) == []
+        assert parse_json_filters(json.dumps(42)) == []
+
+    def test_non_object_entry_is_skipped(self):
+        raw = json.dumps(["not-an-object", {"field": "age", "operator": "=", "value": "30"}])
+        result = parse_json_filters(raw)
+        assert len(result) == 1
+        assert result[0].field == "age"
+
+    def test_entry_missing_a_key_is_skipped(self):
+        raw = json.dumps([{"field": "age", "operator": "="}, {"field": "name", "operator": "=", "value": "Alice"}])
+        result = parse_json_filters(raw)
+        assert len(result) == 1
+        assert result[0].field == "name"
 
 
 class TestParseTabulatorFilters:
@@ -100,3 +130,9 @@ class TestTablesBuildParams:
         with app.flask_app.test_request_context(f"/?size={get_max_page_size()}"):
             params = tables_build_params()
             assert params.size == get_max_page_size()
+
+    def test_malformed_filters_query_param_does_not_500(self, app):
+        qs = f"/?filters={urllib.parse.quote('not valid json')}"
+        with app.flask_app.test_request_context(qs):
+            params = tables_build_params()
+            assert params.filters == []

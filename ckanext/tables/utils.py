@@ -10,9 +10,7 @@ FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
 
 
 def tables_build_params() -> QueryParams:
-    filters = json.loads(tk.request.args.get("filters", "[]"))
-
-    all_filters = [FilterItem(f["field"], f["operator"], f["value"]) for f in filters]
+    all_filters = parse_json_filters(tk.request.args.get("filters", "[]"))
     all_filters.extend(parse_tabulator_filters())
 
     page = tk.request.args.get("page", 1, int)
@@ -25,6 +23,33 @@ def tables_build_params() -> QueryParams:
         sort_by=tk.request.args.get("sort[0][field]"),
         sort_order=tk.request.args.get("sort[0][dir]"),
     )
+
+
+def parse_json_filters(raw: str) -> list[FilterItem]:
+    """Parse the ``filters`` query param's JSON array into ``FilterItem``s.
+
+    Anything malformed — invalid JSON, a non-array, a non-object entry, or an
+    entry missing a required key — is skipped rather than left to raise past
+    this point and turn into a 500 for an edited query string.
+    """
+    try:
+        filters = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    if not isinstance(filters, list):
+        return []
+
+    result = []
+    for f in filters:
+        if not isinstance(f, dict):
+            continue
+        try:
+            result.append(FilterItem(f["field"], f["operator"], f["value"]))
+        except KeyError:
+            continue
+
+    return result
 
 
 def parse_tabulator_filters() -> list[FilterItem]:

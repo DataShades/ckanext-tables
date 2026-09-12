@@ -334,6 +334,15 @@ class TestDataStoreDataSource:
         assert ds_err.count() == 0
         assert ds_err.get_columns() == []
 
+    def test_invalid_sort_field_does_not_500(self):
+        # An edited query string can request sorting on a field the datastore doesn't
+        # have — datastore_search raises ValidationError for that, which used to be
+        # uncaught here.
+        self.ds.sort("nonexistent_field", "asc")
+
+        assert self.ds.all() == []
+        assert self.ds.count() == 3  # count() doesn't apply sort, so it's unaffected
+
 
 class TestListDataSource:
     @pytest.fixture
@@ -685,6 +694,22 @@ class TestDatabaseDataSource:
         col = stmt.selected_columns.name
         expr = ds.build_filter(col, "UNKNOWN_OP", "value")
         assert expr is None
+
+    def test_build_filter_boolean_with_non_string_value(self):
+        # A filter value from JSON (?filters=...) can be a bool/int, not just a string —
+        # value.lower() used to raise AttributeError for anything but a str.
+        stmt = select(model.Package)
+        ds = DatabaseDataSource(stmt)
+        col = stmt.selected_columns.private
+        assert ds.build_filter(col, "=", True) is not None
+        assert ds.build_filter(col, "=", 1) is not None
+
+    def test_filter_skips_unknown_field(self):
+        # An edited query string can reference a field that doesn't exist on the
+        # statement — this used to raise AttributeError via a bare getattr().
+        ds = DatabaseDataSource(select(model.User))
+        result = ds.filter([FilterItem("nonexistent_field", "=", "x")]).all()
+        assert isinstance(result, list)
 
     @pytest.mark.usefixtures("clean_db")
     def test_dataset_source(self):
