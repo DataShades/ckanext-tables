@@ -19,6 +19,11 @@
  *                     and Tooltip subscribe to - required even though nothing here
  *                     calls it directly
  *  - ResizeColumns:  per-column `resizable: true/false`
+ *  - ResizeTable:    watches the table's container via ResizeObserver and redraws on
+ *                     change - without it, `fitColumns` layout is computed once against
+ *                     whatever width the container had at construction and never again,
+ *                     so columns can render too narrow until something else (e.g. the
+ *                     header-filter toggle) happens to call `table.redraw()`.
  *  - Tooltip:        per-column `tooltip: true`
  *  - Edit:           NOT used for cell editing anywhere in ckanext-tables, but
  *                     Filter's `headerFilter: true` code path unconditionally
@@ -36,6 +41,7 @@ import SelectRowModule from "tabulator-tables/src/js/modules/SelectRow/SelectRow
 import MenuModule from "tabulator-tables/src/js/modules/Menu/Menu.js";
 import InteractionModule from "tabulator-tables/src/js/modules/Interaction/Interaction.js";
 import ResizeColumnsModule from "tabulator-tables/src/js/modules/ResizeColumns/ResizeColumns.js";
+import ResizeTableModule from "tabulator-tables/src/js/modules/ResizeTable/ResizeTable.js";
 import TooltipModule from "tabulator-tables/src/js/modules/Tooltip/Tooltip.js";
 import EditModule from "tabulator-tables/src/js/modules/Edit/Edit.js";
 
@@ -49,6 +55,7 @@ Tabulator.registerModule([
     MenuModule,
     InteractionModule,
     ResizeColumnsModule,
+    ResizeTableModule,
     TooltipModule,
     EditModule,
 ]);
