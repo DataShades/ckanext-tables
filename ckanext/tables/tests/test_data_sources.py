@@ -137,6 +137,21 @@ class TestCSVResourceDataSource:
         assert len(data) == 3
         assert ds.cache_backend.get(ds.get_cache_key()) is None
 
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    def test_invalidate_removes_the_cached_dataframe(self, mock_read_csv, tmp_path):
+        mock_read_csv.return_value = pd.DataFrame([{"id": "1", "name": "Alice", "age": "30"}])
+
+        ds = CsvUrlDataSource(
+            "http://example.com/invalidate.csv",
+            cache_backend=PickleCacheBackend(cache_dir=str(tmp_path)),
+        )
+        ds.filter([]).all()  # populates the cache
+        assert ds.cache_backend.get(ds.get_cache_key()) is not None
+
+        ds.invalidate()
+
+        assert ds.cache_backend.get(ds.get_cache_key()) is None
+
     @pytest.mark.usefixtures("clean_db")
     def test_get_source_path_upload(self, package, sysadmin, create_with_upload):
         """Test retrieving path from an uploaded resource."""

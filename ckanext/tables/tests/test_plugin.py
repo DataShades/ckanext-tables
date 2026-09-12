@@ -1,7 +1,10 @@
+from unittest import mock
+
 import pytest
 
 import ckan.plugins.toolkit as tk
 
+from ckanext.tables.cache import PickleCacheBackend
 from ckanext.tables.plugin import TablesPlugin
 
 
@@ -88,3 +91,51 @@ class TestTablesPlugin:
             url = tk.h.url_for("tables.resource_table_ajax", resource_id="test-id", resource_view_id="view-id")
             assert "test-id" in url
             assert "view-id" in url
+
+
+@pytest.mark.ckan_config("ckan.plugins", "tables")
+@pytest.mark.usefixtures("with_plugins", "with_request_context")
+class TestResourceControllerHooks:
+    """before_resource_update/delete must invalidate both the DataFrame and its counts (COR-3)."""
+
+    def test_before_resource_update_invalidates_on_new_upload(self, tmp_path):
+        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        key = "resource-res-1"
+        backend.set(key, [{"a": 1}], ttl=60)
+
+        with (
+            mock.patch("ckanext.tables.plugin.get_cache_backend", return_value=backend),
+            mock.patch("ckanext.tables.plugin.get_cache_ttl", return_value=60),
+        ):
+            TablesPlugin().before_resource_update(
+                {}, current={"id": "res-1"}, resource={"id": "res-1", "url_type": "upload", "upload": "new-file"}
+            )
+
+        assert backend.get(key) is None
+        assert backend.get(f"{key}:gen") is not None
+
+    def test_before_resource_update_skips_upload_without_a_new_file(self, tmp_path):
+        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        key = "resource-res-1"
+        backend.set(key, [{"a": 1}], ttl=60)
+
+        with mock.patch("ckanext.tables.plugin.get_cache_backend", return_value=backend):
+            TablesPlugin().before_resource_update(
+                {}, current={"id": "res-1"}, resource={"id": "res-1", "url_type": "upload", "upload": None}
+            )
+
+        assert backend.get(key) == [{"a": 1}]
+
+    def test_before_resource_delete_invalidates(self, tmp_path):
+        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        key = "resource-res-1"
+        backend.set(key, [{"a": 1}], ttl=60)
+
+        with (
+            mock.patch("ckanext.tables.plugin.get_cache_backend", return_value=backend),
+            mock.patch("ckanext.tables.plugin.get_cache_ttl", return_value=60),
+        ):
+            TablesPlugin().before_resource_delete({}, resource={"id": "res-1"}, resources=[])
+
+        assert backend.get(key) is None
+        assert backend.get(f"{key}:gen") is not None

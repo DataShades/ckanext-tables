@@ -500,3 +500,27 @@ class TestFileCacheBackendAtomicWrite:
 
     def test_redis_backend_clean_expired_is_a_noop(self):
         assert RedisCacheBackend().clean_expired() == 0
+
+
+class TestInvalidateCacheEntry:
+    """invalidate_cache_entry deletes the data key and bumps a generation token (COR-3)."""
+
+    def test_deletes_the_key(self, feather_backend):
+        from ckanext.tables.cache import invalidate_cache_entry
+
+        feather_backend.set("key1", pd.DataFrame([{"a": 1}]), ttl=60)
+        invalidate_cache_entry(feather_backend, "key1", ttl=60)
+        assert feather_backend.get("key1") is None
+
+    def test_bumps_the_generation_token_to_a_new_value(self, feather_backend):
+        from ckanext.tables.cache import invalidate_cache_entry
+
+        invalidate_cache_entry(feather_backend, "key1", ttl=60)
+        first_gen = feather_backend.get("key1:gen")
+        assert first_gen is not None
+
+        invalidate_cache_entry(feather_backend, "key1", ttl=60)
+        second_gen = feather_backend.get("key1:gen")
+
+        assert second_gen is not None
+        assert second_gen != first_gen

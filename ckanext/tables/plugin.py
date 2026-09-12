@@ -5,7 +5,8 @@ import ckan.plugins.toolkit as tk
 from ckan import types
 from ckan.common import CKANConfig
 
-from ckanext.tables.config import get_cache_backend
+from ckanext.tables.cache import invalidate_cache_entry
+from ckanext.tables.config import get_cache_backend, get_cache_ttl
 from ckanext.tables.logic.schema import get_preview_schema
 
 
@@ -66,7 +67,7 @@ class TablesPlugin(p.SingletonPlugin):
         if resource.get("url_type") == "url" and current["url"] == resource["url"]:
             return
 
-        get_cache_backend().delete(f"resource-{current['id']}")
+        invalidate_cache_entry(get_cache_backend(), f"resource-{current['id']}", get_cache_ttl())
 
     def before_resource_delete(
         self,
@@ -74,4 +75,4 @@ class TablesPlugin(p.SingletonPlugin):
         resource: dict[str, Any],
         resources: list[dict[str, Any]],
     ) -> None:
-        get_cache_backend().delete(f"resource-{resource['id']}")
+        invalidate_cache_entry(get_cache_backend(), f"resource-{resource['id']}", get_cache_ttl())

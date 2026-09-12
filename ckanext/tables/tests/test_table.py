@@ -309,3 +309,62 @@ class TestTableDefinitionCacheIntegration:
         with_filter = simple_table._count_cache_key(QueryParams(filters=[FilterItem("age", "=", 30)]))
         other_filter = simple_table._count_cache_key(QueryParams(filters=[FilterItem("age", "=", 31)]))
         assert no_filter != with_filter != other_filter
+
+    def test_refresh_data_invalidates_the_dataframe(self, simple_data, tmp_path):
+        # refresh_data() used to delete "table:<name>", a key the DataFrame was never
+        # cached under (it's cached under the data source's own get_cache_key()) — a
+        # complete no-op that left the Refresh button doing nothing (COR-3).
+        import contextlib
+
+        from ckanext.tables.cache import PickleCacheBackend
+        from ckanext.tables.data_sources import CsvUrlDataSource
+
+        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+
+        with (
+            mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read,
+            # Bypass the guarded-fetch layer (real SSRF/timeout checks against a live
+            # host) — see mocked_fetch_remote_file in test_data_sources.py.
+            mock.patch(
+                "ckanext.tables.data_sources.fetch_remote_file",
+                return_value=contextlib.nullcontext("/tmp/mocked-source"),
+            ),
+        ):
+            import pandas as pd
+
+            mock_read.return_value = pd.DataFrame(simple_data)
+            ds = CsvUrlDataSource(url="http://example.com/refresh.csv", cache_backend=backend)
+            tbl = TableDefinition(name="refresh_tbl", data_source=ds)
+            tbl.get_raw_data(QueryParams(), paginate=False)  # populates the cache
+
+        assert backend.get(ds.get_cache_key()) is not None
+
+        tbl.refresh_data()
+
+        assert backend.get(ds.get_cache_key()) is None
+
+    def test_refresh_data_invalidates_cached_counts(self, simple_data, tmp_path):
+        # A filtered count used to survive refresh_data() indefinitely — only the
+        # unfiltered ":count" key was ever cleared (COR-3).
+        from ckanext.tables.cache import PickleCacheBackend
+        from ckanext.tables.data_sources import CsvUrlDataSource
+
+        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+
+        with mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read:
+            import pandas as pd
+
+            mock_read.return_value = pd.DataFrame(simple_data)
+            ds = CsvUrlDataSource(url="http://example.com/count-refresh.csv", cache_backend=backend)
+            ds._df = pd.DataFrame(simple_data)
+            ds._filtered_df = pd.DataFrame(simple_data)
+
+        tbl = TableDefinition(name="count_refresh_tbl", data_source=ds)
+        params = QueryParams(filters=[FilterItem("age", "=", 30)])
+        tbl.get_total_count(params)  # populates a filtered count entry
+
+        assert tbl._get_cached_count(params) is not None
+
+        tbl.refresh_data()
+
+        assert tbl._get_cached_count(params) is None

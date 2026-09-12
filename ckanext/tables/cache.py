@@ -354,7 +354,7 @@ class _FileCacheBackend(CacheBackend, ABC):
         """Public accessor for the cache file path (useful in tests)."""
         return self._cache_path(key)
 
-    def clean_expired(self) -> int:
+    def clean_expired(self) -> int: # noqa: C901
         """Delete every expired cache entry in this directory, of any format.
 
         ``get`` already deletes an entry the next time it's read past its TTL,
@@ -533,3 +533,21 @@ class CachedDataSourceMixin:
     def get_cache_key(self) -> str:
         """Return a unique string key for this data source instance."""
         raise NotImplementedError
+
+    def invalidate(self) -> None:
+        """Remove this data source's cached DataFrame and orphan every count derived from it."""
+        invalidate_cache_entry(self.cache_backend, self.get_cache_key(), self.cache_ttl)
+
+
+def invalidate_cache_entry(cache_backend: CacheBackend, key: str, ttl: int) -> None:
+    """Delete *key* and make every count cached against it unreachable.
+
+    A count is cached per distinct filter combination a user has applied (see
+    ``TableDefinition._count_cache_key``) — an unbounded set that can't be
+    enumerated and deleted directly. Bumping a generation token stored under
+    ``f"{key}:gen"`` instead means any count computed *after* this call uses a
+    new key, so a stale one is never served again; the orphaned old entries
+    are simply left to expire via their own TTL, like any other expired entry.
+    """
+    cache_backend.delete(key)
+    cache_backend.set(f"{key}:gen", uuid.uuid4().hex, ttl)

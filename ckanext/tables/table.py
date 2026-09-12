@@ -53,7 +53,7 @@ class TableDefinition:
     def __post_init__(self):
         if isinstance(self.data_source, CachedDataSourceMixin):
             self._cache = self.data_source.cache_backend
-            self._cache_key = f"table:{self.name}"
+            self._cache_key = self.data_source.get_cache_key()
             self._cache_ttl = self.data_source.cache_ttl
         else:
             self._cache = None
@@ -165,13 +165,23 @@ class TableDefinition:
 
         return count
 
+    def _generation(self) -> str:
+        """Return the current cache generation, bumped by refresh_data() to orphan old counts."""
+        if self._cache is None:
+            return "0"
+
+        generation = self._cache.get(f"{self._cache_key}:gen")
+        return generation if isinstance(generation, str) else "0"
+
     def _count_cache_key(self, params: types.QueryParams) -> str:
         """Return the cache sub-key for a given set of filters (count ignores page/size/sort)."""
+        generation = self._generation()
+
         if not params.filters:
-            return f"{self._cache_key}:count"
+            return f"{self._cache_key}:count:{generation}"
 
         filters_key = "|".join(f"{f.field}:{f.operator}:{f.value}" for f in params.filters)
-        return f"{self._cache_key}:count:{filters_key}"
+        return f"{self._cache_key}:count:{generation}:{filters_key}"
 
     def _get_cached_count(self, params: types.QueryParams) -> int | None:
         if self._cache is None:
@@ -248,10 +258,8 @@ class TableDefinition:
         return next((e for e in self.exporters if e.name == name), None)
 
     def refresh_data(self) -> None:
-        if self._cache is not None:
-            self._cache.delete(self._cache_key)
-            # Also clear any cached counts
-            self._cache.delete(f"{self._cache_key}:count")
+        if isinstance(self.data_source, CachedDataSourceMixin):
+            self.data_source.invalidate()
 
 
 @dataclass(frozen=True)
