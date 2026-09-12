@@ -166,8 +166,12 @@ class TableDefinition:
         return count
 
     def _count_cache_key(self, params: types.QueryParams) -> str:
-        """Return the cache sub-key for a given set of query params."""
-        return f"{self._cache_key}:count:{params!s}" if params.filters else f"{self._cache_key}:count"
+        """Return the cache sub-key for a given set of filters (count ignores page/size/sort)."""
+        if not params.filters:
+            return f"{self._cache_key}:count"
+
+        filters_key = "|".join(f"{f.field}:{f.operator}:{f.value}" for f in params.filters)
+        return f"{self._cache_key}:count:{filters_key}"
 
     def _get_cached_count(self, params: types.QueryParams) -> int | None:
         if self._cache is None:
