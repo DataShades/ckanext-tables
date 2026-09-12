@@ -251,6 +251,35 @@ class TestRedisCacheBackend:
         result = backend.get("decimal_key")
         assert abs(result - 9.99) < 0.001
 
+    def test_get_memoises_after_first_fetch(self):
+        # A repeat get() for an unchanged value should skip json.loads on the
+        # (potentially large) payload, not just return the same result (PERF-1).
+        backend = RedisCacheBackend()
+        backend.set("memo_key", {"x": 1}, ttl=60)
+
+        with mock.patch("ckanext.tables.cache.json.loads", wraps=json.loads) as mock_loads:
+            first = backend.get("memo_key")
+            second = backend.get("memo_key")
+
+        assert first == second == {"x": 1}
+        assert mock_loads.call_count == 1
+
+    def test_overwrite_busts_the_memo(self):
+        backend = RedisCacheBackend()
+        backend.set("memo_key2", {"x": 1}, ttl=60)
+        backend.get("memo_key2")
+
+        backend.set("memo_key2", {"x": 2}, ttl=60)
+        assert backend.get("memo_key2") == {"x": 2}
+
+    def test_delete_clears_the_memo(self):
+        backend = RedisCacheBackend()
+        backend.set("memo_key3", {"x": 1}, ttl=60)
+        backend.get("memo_key3")
+
+        backend.delete("memo_key3")
+        assert backend.get("memo_key3") is None
+
 
 class TestFileCacheBackendUnsafeDir:
     """A cache directory another local user could write to must disable caching, not use it."""

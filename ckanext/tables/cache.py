@@ -10,6 +10,7 @@ import os
 import pickle
 import threading
 import time
+import uuid
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from datetime import date, datetime
@@ -92,17 +93,44 @@ class RedisCacheBackend(CacheBackend):
 
     _PREFIX = "ckanext:tables:"
 
+    # Same shape/purpose as _FileCacheBackend._memo: a small, in-process
+    # LRU of already-decoded values, keyed by the full Redis key, valid as
+    # of a version token. `get` still does one Redis round trip to check
+    # that token, but skips fetching and json-decoding the (potentially
+    # large) payload itself when it's unchanged.
+    _memo: OrderedDict[str, tuple[bytes, Any]] = OrderedDict()
+    _memo_lock = threading.Lock()
+
     def _full_key(self, key: str) -> str:
         return f"{self._PREFIX}{key}"
 
+    def _version_key(self, key: str) -> str:
+        return f"{self._PREFIX}{key}:v"
+
     def get(self, key: str) -> Any:
+        full_key = self._full_key(key)
+
         with connect_to_redis() as conn:
-            data: bytes | None = conn.get(self._full_key(key))  # type: ignore
+            version: bytes | None = conn.get(self._version_key(key))  # type: ignore
+
+            if version is None:
+                self._memo_delete(full_key)
+                return None
+
+            with self._memo_lock:
+                entry = self._memo.get(full_key)
+                if entry is not None and entry[0] == version:
+                    self._memo.move_to_end(full_key)
+                    return entry[1]
+
+            data: bytes | None = conn.get(full_key)  # type: ignore
 
         if not data:
             return None
 
-        return json.loads(data)
+        value = json.loads(data)
+        self._memo_set(full_key, version, value)
+        return value
 
     def set(self, key: str, value: Any, ttl: int) -> None:
         if isinstance(value, pd.DataFrame):
@@ -110,10 +138,26 @@ class RedisCacheBackend(CacheBackend):
 
         with connect_to_redis() as conn:
             conn.setex(self._full_key(key), ttl, json.dumps(value, cls=_TablesJSONEncoder))
+            conn.setex(self._version_key(key), ttl, uuid.uuid4().hex)
 
     def delete(self, key: str) -> None:
         with connect_to_redis() as conn:
             conn.delete(self._full_key(key))  # type: ignore
+            conn.delete(self._version_key(key))  # type: ignore
+
+        self._memo_delete(self._full_key(key))
+
+    def _memo_set(self, full_key: str, version: bytes, value: Any) -> None:
+        with self._memo_lock:
+            self._memo[full_key] = (version, value)
+            self._memo.move_to_end(full_key)
+
+            while len(self._memo) > _MEMO_MAX_ENTRIES:
+                self._memo.popitem(last=False)
+
+    def _memo_delete(self, full_key: str) -> None:
+        with self._memo_lock:
+            self._memo.pop(full_key, None)
 
 
 class _FileCacheBackend(CacheBackend, ABC):
