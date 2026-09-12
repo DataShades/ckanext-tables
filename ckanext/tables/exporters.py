@@ -1,8 +1,9 @@
 import csv
 import json
 import logging
+from collections.abc import Iterator
 from datetime import datetime, timezone
-from io import BytesIO, StringIO
+from io import BytesIO
 from typing import TYPE_CHECKING
 
 import yaml
@@ -15,6 +16,17 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
+
+
+class _Echo:
+    """A file-like object whose ``write`` just returns what it was given.
+
+    Lets ``csv.writer`` be used to format one row at a time into a string,
+    instead of accumulating into a real buffer, for exporters that stream.
+    """
+
+    def write(self, value: str) -> str:
+        return value
 
 
 class ExporterBase:
@@ -38,6 +50,17 @@ class ExporterBase:
         raise NotImplementedError
 
     @classmethod
+    def export_stream(cls, table: "TableDefinition", params: "QueryParams") -> Iterator[bytes]:
+        """Yield the exported data in chunks.
+
+        The default just wraps ``export()`` as a single chunk; override this (and, for
+        the reverse direction, have ``export()`` join it) for exporters that can be
+        produced incrementally, so the response can start sending before the whole
+        file is built and without holding two full copies of it in memory at once.
+        """
+        yield cls.export(table, params)
+
+    @classmethod
     def get_table_columns(cls, table: "TableDefinition") -> list["ColumnDefinition"]:
         """Get the list of table columns to be exported.
 
@@ -59,20 +82,17 @@ class CSVExporter(ExporterBase):
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
-        output = StringIO()
-        writer = csv.writer(output)
+        return b"".join(cls.export_stream(table, params))
+
+    @classmethod
+    def export_stream(cls, table: "TableDefinition", params: "QueryParams") -> Iterator[bytes]:
+        writer = csv.writer(_Echo())
         columns = cls.get_table_columns(table)
 
-        header = [col.title for col in columns]
-        writer.writerow(header)
+        yield writer.writerow([col.title for col in columns]).encode("utf-8")
 
-        # Write data rows
-        data = table.get_raw_data(params, paginate=False)
-
-        for row in data:
-            writer.writerow([row.get(col.field, "") for col in columns])
-
-        return output.getvalue().encode("utf-8")
+        for row in table.get_raw_data(params, paginate=False):
+            yield writer.writerow([row.get(col.field, "") for col in columns]).encode("utf-8")
 
 
 class JSONExporter(ExporterBase):
@@ -131,19 +151,17 @@ class TSVExporter(ExporterBase):
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
-        output = StringIO()
-        writer = csv.writer(output, delimiter="\t")
+        return b"".join(cls.export_stream(table, params))
 
+    @classmethod
+    def export_stream(cls, table: "TableDefinition", params: "QueryParams") -> Iterator[bytes]:
+        writer = csv.writer(_Echo(), delimiter="\t")
         columns = cls.get_table_columns(table)
-        header = [col.title for col in columns]
-        writer.writerow(header)
 
-        # Rows
-        data = table.get_raw_data(params, paginate=False)
-        for row in data:
-            writer.writerow([row.get(col.field, "") for col in columns])
+        yield writer.writerow([col.title for col in columns]).encode("utf-8")
 
-        return output.getvalue().encode("utf-8")
+        for row in table.get_raw_data(params, paginate=False):
+            yield writer.writerow([row.get(col.field, "") for col in columns]).encode("utf-8")
 
 
 class YAMLExporter(ExporterBase):
@@ -168,9 +186,12 @@ class NDJSONExporter(ExporterBase):
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
-        data = table.get_raw_data(params, paginate=False)
-        lines = [json.dumps(row, default=str) for row in data]
-        return "\n".join(lines).encode("utf-8")
+        return b"".join(cls.export_stream(table, params))
+
+    @classmethod
+    def export_stream(cls, table: "TableDefinition", params: "QueryParams") -> Iterator[bytes]:
+        for row in table.get_raw_data(params, paginate=False):
+            yield (json.dumps(row, default=str) + "\n").encode("utf-8")
 
 
 class HTMLExporter(ExporterBase):

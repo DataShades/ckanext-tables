@@ -5,7 +5,7 @@ import logging
 from datetime import datetime as dt
 from datetime import timezone as tz
 
-from flask import Response, jsonify, request
+from flask import Response, jsonify, request, stream_with_context
 from flask.views import MethodView
 
 import ckan.plugins.toolkit as tk
@@ -103,11 +103,10 @@ class ExportTableMixin:
                 tk._(f"Cannot export {total} rows: the maximum is {max_rows}. Add filters to narrow the result set."),
             )
 
-        data = exporter.export(table, params)
         filename = self._prepare_export_filename(table, exporter)
 
         return Response(
-            data,
+            stream_with_context(exporter.export_stream(table, params)),
             mimetype=exporter.mime_type,
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )

@@ -45,6 +45,16 @@ class TestCSVExporter:
         assert CSVExporter.name == "csv"
         assert CSVExporter.mime_type == "text/csv"
 
+    def test_export_stream_yields_one_chunk_per_row(self, simple_table, params):
+        # header + 3 data rows from simple_table, each its own chunk — proves rows are
+        # produced incrementally rather than built into one buffer first (PERF-4).
+        chunks = list(CSVExporter.export_stream(simple_table, params))
+        assert len(chunks) == 4
+        assert all(isinstance(c, bytes) for c in chunks)
+
+    def test_export_stream_joined_matches_export(self, simple_table, params):
+        assert b"".join(CSVExporter.export_stream(simple_table, params)) == CSVExporter.export(simple_table, params)
+
 
 class TestJSONExporter:
     def test_export_valid_json(self, simple_table, params):
@@ -73,6 +83,10 @@ class TestTSVExporter:
         assert TSVExporter.name == "tsv"
         assert TSVExporter.mime_type == "text/tab-separated-values"
 
+    def test_export_stream_yields_one_chunk_per_row(self, simple_table, params):
+        chunks = list(TSVExporter.export_stream(simple_table, params))
+        assert len(chunks) == 4
+
 
 # ---------------------------------------------------------------------------
 # YAMLExporter
@@ -91,6 +105,12 @@ class TestYAMLExporter:
     def test_exporter_attributes(self):
         assert YAMLExporter.name == "yaml"
 
+    def test_export_stream_defaults_to_a_single_chunk(self, simple_table, params):
+        # YAML isn't row-streamable (it's one document), so the base-class default
+        # export_stream just wraps export() as a single chunk.
+        chunks = list(YAMLExporter.export_stream(simple_table, params))
+        assert chunks == [YAMLExporter.export(simple_table, params)]
+
 
 class TestNDJSONExporter:
     def test_export_one_json_per_line(self, simple_table, params):
@@ -102,6 +122,11 @@ class TestNDJSONExporter:
 
     def test_exporter_attributes(self):
         assert NDJSONExporter.name == "ndjson"
+
+    def test_export_stream_yields_one_chunk_per_row(self, simple_table, params):
+        chunks = list(NDJSONExporter.export_stream(simple_table, params))
+        assert len(chunks) == 3
+        assert all(json.loads(c) for c in chunks)
 
 
 class TestXLSXExporter:
