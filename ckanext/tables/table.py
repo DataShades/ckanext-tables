@@ -75,7 +75,7 @@ class TableDefinition:
             self.columns.append(
                 ColumnDefinition(
                     field=COLUMN_ACTIONS_FIELD,
-                    title=tk._(""),
+                    title="",
                     formatters=[(formatters.ActionsFormatter, {})],
                     filterable=False,
                     tabulator_formatter="html",

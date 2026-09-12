@@ -160,6 +160,17 @@ class DatabaseDataSource(BaseDataSource):
         return [c.name for c in self.stmt.selected_columns]
 
 
+def _numeric_or_string_pair(row_value: Any, filter_value: Any) -> tuple[Any, Any]:
+    """Compare two values numerically when both parse as numbers, else as strings."""
+    if not isinstance(row_value, bool) and not isinstance(filter_value, bool):
+        try:
+            return float(row_value), float(filter_value)
+        except (TypeError, ValueError):
+            pass
+
+    return str(row_value), str(filter_value)
+
+
 class ListDataSource(BaseDataSource):
     """A data source that uses a list of dictionaries as the data source.
 
@@ -187,18 +198,23 @@ class ListDataSource(BaseDataSource):
         return self
 
     def build_filter(self, field: str, operator: str, value: str) -> Callable[[dict[str, Any]], bool] | None:
-        operators: dict[str, Callable[[str, str], bool]] = {
+        string_operators: dict[str, Callable[[str, str], bool]] = {
             "=": lambda a, b: a == b,
             "!=": lambda a, b: a != b,
+            "like": lambda a, b: b.lower() in a.lower(),
+        }
+        ordering_operators: dict[str, Callable[[Any, Any], bool]] = {
             "<": lambda a, b: a < b,
             "<=": lambda a, b: a <= b,
             ">": lambda a, b: a > b,
             ">=": lambda a, b: a >= b,
-            "like": lambda a, b: b.lower() in a.lower(),
         }
 
-        if op_func := operators.get(operator):
+        if op_func := string_operators.get(operator):
             return lambda row: op_func(str(row.get(field, "")), str(value))
+
+        if op_func := ordering_operators.get(operator):
+            return lambda row: op_func(*_numeric_or_string_pair(row.get(field, ""), value))
 
         return None
 
@@ -208,7 +224,10 @@ class ListDataSource(BaseDataSource):
 
         self.filtered = sorted(
             self.filtered,
-            key=lambda x: x.get(sort_by),
+            # A type-stable (bool, str) key: rows missing the field, or with a None
+            # value, sort together at one end instead of raising TypeError against
+            # rows whose value is an int/str/float mix.
+            key=lambda x: (x.get(sort_by) is None, str(x.get(sort_by, ""))),
             reverse=(sort_order or "").lower() == "desc",
         )
 

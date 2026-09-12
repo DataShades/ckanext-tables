@@ -394,6 +394,18 @@ class TestListDataSource:
         result = ds.filter([FilterItem(field="name", operator="UNKNOWN", value="Alice")]).all()
         assert len(result) == 3  # no filter applied
 
+    def test_filter_ordering_is_numeric_not_lexicographic(self):
+        # As plain strings, "100" < "50" (lexicographic: '1' < '5') and "9" < "50"
+        # is False ('9' > '5') — both backwards for actual numbers.
+        ds = ListDataSource([{"age": "9"}, {"age": "50"}, {"age": "100"}])
+        result = ds.filter([FilterItem(field="age", operator="<", value="50")]).all()
+        assert [row["age"] for row in result] == ["9"]
+
+    def test_filter_ordering_falls_back_to_string_for_non_numeric(self):
+        ds = ListDataSource([{"name": "Alice"}, {"name": "Bob"}])
+        result = ds.filter([FilterItem(field="name", operator="<", value="Bob")]).all()
+        assert [row["name"] for row in result] == ["Alice"]
+
     def test_sort_asc(self, ds):
         result = ds.filter([]).sort("name", "asc").all()
         assert result[0]["name"] == "Alice"
@@ -405,6 +417,18 @@ class TestListDataSource:
 
     def test_sort_none_field(self, ds):
         result = ds.filter([]).sort(None, None).all()
+        assert len(result) == 3
+
+    def test_sort_does_not_raise_on_missing_field(self):
+        # sorted(key=lambda x: x.get(sort_by)) used to raise TypeError comparing
+        # None against a real value once any row lacks the field.
+        ds = ListDataSource([{"name": "Alice", "age": 30}, {"name": "Bob"}])
+        result = ds.filter([]).sort("age", "asc").all()
+        assert len(result) == 2
+
+    def test_sort_does_not_raise_on_mixed_types(self):
+        ds = ListDataSource([{"age": 30}, {"age": "25"}, {"age": None}])
+        result = ds.filter([]).sort("age", "asc").all()
         assert len(result) == 3
 
     def test_paginate_page1(self, ds):
