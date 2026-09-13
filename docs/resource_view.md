@@ -18,12 +18,14 @@ The view is available for resources whose **Format** field (case-insensitive) is
 | `orc`     | `OrcUrlDataSource`         |
 | `parquet` | `ParquetUrlDataSource`     |
 | `feather` | `FeatherUrlDataSource`     |
+| `jsonld` / `json-ld` | `JsonLdUrlDataSource` |
+| `ndjson` / `jsonl` | `NdjsonUrlDataSource` |
 
 If the resource has been pushed to the **CKAN Datastore** (i.e. its `datastore_active` flag is `True`), the `DataStoreDataSource` is used regardless of the format field, providing direct and efficient access to stored records without any caching overhead.
 
 ## Caching
 
-For file-based data sources (CSV, TSV, XLSX, XLS, ODS, ORC, Parquet, Feather), fetched data is cached to disk as Arrow IPC (Feather) files, with a default TTL of **3600 seconds** (1 hour). Both are configurable:
+For file-based data sources (CSV, TSV, XLSX, XLS, ODS, ORC, Parquet, Feather, JSON-LD, NDJSON), fetched data is cached to disk as Arrow IPC (Feather) files, with a default TTL of **3600 seconds** (1 hour). Both are configurable:
 
 ```ini
 ckanext.tables.cache.ttl = 3600

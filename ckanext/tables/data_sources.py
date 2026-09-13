@@ -905,6 +905,18 @@ class TsvUrlDataSource(CsvUrlDataSource):
     _format_name = "TSV"
 
 
+class NdjsonUrlDataSource(BaseResourceDataSource):
+    """Reads a newline-delimited JSON (NDJSON) file — one JSON object per line."""
+
+    _format_name = "NDJSON"
+
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return pd.read_json(path, lines=True, **kwargs)
+
+    def _schema_reader(self, path: str) -> list[str]:
+        return list(pd.read_json(path, lines=True, nrows=1).columns)
+
+
 class XlsxUrlDataSource(BaseResourceDataSource):
     _format_name = "XLSX"
 
@@ -969,6 +981,51 @@ class FeatherUrlDataSource(BaseResourceDataSource):
 
     def _schema_reader(self, path: str) -> list[str]:
         return feather.read_table(path, columns=[]).schema.names
+
+
+class JsonLdUrlDataSource(BaseResourceDataSource):
+    """Reads a JSON-LD document as a flat table.
+
+    This is a shallow, non-semantic reader: no ``@context`` expansion, IRI
+    compaction, or blank-node resolution — it just tabulates whichever array
+    of node objects the document exposes, so ``@id``/``@type``/etc. show up
+    as ordinary (underscore-flattened, for nested values) columns. That
+    matches what "preview this resource" needs; anything requiring real
+    JSON-LD semantics belongs in a dedicated linked-data library instead.
+
+    The array of records is taken from, in order: the document's ``@graph``
+    key (the common shape for a document describing several entities), or a
+    single-item list wrapping the document if it's one bare object. A
+    top-level JSON array is used as-is.
+    """
+
+    _format_name = "JSON-LD"
+    _schema_read_errors = (OSError, ValueError, TypeError)
+
+    # pandas' default "." would make a flattened field like "name.en" collide
+    # with Tabulator's dot-path field syntax on the client (it'd look for a
+    # nested `row.name.en` instead of the literal flat key) and render blank.
+    _FLATTEN_SEP = "_"
+
+    @staticmethod
+    def _load_records(path: str) -> list[dict[str, Any]]:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        if isinstance(data, dict):
+            data = data.get("@graph", [data])
+
+        if not isinstance(data, list):
+            raise TypeError("A JSON-LD document must be an object, a @graph array, or a top-level array")
+
+        return data
+
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return pd.json_normalize(self._load_records(path), sep=self._FLATTEN_SEP)
+
+    def _schema_reader(self, path: str) -> list[str]:
+        records = self._load_records(path)
+        return list(pd.json_normalize(records[:1], sep=self._FLATTEN_SEP).columns) if records else []
 
 
 class DataStoreDataSource(BaseDataSource):

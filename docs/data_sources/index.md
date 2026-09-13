@@ -29,4 +29,6 @@ These data sources are used automatically by the [Resource View](../resource_vie
 | [`OrcUrlDataSource`](./resource.md#orcurldatasource) | `orc` | Reads Apache ORC columnar files. |
 | [`ParquetUrlDataSource`](./resource.md#parqueturldatasource) | `parquet` | Reads Apache Parquet columnar files. |
 | [`FeatherUrlDataSource`](./resource.md#featherurldatasource) | `feather` | Reads Apache Arrow Feather files. |
+| [`JsonLdUrlDataSource`](./resource.md#jsonldurldatasource) | `jsonld`, `json-ld` | Tabulates a JSON-LD document's `@graph` array (or itself); shallow, no semantic processing. |
+| [`NdjsonUrlDataSource`](./resource.md#ndjsonurldatasource) | `ndjson`, `jsonl` | Reads a newline-delimited JSON file — one JSON object per line. |
 | [`DataStoreDataSource`](./resource.md#datastoredatasource) | any (when `datastore_active`) | Queries the CKAN Datastore API directly — no caching. |

@@ -46,6 +46,23 @@ source = TsvUrlDataSource(url="https://example.com/data.tsv")
 
 ---
 
+### NdjsonUrlDataSource
+
+Reads a newline-delimited JSON file (`.ndjson`/`.jsonl`) — one JSON object per line.
+
+```python
+from ckanext.tables.shared import NdjsonUrlDataSource
+
+source = NdjsonUrlDataSource(url="https://example.com/data.ndjson")
+```
+
+::: tables.data_sources.NdjsonUrlDataSource
+    options:
+      show_source: true
+      show_bases: false
+
+---
+
 ### XlsxUrlDataSource
 
 Reads the first sheet of an Excel workbook (`.xlsx`).
@@ -142,6 +159,23 @@ source = FeatherUrlDataSource(url="https://example.com/data.feather")
 ```
 
 ::: tables.data_sources.FeatherUrlDataSource
+    options:
+      show_source: true
+      show_bases: false
+
+---
+
+### JsonLdUrlDataSource
+
+Tabulates a JSON-LD document (`.jsonld`). This is a shallow, non-semantic reader: no `@context` expansion, IRI compaction, or blank-node resolution — it just reads whichever array of node objects the document exposes (its `@graph` array, itself if it's already an array, or a single bare object treated as one row), with nested values flattened into underscore-joined column names (e.g. `name_@value` — not dot-joined, which would collide with Tabulator's dot-path field syntax on the client). Triggered by the format `jsonld` or `json-ld`.
+
+```python
+from ckanext.tables.shared import JsonLdUrlDataSource
+
+source = JsonLdUrlDataSource(url="https://example.com/data.jsonld")
+```
+
+::: tables.data_sources.JsonLdUrlDataSource
     options:
       show_source: true
       show_bases: false

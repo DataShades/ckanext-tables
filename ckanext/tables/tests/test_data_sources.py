@@ -1,5 +1,6 @@
 import contextlib
 import decimal
+import json
 import os
 import uuid
 from datetime import datetime  # noqa: DTZ001
@@ -27,7 +28,9 @@ from ckanext.tables.data_sources import (
     DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
+    JsonLdUrlDataSource,
     ListDataSource,
+    NdjsonUrlDataSource,
     OdsUrlDataSource,
     OrcUrlDataSource,
     PandasDataSource,
@@ -365,6 +368,93 @@ class TestTsvUrlDataSource:
 
     def test_format_name(self):
         assert TsvUrlDataSource(url="http://example.com/data.tsv")._format_name == "TSV"
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_fetch_remote_file")
+class TestNdjsonUrlDataSource:
+    @mock.patch("ckanext.tables.data_sources.pd.read_json")
+    def test_fetch_and_parse(self, mock_read_json):
+        mock_read_json.return_value = pd.DataFrame([{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}])
+
+        ds = NdjsonUrlDataSource(url="http://example.com/data.ndjson")
+        data = ds.filter([]).all()
+
+        assert data == [{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}]
+        mock_read_json.assert_called_once_with("/tmp/mocked-source", lines=True)
+
+    def test_format_name(self):
+        assert NdjsonUrlDataSource(url="http://example.com/data.ndjson")._format_name == "NDJSON"
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis")
+class TestJsonLdUrlDataSource:
+    """Exercises JsonLdUrlDataSource's real @graph/bare-object/array handling.
+
+    It does real file I/O (json.load) rather than calling a mockable pandas
+    reader, so these write a real file and point the mocked
+    ``fetch_remote_file`` at it instead of using the ``mocked_fetch_remote_file``
+    fixture's fake path.
+    """
+
+    def _ds(self, tmp_path, monkeypatch, content: str) -> JsonLdUrlDataSource:
+        path = tmp_path / "data.jsonld"
+        path.write_text(content)
+        monkeypatch.setattr(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            lambda *a, **kw: contextlib.nullcontext(str(path)),
+        )
+        return JsonLdUrlDataSource(url="http://example.com/data.jsonld")
+
+    def test_top_level_array(self, tmp_path, monkeypatch):
+        content = json.dumps([{"@id": "ex:1", "name": "Alice"}, {"@id": "ex:2", "name": "Bob"}])
+        ds = self._ds(tmp_path, monkeypatch, content)
+
+        assert ds.filter([]).all() == [{"@id": "ex:1", "name": "Alice"}, {"@id": "ex:2", "name": "Bob"}]
+
+    def test_at_graph_array(self, tmp_path, monkeypatch):
+        content = json.dumps(
+            {
+                "@context": "https://schema.org",
+                "@graph": [{"@id": "ex:1", "name": "Alice"}, {"@id": "ex:2", "name": "Bob"}],
+            }
+        )
+        ds = self._ds(tmp_path, monkeypatch, content)
+
+        assert ds.filter([]).all() == [{"@id": "ex:1", "name": "Alice"}, {"@id": "ex:2", "name": "Bob"}]
+
+    def test_bare_object_becomes_a_single_row(self, tmp_path, monkeypatch):
+        content = json.dumps({"@id": "ex:1", "name": "Alice"})
+        ds = self._ds(tmp_path, monkeypatch, content)
+
+        assert ds.filter([]).all() == [{"@id": "ex:1", "name": "Alice"}]
+
+    def test_nested_values_are_flattened_with_underscores(self, tmp_path, monkeypatch):
+        """An underscore separator avoids colliding with Tabulator's dot-path field syntax."""
+        content = json.dumps([{"@id": "ex:1", "name": {"@value": "Alice", "@language": "en"}}])
+        ds = self._ds(tmp_path, monkeypatch, content)
+
+        assert ds.filter([]).all() == [{"@id": "ex:1", "name_@value": "Alice", "name_@language": "en"}]
+
+    def test_schema_reader_matches_full_load_columns(self, tmp_path, monkeypatch):
+        content = json.dumps([{"@id": "ex:1", "name": "Alice", "age": 30}])
+        ds = self._ds(tmp_path, monkeypatch, content)
+
+        assert ds.get_columns() == ["@id", "name", "age"]
+
+    def test_invalid_top_level_scalar_raises(self, tmp_path, monkeypatch):
+        ds = self._ds(tmp_path, monkeypatch, json.dumps("just a string"))
+
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
+
+    def test_malformed_json_raises(self, tmp_path, monkeypatch):
+        ds = self._ds(tmp_path, monkeypatch, "{not valid json")
+
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
+
+    def test_format_name(self):
+        assert JsonLdUrlDataSource(url="http://example.com/data.jsonld")._format_name == "JSON-LD"
 
 
 class TestSerialization:
@@ -1051,6 +1141,12 @@ class TestUrlDataSourceErrorPaths:
     @mock.patch("ckanext.tables.data_sources.pd.read_csv", side_effect=OSError("boom"))
     def test_tsv_error_raises(self, _):
         ds = TsvUrlDataSource(url="http://example.com/file.tsv")
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_json", side_effect=OSError("boom"))
+    def test_ndjson_error_raises(self, _):
+        ds = NdjsonUrlDataSource(url="http://example.com/file.ndjson")
         with pytest.raises(DataSourceError):
             ds.fetch_dataframe()
 

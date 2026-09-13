@@ -11,6 +11,8 @@ from ckanext.tables.data_sources import (
     DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
+    JsonLdUrlDataSource,
+    NdjsonUrlDataSource,
     OdsUrlDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
@@ -188,6 +190,28 @@ class TestTablesGuessDataSource:
         resource = {"format": "ODS", "url": "http://example.com/data.ods", "id": "res-2c"}
         ds = tables_guess_data_source(resource)
         assert isinstance(ds, OdsUrlDataSource)
+
+    def test_jsonld_format(self):
+        resource = {"format": "JSONLD", "url": "http://example.com/data.jsonld", "id": "res-2d"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, JsonLdUrlDataSource)
+
+    def test_json_ld_format_with_hyphen(self):
+        """Both "JSONLD" and "JSON-LD" are common spellings for a resource's declared format."""
+        resource = {"format": "JSON-LD", "url": "http://example.com/download?id=1", "id": "res-2e"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, JsonLdUrlDataSource)
+
+    def test_ndjson_format(self):
+        resource = {"format": "NDJSON", "url": "http://example.com/data.ndjson", "id": "res-2f"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, NdjsonUrlDataSource)
+
+    def test_jsonl_format(self):
+        """The ".jsonl" ("JSON Lines") extension is another common name for NDJSON."""
+        resource = {"format": "JSONL", "url": "http://example.com/data.jsonl", "id": "res-2g"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, NdjsonUrlDataSource)
 
     def test_orc_format(self):
         resource = {"format": "ORC", "url": "http://example.com/data.orc", "id": "res-3"}

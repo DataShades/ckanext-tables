@@ -39,6 +39,16 @@ class TestTablesPlugin:
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "ods"}}) is True
 
+    def test_can_view_jsonld(self):
+        plugin = TablesPlugin()
+        assert plugin.can_view({"resource": {"format": "jsonld"}}) is True
+        assert plugin.can_view({"resource": {"format": "JSON-LD"}}) is True
+
+    def test_can_view_ndjson(self):
+        plugin = TablesPlugin()
+        assert plugin.can_view({"resource": {"format": "ndjson"}}) is True
+        assert plugin.can_view({"resource": {"format": "JSONL"}}) is True
+
     def test_can_view_unsupported(self):
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "XML"}}) is False

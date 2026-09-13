@@ -14,6 +14,8 @@ from ckanext.tables.data_sources import (
     DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
+    JsonLdUrlDataSource,
+    NdjsonUrlDataSource,
     OdsUrlDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
@@ -36,6 +38,10 @@ DATA_SOURCE_BY_FORMAT = {
     "orc": OrcUrlDataSource,
     "parquet": ParquetUrlDataSource,
     "feather": FeatherUrlDataSource,
+    "jsonld": JsonLdUrlDataSource,
+    "json-ld": JsonLdUrlDataSource,
+    "ndjson": NdjsonUrlDataSource,
+    "jsonl": NdjsonUrlDataSource,
 }
 SUPPORTED_FORMATS = frozenset(DATA_SOURCE_BY_FORMAT)
 
