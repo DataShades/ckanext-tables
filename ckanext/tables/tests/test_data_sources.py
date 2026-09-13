@@ -31,6 +31,7 @@ from ckanext.tables.data_sources import (
     OrcUrlDataSource,
     PandasDataSource,
     ParquetUrlDataSource,
+    XlsUrlDataSource,
     XlsxUrlDataSource,
     _sniff_csv_delimiter,
 )
@@ -297,6 +298,27 @@ class TestCSVResourceDataSource:
         """Test that initialization fails without url or resource_id."""
         with pytest.raises(ValueError, match="Either url or resource_id must be provided"):
             CsvUrlDataSource()
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_fetch_remote_file")
+class TestXlsUrlDataSource:
+    """XlsUrlDataSource only overrides XlsxUrlDataSource's `_format_name`.
+
+    pandas picks the xlrd/openpyxl engine from the file's actual bytes, not
+    its extension.
+    """
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_excel")
+    def test_fetch_and_parse(self, mock_read_excel):
+        mock_read_excel.return_value = pd.DataFrame([{"id": "1", "name": "Alice"}])
+
+        ds = XlsUrlDataSource(url="http://example.com/legacy.xls")
+        data = ds.filter([]).all()
+
+        assert data == [{"id": "1", "name": "Alice"}]
+
+    def test_format_name(self):
+        assert XlsUrlDataSource(url="http://example.com/legacy.xls")._format_name == "XLS"
 
 
 class TestSerialization:
@@ -965,6 +987,12 @@ class TestUrlDataSourceErrorPaths:
     @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
     def test_xlsx_error_raises(self, _):
         ds = XlsxUrlDataSource(url="http://example.com/file.xlsx")
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
+    def test_xls_error_raises(self, _):
+        ds = XlsUrlDataSource(url="http://example.com/file.xls")
         with pytest.raises(DataSourceError):
             ds.fetch_dataframe()
 

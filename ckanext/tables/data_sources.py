@@ -904,6 +904,18 @@ class XlsxUrlDataSource(BaseResourceDataSource):
         return list(pd.read_excel(path, nrows=0).columns)
 
 
+class XlsUrlDataSource(XlsxUrlDataSource):
+    """Reads a legacy Excel 97-2003 (``.xls``) workbook.
+
+    ``pd.read_excel`` picks its engine (``xlrd`` here vs. ``openpyxl`` for
+    ``.xlsx``) by sniffing the file's actual bytes, not its extension — our
+    local paths are extensionless temp files anyway — so this only needs to
+    override ``_format_name`` for accurate error messages/logging.
+    """
+
+    _format_name = "XLS"
+
+
 class OrcUrlDataSource(BaseResourceDataSource):
     _format_name = "ORC"
     _schema_read_errors = (OSError, ValueError, pa.ArrowInvalid)

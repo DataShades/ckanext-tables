@@ -10,6 +10,7 @@ from .data_sources import (
     ListDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
+    XlsUrlDataSource,
     XlsxUrlDataSource,
 )
 from .exporters import ALL_EXPORTERS
@@ -45,6 +46,7 @@ __all__ = [
     "BaseDataSource",
     "DataSourceError",
     "XlsxUrlDataSource",
+    "XlsUrlDataSource",
     "OrcUrlDataSource",
     "ParquetUrlDataSource",
     "FeatherUrlDataSource",

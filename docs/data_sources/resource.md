@@ -46,6 +46,23 @@ source = XlsxUrlDataSource(url="https://example.com/report.xlsx")
 
 ---
 
+### XlsUrlDataSource
+
+Reads the first sheet of a legacy Excel 97-2003 workbook (`.xls`).
+
+```python
+from ckanext.tables.shared import XlsUrlDataSource
+
+source = XlsUrlDataSource(url="https://example.com/legacy-report.xls")
+```
+
+::: tables.data_sources.XlsUrlDataSource
+    options:
+      show_source: true
+      show_bases: false
+
+---
+
 ### OrcUrlDataSource
 
 Reads an Apache ORC columnar file.

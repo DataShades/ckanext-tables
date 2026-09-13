@@ -13,6 +13,7 @@ from ckanext.tables.data_sources import (
     FeatherUrlDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
+    XlsUrlDataSource,
     XlsxUrlDataSource,
 )
 from ckanext.tables.shared import ALL_EXPORTERS
@@ -170,6 +171,11 @@ class TestTablesGuessDataSource:
         resource = {"format": "XLSX", "url": "http://example.com/data.xlsx", "id": "res-2"}
         ds = tables_guess_data_source(resource)
         assert isinstance(ds, XlsxUrlDataSource)
+
+    def test_xls_format(self):
+        resource = {"format": "XLS", "url": "http://example.com/data.xls", "id": "res-2b"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, XlsUrlDataSource)
 
     def test_orc_format(self):
         resource = {"format": "ORC", "url": "http://example.com/data.orc", "id": "res-3"}

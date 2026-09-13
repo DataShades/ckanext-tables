@@ -16,6 +16,7 @@ from ckanext.tables.data_sources import (
     FeatherUrlDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
+    XlsUrlDataSource,
     XlsxUrlDataSource,
 )
 from ckanext.tables.exporters import ALL_EXPORTERS
@@ -27,6 +28,7 @@ FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
 DATA_SOURCE_BY_FORMAT = {
     "csv": CsvUrlDataSource,
     "xlsx": XlsxUrlDataSource,
+    "xls": XlsUrlDataSource,
     "orc": OrcUrlDataSource,
     "parquet": ParquetUrlDataSource,
     "feather": FeatherUrlDataSource,

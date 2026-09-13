@@ -23,6 +23,7 @@ These data sources are used automatically by the [Resource View](../resource_vie
 | ----------- | ------------------- | ----------- |
 | [`CsvUrlDataSource`](./resource.md#csvurldatasource) | `csv` | Reads CSV files with auto-detected delimiter. |
 | [`XlsxUrlDataSource`](./resource.md#xlsxurldatasource) | `xlsx` | Reads the first sheet of an Excel workbook. |
+| [`XlsUrlDataSource`](./resource.md#xlsurldatasource) | `xls` | Reads the first sheet of a legacy Excel 97-2003 workbook. |
 | [`OrcUrlDataSource`](./resource.md#orcurldatasource) | `orc` | Reads Apache ORC columnar files. |
 | [`ParquetUrlDataSource`](./resource.md#parqueturldatasource) | `parquet` | Reads Apache Parquet columnar files. |
 | [`FeatherUrlDataSource`](./resource.md#featherurldatasource) | `feather` | Reads Apache Arrow Feather files. |

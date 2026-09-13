@@ -27,6 +27,10 @@ class TestTablesPlugin:
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "xlsx"}}) is True
 
+    def test_can_view_xls(self):
+        plugin = TablesPlugin()
+        assert plugin.can_view({"resource": {"format": "xls"}}) is True
+
     def test_can_view_unsupported(self):
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "XML"}}) is False
