@@ -7,7 +7,7 @@ Here you can find complete usage instructions for the Tables extension. The proc
 
 We're going to use a **demo** table definition called `PeopleTable` for demonstration purposes.
 
-It's a working example located in a separate extension and can be enabled alongside the tables extension. Just add `tables_demo` to your `ckan.plugins` configuration. It also requires the `faker` package (`pip install faker`) to generate its mock data.
+It's a working example located in a separate extension and can be enabled alongside the tables extension. Install the `demo` extra to pull in its `faker` dependency (`pip install ckanext-tables[demo]`), then add `tables_demo` to your `ckan.plugins` configuration.
 
 The demo table uses all the features of the tables extension, including data sources, formatters, all action types, and exporters. A minimal example could be much simpler, but this one demonstrates the full power of the extension.
 

@@ -25,6 +25,7 @@ dependencies = [
 xlsx = ["openpyxl>=3.1.2,<4.0.0"]
 pdf = ["weasyprint>=66.0.0,<70.0.0"]
 orc = ["pyarrow[orc]"]
+demo = ["faker"]
 test = ["pytest-ckan"]
 dev = ["pre-commit"]
 docs = ["mkdocs", "mkdocs-material", "mkdocstrings", "mkdocstrings-python", "mkdocs-macros-plugin"]
