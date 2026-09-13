@@ -273,6 +273,17 @@ class TestExportTableMixin:
         assert "sample" in filename
         assert filename.endswith(".csv")
 
+    def test_export_content_disposition_is_quoted(self, sample_table: TableDefinition):
+        """The filename contains a space (timestamp) so it must be quoted."""
+        mixin = self._make_mixin()
+        with mock.patch("ckanext.tables.generics.tables_build_params") as mock_params:
+            mock_params.return_value = QueryParams()
+            response = mixin._export(sample_table, "csv")
+
+        disposition = response.headers["Content-Disposition"]
+        assert disposition.startswith(f'attachment; filename="{sample_table.name}-')
+        assert disposition.endswith('.csv"')
+
 
 @pytest.mark.ckan_config("ckan.plugins", "tables")
 @pytest.mark.usefixtures("with_plugins", "with_request_context")

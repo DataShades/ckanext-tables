@@ -43,7 +43,11 @@ describe("_onTableExportClick", () => {
         const table = { getSorters: () => [{ field: "age", dir: "desc" }] };
         const showToast = vi.fn();
         const blob = new Blob(["a,b\n1,2"], { type: "text/csv" });
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: () => Promise.resolve(blob) });
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            blob: () => Promise.resolve(blob),
+            headers: { get: () => null },
+        });
         vi.stubGlobal("fetch", fetchMock);
 
         window.history.replaceState({}, "", "/dataset/resource/view");
@@ -72,6 +76,8 @@ describe("_onTableExportClick", () => {
         expect((URL.createObjectURL as any)).toHaveBeenCalledWith(blob);
         expect((URL.revokeObjectURL as any)).toHaveBeenCalledWith("blob:fake");
         expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
+        // COR-17: falls back to the table name when there's no Content-Disposition header.
+        expect((HTMLAnchorElement.prototype.click as any).mock.contexts[0].download).toBe("my-resource.csv");
 
         expect(showToast).toHaveBeenCalledWith(expect.stringContaining("CSV"));
         expect(showToast).toHaveBeenCalledWith(expect.stringContaining("CSV"), "default", false);
@@ -79,6 +85,33 @@ describe("_onTableExportClick", () => {
         // Buttons/toggle are disabled during the request and re-enabled after.
         expect(button.disabled).toBe(false);
         expect(toggle.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("uses the filename from the server's Content-Disposition header when present", async () => {
+        const { tableExportersMenu, button } = buildExportersMenu("csv", "CSV");
+        const blob = new Blob(["a,b\n1,2"], { type: "text/csv" });
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            blob: () => Promise.resolve(blob),
+            headers: { get: () => 'attachment; filename="my-resource-2026-09-13 14-00-00.csv"' },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const instance = makeInstance({
+            tableExportersMenu,
+            table: { getSorters: () => [] },
+            tableName: "my-resource",
+            tableFilters: [],
+            sandbox: { client: { url: (u: string) => u } },
+            options: { config: { ajaxURL: "/table" } },
+            _showToast: vi.fn(),
+        });
+
+        await instance._onTableExportClick({ target: button } as unknown as Event);
+
+        expect((HTMLAnchorElement.prototype.click as any).mock.contexts[0].download).toBe(
+            "my-resource-2026-09-13 14-00-00.csv"
+        );
     });
 
     it("shows a failure toast and re-enables controls when the response isn't ok", async () => {
@@ -101,6 +134,35 @@ describe("_onTableExportClick", () => {
         expect(showToast).toHaveBeenCalledWith(expect.stringContaining("failed"), "danger", false);
         expect(button.disabled).toBe(false);
         consoleError.mockRestore();
+    });
+});
+
+describe("_filenameFromContentDisposition", () => {
+    const instance = makeInstance();
+
+    it("returns null for a missing header", () => {
+        expect(instance._filenameFromContentDisposition(null)).toBeNull();
+        expect(instance._filenameFromContentDisposition(undefined)).toBeNull();
+    });
+
+    it("extracts a quoted filename", () => {
+        expect(instance._filenameFromContentDisposition('attachment; filename="my table.csv"')).toBe(
+            "my table.csv"
+        );
+    });
+
+    it("extracts an unquoted filename", () => {
+        expect(instance._filenameFromContentDisposition("attachment; filename=data.csv")).toBe("data.csv");
+    });
+
+    it("decodes an RFC 5987 filename*=UTF-8'' value", () => {
+        expect(
+            instance._filenameFromContentDisposition("attachment; filename*=UTF-8''caf%C3%A9.csv")
+        ).toBe("café.csv");
+    });
+
+    it("returns null when the header has no filename parameter", () => {
+        expect(instance._filenameFromContentDisposition("attachment")).toBeNull();
     });
 });
 

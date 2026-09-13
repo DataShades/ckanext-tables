@@ -507,9 +507,12 @@ ckan.module("tables-tabulator", function ($) {
                 if (!response.ok) throw new Error(`${target.innerText} export failed`);
 
                 const blob = await response.blob();
+                const filename =
+                    this._filenameFromContentDisposition(response.headers?.get("Content-Disposition")) ||
+                    `${this.tableName || "table"}.${exporter}`;
                 const a = document.createElement("a");
                 a.href = URL.createObjectURL(blob);
-                a.download = `${this.tableName || "table"}.${exporter}`;
+                a.download = filename;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -527,6 +530,25 @@ ckan.module("tables-tabulator", function ($) {
                 exportButtons.forEach((btn) => (btn.disabled = false));
                 toggle?.removeAttribute("disabled");
             }
+        },
+
+        // The server names the export (see ExportTableMixin._prepare_export_filename)
+        // and puts it in Content-Disposition; parse it out instead of duplicating that
+        // naming logic client-side, so the two never drift out of sync.
+        _filenameFromContentDisposition: function (header: string | null | undefined): string | null {
+            if (!header) return null;
+
+            const utf8Match = header.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+            if (utf8Match) {
+                try {
+                    return decodeURIComponent(utf8Match[1]);
+                } catch {
+                    return null;
+                }
+            }
+
+            const match = header.match(/filename\s*=\s*"?([^";]+)"?/i);
+            return match ? match[1] : null;
         },
 
         _onRefreshTable: function (): void {

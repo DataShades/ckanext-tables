@@ -125,7 +125,7 @@ class ExportTableMixin:
         return Response(
             stream_with_context(exporter.export_stream(table, params)),
             mimetype=exporter.mime_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
     def _prepare_export_filename(self, table: TableDefinition, exporter: type[exporters.ExporterBase]) -> str:
