@@ -629,6 +629,24 @@ class CachedDataSourceMixin:
         """Cache *count* for *filters* under the current generation."""
         _metadata_set(self._count_cache_key(filters), count, self.cache_ttl)
 
+    def get_cached_columns(self) -> list[str] | None:
+        """Return the cached column list, or ``None`` on a cache miss."""
+        result = _metadata_get(self._columns_cache_key())
+        return list(result) if isinstance(result, list) else None
+
+    def set_cached_columns(self, columns: list[str]) -> None:
+        """Cache *columns* under the current generation."""
+        _metadata_set(self._columns_cache_key(), columns, self.cache_ttl)
+
+    def _columns_cache_key(self) -> str:
+        """Return the cache key for this source's column list.
+
+        Scoped by generation like ``_count_cache_key``, so ``invalidate()``
+        orphans a stale column list the same way it orphans stale counts,
+        with no separate invalidation path to keep in sync.
+        """
+        return f"{self.get_cache_key()}:columns:{self._generation()}"
+
     def _generation(self) -> str:
         """Return the current cache generation, bumped by ``invalidate()`` to orphan old counts."""
         generation = _metadata_get(f"{self.get_cache_key()}:gen")

@@ -896,6 +896,66 @@ class TestCsvDelimiterSniffing:
         assert fast.equals(slow)
 
 
+@pytest.mark.usefixtures("clean_redis", "mocked_fetch_remote_file")
+class TestUrlDataSourceColumnCaching:
+    """get_columns() caches its result instead of recomputing it on every call.
+
+    CsvUrlDataSource stands in for all five *UrlDataSource formats, since the
+    caching lives in the shared BaseResourceDataSource.get_columns(), not per format.
+    """
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    def test_second_call_does_not_re_read_the_source(self, mock_read_csv, tmp_path):
+        mock_read_csv.return_value = pd.DataFrame({"a": [1], "b": [2]})
+        ds = CsvUrlDataSource(
+            "http://example.com/col-cache-1.csv",
+            cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path)),
+        )
+
+        first = ds.get_columns()
+        mock_read_csv.reset_mock()
+        second = ds.get_columns()
+
+        assert first == second == ["a", "b"]
+        mock_read_csv.assert_not_called()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    def test_a_fresh_instance_with_no_shared_disk_still_reuses_the_cache(self, mock_read_csv, tmp_path):
+        # Each AJAX/action request builds a brand-new data source instance (see
+        # ResourceViewHandler.get_table_for_resource) — and, in a multi-worker
+        # deployment, from a worker with no shared Feather cache_dir at all. The
+        # column list must still come from the shared Redis metadata store.
+        mock_read_csv.return_value = pd.DataFrame({"a": [1], "b": [2]})
+        url = "http://example.com/col-cache-2.csv"
+
+        CsvUrlDataSource(url, cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path / "worker1"))).get_columns()
+        mock_read_csv.reset_mock()
+
+        columns = CsvUrlDataSource(
+            url, cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path / "worker2"))
+        ).get_columns()
+
+        assert columns == ["a", "b"]
+        mock_read_csv.assert_not_called()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    def test_invalidate_orphans_the_cached_columns(self, mock_read_csv, tmp_path):
+        mock_read_csv.return_value = pd.DataFrame({"a": [1]})
+        ds = CsvUrlDataSource(
+            "http://example.com/col-cache-3.csv",
+            cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path)),
+        )
+
+        assert ds.get_columns() == ["a"]
+
+        ds.invalidate()
+        mock_read_csv.return_value = pd.DataFrame({"a": [1], "new_col": [2]})
+        mock_read_csv.reset_mock()
+
+        assert ds.get_columns() == ["a", "new_col"]
+        mock_read_csv.assert_called_once()
+
+
 @pytest.mark.usefixtures("mocked_fetch_remote_file")
 class TestUrlDataSourceErrorPaths:
     """All URL-based sources should return an empty DataFrame on errors."""

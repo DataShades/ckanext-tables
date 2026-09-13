@@ -738,6 +738,30 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     def get_cache_key(self) -> str:
         return resource_cache_key(self.resource["id"]) if self.resource else f"url-{self.url}"
 
+    def get_columns(self) -> list[str]:
+        """Return the column names, preferring a cached answer over recomputing it.
+
+        The resource-preview endpoints (``views.py``'s ``ResourceViewHandler``/
+        ``ResourceViewDeferredHandler``) call this on *every* GET/POST for a given
+        resource — pagination, sorting, filtering, and every action all re-derive
+        the same deterministic column list before doing anything else.
+        """
+        cached = self.get_cached_columns()
+
+        if cached is not None:
+            return cached
+
+        columns = self._fetch_columns()
+
+        if columns:
+            self.set_cached_columns(columns)
+
+        return columns
+
+    def _fetch_columns(self) -> list[str]:
+        """Subclass hook: compute the column names, without consulting the cache above."""
+        raise NotImplementedError
+
     def get_source_path(self) -> str:
         if self._source_path:
             return self._source_path
@@ -877,7 +901,7 @@ class CsvUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching CSV from %s", self.get_source_path())
             return pd.DataFrame()
 
-    def get_columns(self) -> list[str]:
+    def _fetch_columns(self) -> list[str]:
         if self._load_from_cache():
             return list(self._df.columns) if self._df is not None else []
 
@@ -901,7 +925,7 @@ class XlsxUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching XLSX from %s", self.get_source_path())
             return pd.DataFrame()
 
-    def get_columns(self) -> list[str]:
+    def _fetch_columns(self) -> list[str]:
         if self._load_from_cache():
             return list(self._df.columns) if self._df is not None else []
 
@@ -925,7 +949,7 @@ class OrcUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching ORC from %s", self.get_source_path())
             return pd.DataFrame()
 
-    def get_columns(self) -> list[str]:
+    def _fetch_columns(self) -> list[str]:
         if self._load_from_cache():
             return list(self._df.columns) if self._df is not None else []
 
@@ -949,7 +973,7 @@ class ParquetUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching Parquet from %s", self.get_source_path())
             return pd.DataFrame()
 
-    def get_columns(self) -> list[str]:
+    def _fetch_columns(self) -> list[str]:
         if self._load_from_cache():
             return list(self._df.columns) if self._df is not None else []
 
@@ -973,7 +997,7 @@ class FeatherUrlDataSource(BaseResourceDataSource):
             log.exception("Error fetching Feather from %s", self.get_source_path())
             return pd.DataFrame()
 
-    def get_columns(self) -> list[str]:
+    def _fetch_columns(self) -> list[str]:
         if self._load_from_cache():
             return list(self._df.columns) if self._df is not None else []
 

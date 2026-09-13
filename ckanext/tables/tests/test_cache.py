@@ -490,6 +490,33 @@ class TestCachedDataSourceMixinCounts:
         assert RedisCacheBackend().get(ds._count_cache_key([])) == 7
 
 
+@pytest.mark.usefixtures("clean_redis")
+class TestCachedDataSourceMixinColumns:
+    def test_get_cached_columns_is_none_on_a_miss(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        assert ds.get_cached_columns() is None
+
+    def test_set_then_get_returns_the_cached_value(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        ds.set_cached_columns(["a", "b"])
+        assert ds.get_cached_columns() == ["a", "b"]
+
+    def test_invalidate_orphans_previously_cached_columns(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        ds.set_cached_columns(["a", "b"])
+        assert ds.get_cached_columns() is not None
+
+        ds.invalidate()
+
+        assert ds.get_cached_columns() is None
+
+    def test_columns_land_in_redis_regardless_of_the_configured_cache_backend(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend, key="cross-worker-columns-key")
+        ds.set_cached_columns(["x", "y"])
+
+        assert RedisCacheBackend().get(ds._columns_cache_key()) == ["x", "y"]
+
+
 class TestCacheMetadataResilience:
     """A Redis outage must degrade count/generation caching, not break the request."""
 
@@ -516,3 +543,15 @@ class TestCacheMetadataResilience:
 
         with mock.patch.object(cache.RedisCacheBackend, "set", side_effect=cache.RedisError("down")):
             ds.invalidate()  # the Feather delete must still happen, the Redis bump must not raise
+
+    def test_get_cached_columns_returns_none_when_redis_is_unreachable(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+
+        with mock.patch.object(cache.RedisCacheBackend, "get", side_effect=cache.RedisError("down")):
+            assert ds.get_cached_columns() is None
+
+    def test_set_cached_columns_does_not_raise_when_redis_is_unreachable(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+
+        with mock.patch.object(cache.RedisCacheBackend, "set", side_effect=cache.RedisError("down")):
+            ds.set_cached_columns(["a"])  # must not raise
