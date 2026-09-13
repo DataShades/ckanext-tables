@@ -24,6 +24,21 @@ from ckanext.tables.types import FilterItem, QueryParams
 
 FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
 
+DATA_SOURCE_BY_FORMAT = {
+    "csv": CsvUrlDataSource,
+    "xlsx": XlsxUrlDataSource,
+    "orc": OrcUrlDataSource,
+    "parquet": ParquetUrlDataSource,
+    "feather": FeatherUrlDataSource,
+}
+SUPPORTED_FORMATS = frozenset(DATA_SOURCE_BY_FORMAT)
+
+
+def guess_format(url: str, declared_format: str = "") -> str:
+    """Guess a data format from a URL, falling back to a declared format."""
+    ext = Path(url.split("?", maxsplit=1)[0]).suffix.lstrip(".").lower()
+    return ext or declared_format.lower()
+
 
 def tables_build_params() -> QueryParams:
     all_filters = parse_json_filters(tk.request.args.get("filters", "[]"))
@@ -151,21 +166,13 @@ def tables_guess_data_source(
 
     if file_url:
         url = file_url
-        fmt = Path(file_url.split("?")[0]).suffix.lstrip(".").lower()
+        fmt = guess_format(file_url)
     else:
-        url = resource.get("url")
-        fmt = resource.get("format", "").lower()
+        url = resource.get("url", "")
+        fmt = guess_format(url, resource.get("format", ""))
 
     cache_backend = get_cache_backend()
-    data_sources = {
-        "csv": CsvUrlDataSource,
-        "xlsx": XlsxUrlDataSource,
-        "orc": OrcUrlDataSource,
-        "parquet": ParquetUrlDataSource,
-        "feather": FeatherUrlDataSource,
-    }
-
-    data_source_class = data_sources.get(fmt)
+    data_source_class = DATA_SOURCE_BY_FORMAT.get(fmt)
 
     if not data_source_class:
         raise DataSourceError(f"Unsupported format: {fmt}")

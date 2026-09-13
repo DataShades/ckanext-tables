@@ -35,6 +35,16 @@ class TestTablesPlugin:
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {}}) is False
 
+    def test_can_view_url_extension_wins_over_stale_format(self):
+        plugin = TablesPlugin()
+        resource = {"format": "XML", "url": "http://example.com/data.csv"}
+        assert plugin.can_view({"resource": resource}) is True
+
+    def test_can_view_url_without_extension_falls_back_to_format(self):
+        plugin = TablesPlugin()
+        resource = {"format": "CSV", "url": "http://example.com/download?id=1"}
+        assert plugin.can_view({"resource": resource}) is True
+
     def test_view_template(self):
         plugin = TablesPlugin()
         result = plugin.view_template({}, {})

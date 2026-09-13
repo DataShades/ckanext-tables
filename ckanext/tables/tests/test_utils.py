@@ -17,6 +17,7 @@ from ckanext.tables.data_sources import (
 )
 from ckanext.tables.shared import ALL_EXPORTERS
 from ckanext.tables.utils import (
+    guess_format,
     parse_json_filters,
     parse_tabulator_filters,
     tables_build_params,
@@ -223,6 +224,38 @@ class TestTablesGuessDataSource:
         resource_view = {"file_url": "http://example.com/data.xml"}
         with pytest.raises(DataSourceError, match="Unsupported format"):
             tables_guess_data_source(resource, resource_view)
+
+    def test_url_extension_wins_over_stale_format(self):
+        resource = {"format": "XLSX", "url": "http://example.com/data.csv", "id": "res-11"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, CsvUrlDataSource)
+
+    def test_url_query_string_does_not_affect_resource_url_format_guess(self):
+        resource = {"format": "CSV", "url": "http://example.com/data.parquet?token=abc", "id": "res-12"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, ParquetUrlDataSource)
+
+    def test_url_without_extension_falls_back_to_declared_format(self):
+        resource = {"format": "CSV", "url": "http://example.com/download?id=1", "id": "res-13"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, CsvUrlDataSource)
+
+
+class TestGuessFormat:
+    def test_url_extension_takes_priority(self):
+        assert guess_format("http://example.com/data.csv", "xlsx") == "csv"
+
+    def test_query_string_is_ignored(self):
+        assert guess_format("http://example.com/data.parquet?token=abc") == "parquet"
+
+    def test_falls_back_to_declared_format_without_extension(self):
+        assert guess_format("http://example.com/download?id=1", "CSV") == "csv"
+
+    def test_unsupported_extension_is_not_masked_by_declared_format(self):
+        assert guess_format("http://example.com/data.xml", "csv") == "xml"
+
+    def test_no_url_and_no_declared_format(self):
+        assert guess_format("", "") == ""
 
 
 @pytest.mark.ckan_config("ckan.plugins", "tables datastore")

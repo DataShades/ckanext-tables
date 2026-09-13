@@ -9,6 +9,7 @@ from ckanext.tables.cache import get_cache_backend, invalidate_cache_entry
 from ckanext.tables.config import get_cache_ttl
 from ckanext.tables.data_sources import resource_cache_key
 from ckanext.tables.logic.schema import get_preview_schema
+from ckanext.tables.utils import SUPPORTED_FORMATS, guess_format
 
 
 @tk.blanket.helpers
@@ -40,8 +41,9 @@ class TablesPlugin(p.SingletonPlugin):
         }
 
     def can_view(self, data_dict: types.DataDict) -> bool:
-        fmt = data_dict["resource"].get("format", "").lower()
-        return fmt in ["csv", "xlsx", "orc", "parquet", "feather"]
+        resource = data_dict["resource"]
+        fmt = guess_format(resource.get("url", ""), resource.get("format", ""))
+        return fmt in SUPPORTED_FORMATS
 
     def view_template(self, context: types.Context, data_dict: types.DataDict) -> str:
         return "tables/view/table_preview.html"
