@@ -18,3 +18,13 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      # Runs via the already-installed node_modules on PATH, same assumption
+      # this repo's other JS tooling (gulp, tsc) already makes — not an
+      # isolated pre-commit env.
+      - id: vitest
+        name: vitest (tables-tabulator)
+        entry: npm test
+        language: system
+        files: ^(ckanext/tables/assets/ts/|tests-js/|vitest\.config\.ts$)
+        pass_filenames: false

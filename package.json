@@ -13,13 +13,17 @@
         "@types/jquery": "^3.5.29",
         "esbuild": "^0.28.2",
         "gulp-clean-css": "^4.3.0",
-        "terser": "^5.51.2"
+        "jsdom": "^25.0.1",
+        "terser": "^5.51.2",
+        "vitest": "^5.0.0"
     },
     "scripts": {
         "dev": "DEBUG=1 gulp watch",
         "build": "gulp build",
         "ts-build": "tsc && npx terser ckanext/tables/assets/js/tables-tabulator.js --compress --mangle --output ckanext/tables/assets/js/tables-tabulator.js",
         "ts-watch": "tsc -w",
-        "build:vendor": "esbuild ckanext/tables/assets/js/vendor-src/tabulator-custom-entry.js --bundle --minify --format=iife --outfile=ckanext/tables/assets/js/vendor/tabulator.min.js"
+        "build:vendor": "esbuild ckanext/tables/assets/js/vendor-src/tabulator-custom-entry.js --bundle --minify --format=iife --outfile=ckanext/tables/assets/js/vendor/tabulator.min.js",
+        "test": "vitest run",
+        "test:watch": "vitest"
     }
 }
