@@ -1,11 +1,11 @@
 {% set columns_visibility = h.tables_get_columns_visibility_from_request() %}
 
-<div class="modal fade columns-modal" id="columns-modal" tabindex="-1" role="dialog"
-    aria-labelledby="columns-modal-label" data-bs-backdrop="false">
+<div class="modal fade columns-modal" id="columns-modal-{{ table.id }}" tabindex="-1" role="dialog"
+    aria-labelledby="columns-modal-label-{{ table.id }}" data-bs-backdrop="false">
     <div class="modal-dialog modal-md" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">{{ _("Column visibility") }}</h5>
+                <h5 class="modal-title" id="columns-modal-label-{{ table.id }}">{{ _("Column visibility") }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
@@ -15,15 +15,15 @@
                 </div>
 
                 <div class="d-flex gap-2 mt-3 mb-3">
-                    <button class="btn btn-default" id="select-all-columns" type="button">
+                    <button class="btn btn-default" id="select-all-columns-{{ table.id }}" type="button">
                         <i class="fa fa-eye"></i> {{ _("Show all") }}
                     </button>
-                    <button class="btn btn-default" id="deselect-all-columns" type="button">
+                    <button class="btn btn-default" id="deselect-all-columns-{{ table.id }}" type="button">
                         <i class="fa fa-eye-slash"></i> {{ _("Hide all") }}
                     </button>
                 </div>
 
-                <div id="columns-container" style="max-height: 300px; overflow: auto" class="list-group list-group-flush overflow-y-auto">
+                <div id="columns-container-{{ table.id }}" style="max-height: 300px; overflow: auto" class="list-group list-group-flush overflow-y-auto">
                     {% for column in table.columns %}
                         {% if column.field != h.tables_column_actions_field() %}
                             <label class="list-group-item d-flex align-items-center gap-2">
@@ -39,12 +39,12 @@
                     {% endfor %}
                 </div>
 
-                <div id="column-actions" class="d-flex gap-2 justify-content-end mt-3">
-                    <button class="btn btn-default" id="reset-columns" type="button" data-bs-dismiss="modal">
+                <div id="column-actions-{{ table.id }}" class="d-flex gap-2 justify-content-end mt-3">
+                    <button class="btn btn-default" id="reset-columns-{{ table.id }}" type="button" data-bs-dismiss="modal">
                         {{ _("Reset") }}
                     </button>
 
-                    <button class="btn btn-primary" id="apply-columns" type="button" data-bs-dismiss="modal">
+                    <button class="btn btn-primary" id="apply-columns-{{ table.id }}" type="button" data-bs-dismiss="modal">
                         {{ _("Apply") }}
                     </button>
                 </div>

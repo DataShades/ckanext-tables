@@ -1,31 +1,31 @@
 {% from 'tables/macros/filter_item.html' import filter_item with context %}
 
-<div class="modal fade filters-modal" id="filters-modal" tabindex="-1" role="dialog"
-    aria-labelledby="filters-modal-label" data-bs-backdrop="false">
+<div class="modal fade filters-modal" id="filters-modal-{{ table.id }}" tabindex="-1" role="dialog"
+    aria-labelledby="filters-modal-label-{{ table.id }}" data-bs-backdrop="false">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">{{ _("Table filters") }}</h5>
+                <h5 class="modal-title" id="filters-modal-label-{{ table.id }}">{{ _("Table filters") }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
 
             <div class="modal-body">
-                <div id="filters-container">
+                <div id="filters-container-{{ table.id }}">
                     {% for filter in h.tables_get_filters_from_request() %}
                         {{ filter_item(table, filter.field, filter.operator, filter.value) }}
                     {% endfor %}
                 </div>
 
-                <div id="filter-actions" class="d-flex gap-3 justify-content-end">
-                    <button class="btn me-auto text-primary ps-0" id="add-filter" type="button">
+                <div id="filter-actions-{{ table.id }}" class="d-flex gap-3 justify-content-end">
+                    <button class="btn me-auto text-primary ps-0" id="add-filter-{{ table.id }}" type="button">
                         <i class="fa fa-plus"></i> {{ _("Add filter") }}
                     </button>
 
-                    <button class="btn btn-default" id="clear-filters" type="button" data-bs-dismiss="modal">
+                    <button class="btn btn-default" id="clear-filters-{{ table.id }}" type="button" data-bs-dismiss="modal">
                         {{ _("Clear") }}
                     </button>
 
-                    <button class="btn btn-primary" id="apply-filters" type="button" data-bs-dismiss="modal">
+                    <button class="btn btn-primary" id="apply-filters-{{ table.id }}" type="button" data-bs-dismiss="modal">
                         {{ _("Apply") }}
                     </button>
                 </div>

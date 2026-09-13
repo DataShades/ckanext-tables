@@ -70,39 +70,51 @@ ckan.module("tables-tabulator", function ($) {
             this.sandbox.subscribe("tables:tabulator:refresh", this._refreshData);
         },
 
+        _id: function (base: string): string {
+            return `${base}-${this.tableId}`;
+        },
+
+        _urlKey: function (base: string): string {
+            return `${base}-${this.tableName}`;
+        },
+
         _initAssignVariables: function (): void {
-            this.filtersModal = document.getElementById("filters-modal");
-            this.filtersContainer = document.getElementById("filters-container");
-            this.applyFiltersBtn = document.getElementById("apply-filters");
-            this.clearFiltersModalBtn = document.getElementById("clear-filters");
-            this.clearFiltersBtn = document.getElementById("clear-all-filters");
-            this.filterTemplate = document.getElementById("filter-template");
-            this.addFilterBtn = document.getElementById("add-filter");
-            this.filtersCounter = document.getElementById("filters-counter");
-            this.bulkActionsMenu = document.getElementById("bulk-actions-menu");
-            this.tableActionsMenu = document.getElementById("table-actions-menu");
-            this.tableExportersMenu = document.getElementById("table-exporters-menu");
-            this.tableWrapper = document.querySelector(".tabulator-wrapper");
-            this.tableRefreshBtn = document.getElementById("refresh-table");
+            this.tableId = this.el[0].id;
+            this.tableName = this.options.config.tableName || this.tableId;
+            this.wrapperEl = this.el.closest(".table-wrapper")[0];
+
+            this.filtersModal = document.getElementById(this._id("filters-modal"));
+            this.filtersContainer = document.getElementById(this._id("filters-container"));
+            this.applyFiltersBtn = document.getElementById(this._id("apply-filters"));
+            this.clearFiltersModalBtn = document.getElementById(this._id("clear-filters"));
+            this.clearFiltersBtn = document.getElementById(this._id("clear-all-filters"));
+            this.filterTemplate = document.getElementById(this._id("filter-template"));
+            this.addFilterBtn = document.getElementById(this._id("add-filter"));
+            this.filtersCounter = document.getElementById(this._id("filters-counter"));
+            this.bulkActionsMenu = document.getElementById(this._id("bulk-actions-menu"));
+            this.tableActionsMenu = document.getElementById(this._id("table-actions-menu"));
+            this.tableExportersMenu = document.getElementById(this._id("table-exporters-menu"));
+            this.tableRefreshBtn = document.getElementById(this._id("refresh-table"));
+            this.totalCountEl = document.getElementById(this._id("total-count-value"));
             this.tableFilters = this._updateTableFilters();
 
             // Column visibility controls
-            this.columnsModal = document.getElementById("columns-modal");
-            this.columnsContainer = document.getElementById("columns-container");
-            this.applyColumnsBtn = document.getElementById("apply-columns");
-            this.resetColumnsBtn = document.getElementById("reset-columns");
-            this.selectAllColumnsBtn = document.getElementById("select-all-columns");
-            this.deselectAllColumnsBtn = document.getElementById("deselect-all-columns");
-            this.columnToggles = document.querySelectorAll(".column-toggle");
-            this.hiddenColumnsCounter = document.getElementById("hidden-columns-counter");
-            this.hiddenColumnsBadge = document.getElementById("hidden-columns-badge");
+            this.columnsModal = document.getElementById(this._id("columns-modal"));
+            this.columnsContainer = document.getElementById(this._id("columns-container"));
+            this.applyColumnsBtn = document.getElementById(this._id("apply-columns"));
+            this.resetColumnsBtn = document.getElementById(this._id("reset-columns"));
+            this.selectAllColumnsBtn = document.getElementById(this._id("select-all-columns"));
+            this.deselectAllColumnsBtn = document.getElementById(this._id("deselect-all-columns"));
+            this.columnToggles = this.columnsContainer.querySelectorAll(".column-toggle");
+            this.hiddenColumnsCounter = document.getElementById(this._id("hidden-columns-counter"));
+            this.hiddenColumnsBadge = document.getElementById(this._id("hidden-columns-badge"));
         },
 
         _initFiltersFromUrl: function (): void {
             const url = new URL(window.location.href);
-            const fields = url.searchParams.getAll("field");
-            const operators = url.searchParams.getAll("operator");
-            const values = url.searchParams.getAll("value");
+            const fields = url.searchParams.getAll(this._urlKey("field"));
+            const operators = url.searchParams.getAll(this._urlKey("operator"));
+            const values = url.searchParams.getAll(this._urlKey("value"));
 
             if (fields.length && fields.length === operators.length && fields.length === values.length) {
                 this.tableFilters = fields.map((field: string, i: number) => ({
@@ -143,7 +155,7 @@ ckan.module("tables-tabulator", function ($) {
                 };
             }
 
-            const initialPage = new URLSearchParams(window.location.search).get("page");
+            const initialPage = new URLSearchParams(window.location.search).get(this._urlKey("page"));
 
             this.table = new Tabulator(this.el[0], {
                 ...this.options.config,
@@ -162,9 +174,8 @@ ckan.module("tables-tabulator", function ($) {
                 paginationInitialPage: parseInt(initialPage || "1"),
                 ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
                 ajaxResponse: (_url: string, _params: any, response: any) => {
-                    const el: HTMLElement | null = document.getElementById("total-count-value");
-                    if (el && response.total !== undefined) {
-                        el.innerHTML = response.total;
+                    if (this.totalCountEl && response.total !== undefined) {
+                        this.totalCountEl.innerHTML = response.total;
                     }
                     return response;
                 },
@@ -284,7 +295,7 @@ ckan.module("tables-tabulator", function ($) {
 
             this.table.on("tableBuilt", () => {
                 if (this.options.enableFullscreenToggle) {
-                    this.btnFullscreen = document.getElementById("btn-fullscreen");
+                    this.btnFullscreen = document.getElementById(this._id("btn-fullscreen"));
                     this.btnFullscreen.addEventListener("click", this._onFullscreen);
                 }
 
@@ -294,13 +305,13 @@ ckan.module("tables-tabulator", function ($) {
 
             this.table.on("renderComplete", function (this: any) {
                 htmx.process(this.element);
-                const pageSizeSelect = document.querySelector(".tabulator-page-size");
+                const pageSizeSelect = this.element.querySelector(".tabulator-page-size");
                 if (pageSizeSelect) pageSizeSelect.classList.add("form-select");
             });
 
             this.table.on("pageLoaded", (pageno: number) => {
                 const url = new URL(window.location.href);
-                url.searchParams.set("page", pageno.toString());
+                url.searchParams.set(this._urlKey("page"), pageno.toString());
                 window.history.replaceState({}, "", url);
             });
         },
@@ -403,15 +414,18 @@ ckan.module("tables-tabulator", function ($) {
 
         _updateUrl: function (): void {
             const url = new URL(window.location.href);
-            Array.from(url.searchParams.keys()).forEach((key) => {
-                if (key.startsWith("field") || key.startsWith("operator") || key.startsWith("value")) {
-                    url.searchParams.delete(key);
-                }
-            });
+            const fieldKey = this._urlKey("field");
+            const operatorKey = this._urlKey("operator");
+            const valueKey = this._urlKey("value");
+
+            url.searchParams.delete(fieldKey);
+            url.searchParams.delete(operatorKey);
+            url.searchParams.delete(valueKey);
+
             this.tableFilters.forEach((filter: TableFilter) => {
-                url.searchParams.append("field", filter.field);
-                url.searchParams.append("operator", filter.operator);
-                url.searchParams.append("value", filter.value);
+                url.searchParams.append(fieldKey, filter.field);
+                url.searchParams.append(operatorKey, filter.operator);
+                url.searchParams.append(valueKey, filter.value);
             });
             window.history.replaceState({}, "", url);
         },
@@ -495,7 +509,7 @@ ckan.module("tables-tabulator", function ($) {
                 const blob = await response.blob();
                 const a = document.createElement("a");
                 a.href = URL.createObjectURL(blob);
-                a.download = `${this.options.config.tableId || "table"}.${exporter}`;
+                a.download = `${this.tableName || "table"}.${exporter}`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -554,7 +568,7 @@ ckan.module("tables-tabulator", function ($) {
                 const sorterEl = colEl.querySelector(".tabulator-col-sorter");
                 if (!sorterEl) return;
 
-                filterInput.id = `header-filter-${colEl.getAttribute("tabulator-field") || ""}`;
+                filterInput.id = this._id(`header-filter-${colEl.getAttribute("tabulator-field") || ""}`);
 
                 const btn = this._buildFilterToggleButton(colEl, filterInput);
 
@@ -607,7 +621,11 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _onFullscreen: function (): void {
-            document.body.classList.toggle("tables-fullscreen");
+            this.wrapperEl.classList.toggle("table-fullscreen");
+            document.body.classList.toggle(
+                "tables-fullscreen",
+                document.querySelector(".table-wrapper.table-fullscreen") !== null
+            );
         },
 
         _onApplyColumns: function (): void {
@@ -675,7 +693,7 @@ ckan.module("tables-tabulator", function ($) {
 
         _applyColumnVisibilityFromUrl: function (): void {
             const urlParams = new URLSearchParams(window.location.search);
-            const hiddenColumns = urlParams.getAll("hidden_column");
+            const hiddenColumns = urlParams.getAll(this._urlKey("hidden_column"));
 
             // Hide columns that are marked as hidden in URL
             hiddenColumns.forEach((field: string) => {
@@ -692,7 +710,7 @@ ckan.module("tables-tabulator", function ($) {
 
         _updateHiddenColumnsCounter: function (): void {
             const urlParams = new URLSearchParams(window.location.search);
-            const hiddenCount = urlParams.getAll("hidden_column").length;
+            const hiddenCount = urlParams.getAll(this._urlKey("hidden_column")).length;
 
             this.hiddenColumnsCounter.textContent = hiddenCount.toString();
             this.hiddenColumnsBadge.classList.toggle("d-none", hiddenCount === 0);
@@ -700,11 +718,12 @@ ckan.module("tables-tabulator", function ($) {
 
         _updateColumnsUrl: function (hiddenColumns: string[]): void {
             const url = new URL(window.location.href);
+            const key = this._urlKey("hidden_column");
 
-            url.searchParams.delete("hidden_column");
+            url.searchParams.delete(key);
 
             hiddenColumns.forEach((field) => {
-                url.searchParams.append("hidden_column", field);
+                url.searchParams.append(key, field);
             });
 
             window.history.replaceState({}, "", url);

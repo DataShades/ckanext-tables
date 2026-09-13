@@ -3,8 +3,8 @@
 {% block header_account_logged %}
     {% if g.userobj.sysadmin %}
         <li>
-            <a href="{{ h.url_for('tables_demo.people') }}" title="{{ _('People Table') }}">
-                <i class="fa fa-users-between-lines" aria-hidden="true"></i>
+            <a href="{{ h.url_for('tables_demo.dashboard') }}" title="{{ _('Demo Dashboard') }}">
+                <i class="fa fa-table-columns" aria-hidden="true"></i>
             </a>
         </li>
     {% endif %}

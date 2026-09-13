@@ -1,20 +1,28 @@
 {% from 'tables/macros/filter_item.html' import filter_item with context %}
 {% from "macros/form/attributes.html" import attributes %}
 
+{#
+    Every id below is suffixed with table.id (unique per TableDefinition instance,
+    see table.py) so two tables rendered on the same page — two Tables views on one
+    resource, or a dashboard embedding render_table.html twice — never collide on a
+    shared id. The outer .table-wrapper gives the JS module (tables-tabulator.ts) one
+    common ancestor to scope its own lookups and its fullscreen state against.
+#}
+<div class="table-wrapper" data-table-id="{{ table.id }}">
 {% block table_control %}
     <div class="table-control d-flex flex-wrap">
         {% block table_filters %}
-            <div id="filter-template" style="display:none;">
+            <div id="filter-template-{{ table.id }}" style="display:none;">
                 {{ filter_item(table, '', '=', '') }}
             </div>
 
             {% snippet "tables/snippets/table_filters_modal.html", table=table %}
 
             <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
-                <button class="btn btn-light align-items-baseline" data-bs-toggle="modal" data-bs-target="#filters-modal" title="{{ _('Manage Filters') }}">
-                    <i class="fa fa-filter"></i> {{ _("Filters") }} <span class="badge bg-primary d-none" id="filters-counter">0</span>
+                <button class="btn btn-light align-items-baseline" data-bs-toggle="modal" data-bs-target="#filters-modal-{{ table.id }}" title="{{ _('Manage Filters') }}">
+                    <i class="fa fa-filter"></i> {{ _("Filters") }} <span class="badge bg-primary d-none" id="filters-counter-{{ table.id }}">0</span>
                 </button>
-                <button class="btn btn-light " id="clear-all-filters" title="{{ _('Clear all filters') }}">
+                <button class="btn btn-light " id="clear-all-filters-{{ table.id }}" title="{{ _('Clear all filters') }}">
                     <i class="fa fa-times"></i>
                 </button>
             </div>
@@ -23,12 +31,12 @@
         {% block table_columns %}
             {% snippet "tables/snippets/table_columns_modal.html", table=table %}
 
-            <button class="btn btn-light align-items-baseline" data-bs-toggle="modal" data-bs-target="#columns-modal" title="{{ _('Manage Columns') }}">
+            <button class="btn btn-light align-items-baseline" data-bs-toggle="modal" data-bs-target="#columns-modal-{{ table.id }}" title="{{ _('Manage Columns') }}">
                 <i class="fa fa-columns"></i>
                 {{ _("Columns") }}
-                <span class="badge bg-primary d-none" id="hidden-columns-badge">
+                <span class="badge bg-primary d-none" id="hidden-columns-badge-{{ table.id }}">
                     <i class="fa fa-eye-slash text-white"></i>
-                    <span id="hidden-columns-counter">0</span>
+                    <span id="hidden-columns-counter-{{ table.id }}">0</span>
                 </span>
             </button>
         {% endblock %}
@@ -40,7 +48,7 @@
                     title="{{ _('Row actions') }}">
                         <i class="fa fa-table-list"></i> {{ _("Row Actions") }}
                     </button>
-                    <ul class="dropdown-menu" id="bulk-actions-menu">
+                    <ul class="dropdown-menu" id="bulk-actions-menu-{{ table.id }}">
                         {% for action in table.bulk_actions %}
                             <li>
                                 {% set action_attrs = dict(action.attrs, **{'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
@@ -64,7 +72,7 @@
                     title="{{ _('Table actions') }}">
                         <i class="fa fa-table"></i> {{ _("Table Actions") }}
                     </button>
-                    <ul class="dropdown-menu" id="table-actions-menu">
+                    <ul class="dropdown-menu" id="table-actions-menu-{{ table.id }}">
                         {% for action in table.table_actions %}
                             <li>
                                 {% set action_attrs = dict(action.attrs, **{'class': ('dropdown-item ' ~ action.attrs.get('class', '')).strip()}) %}
@@ -88,7 +96,7 @@
                     title="{{ _('Export Table Data') }}">
                         <i class="fa fa-download"></i> {{ _("Export") }}
                     </button>
-                    <ul class="dropdown-menu" id="table-exporters-menu">
+                    <ul class="dropdown-menu" id="table-exporters-menu-{{ table.id }}">
                         {% for exporter in table.exporters %}
                             <li>
                                 <button class="dropdown-item" data-exporter="{{ exporter.name }}">
@@ -105,20 +113,20 @@
         {% endblock %}
 
         {% block table_refresh %}
-            <button class="btn" id="refresh-table" title="{{ _('Refresh Table') }}">
+            <button class="btn" id="refresh-table-{{ table.id }}" title="{{ _('Refresh Table') }}">
                 <i class="fa fa-arrows-rotate"></i>
             </button>
         {% endblock %}
 
         {% block table_total_count %}
             <div class="d-flex align-items-center ms-auto">
-                <span id="total-count-value" class="me-1">
+                <span id="total-count-value-{{ table.id }}" class="me-1">
                     0
                 </span>
                 <span>{{ _('row(s)') }}</span>
             </div>
 
-            <a class='btn d-none d-sm-inline-block' id='btn-fullscreen' title='Fullscreen toggle'><i class='fa fa-expand'></i></a>
+            <a class='btn btn-fullscreen d-none d-sm-inline-block' id='btn-fullscreen-{{ table.id }}' title='Fullscreen toggle'><i class='fa fa-expand'></i></a>
         {% endblock %}
     </div>
 {% endblock table_control %}
@@ -135,3 +143,4 @@
         </div>
     </div>
 {% endblock %}
+</div>

@@ -1,0 +1,20 @@
+{% extends "tables/base.html" %}
+
+{#
+    Two independent TableDefinitions, stacked on one page — each keeps its own
+    filters/columns/counts/fullscreen state (see ARCH-1 in AUDIT.md) and posts its
+    actions to its own solo route via ajax_url (see tables_demo/views.py), not to
+    this page's own URL.
+#}
+{% block page_content %}
+    <div class="pt-2 ckanext-datapreview">
+        {% if page_title %}
+            <h1>{{ page_title }}</h1>
+        {% endif %}
+
+        {% for table in tables %}
+            <h2 class="mt-4">{{ table.name.replace('_', ' ')|title }}</h2>
+            {% snippet "tables/render_table.html", table=table %}
+        {% endfor %}
+    </div>
+{% endblock page_content %}

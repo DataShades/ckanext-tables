@@ -2,28 +2,34 @@
 
 $color-active: #035C7A;
 
+// Fullscreen is per-table (scoped to .table-wrapper, toggled by tables-tabulator.ts'
+// _onFullscreen), not per-page — two tables on one page can be toggled independently.
+// The debug-toolbar hide stays a body-level effect: it applies whenever *any* table is
+// fullscreen, since the toolbar sits outside every .table-wrapper and there's nothing
+// table-specific about hiding it.
 body.tables-fullscreen {
     .debug, #flDebugToolbarHandle {
         display: none;
     }
+}
 
-    #btn-fullscreen i:before {
-        content: "\f066";
-    }
-    .ckanext-datapreview {
-        padding: 1rem;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
+.table-wrapper.table-fullscreen {
+    padding: 1rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    background-color: white;
+    overflow-x: auto;
+
+    .tabulator-container {
         height: 100%;
-        z-index: 1000;
-        background-color: white;
-        overflow-x: auto;
+    }
 
-        .tabulator-container {
-            height: 100%;
-        }
+    .btn-fullscreen i:before {
+        content: "\f066";
     }
 }
 
@@ -266,7 +272,7 @@ body.tables-fullscreen {
     }
 }
 
-#columns-modal {
+.columns-modal {
     .list-group-item:after {
         display: none;
     }

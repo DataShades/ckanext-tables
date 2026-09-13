@@ -1,16 +1,18 @@
 import ckanext.tables.shared as t
-from ckanext.tables_demo.utils import generate_mock_data
+from ckanext.tables_demo.utils import generate_mock_data, generate_mock_products
 
-DATA = generate_mock_data(1000)
+DATA = generate_mock_data(10000)
+PRODUCTS_DATA = generate_mock_products(10000)
 
 
 class PeopleTable(t.TableDefinition):
     """Demo table definition for the people table."""
 
-    def __init__(self):
+    def __init__(self, ajax_url: str | None = None):
         super().__init__(
             name="people",
             data_source=t.ListDataSource(data=DATA),
+            ajax_url=ajax_url,
             columns=[
                 t.ColumnDefinition(field="id", title="ID", width=90),
                 t.ColumnDefinition(field="name"),
@@ -86,5 +88,42 @@ class PeopleTable(t.TableDefinition):
 
     def recreate_users(self) -> t.ActionHandlerResult:
         """Callback to recreate the mock users."""
-        DATA[:] = generate_mock_data(1000)
+        DATA[:] = generate_mock_data(10000)
         return t.ActionHandlerResult(success=True, message="Users recreated.")
+
+
+class ProductsTable(t.TableDefinition):
+    """Demo table definition for the products table."""
+
+    def __init__(self, ajax_url: str | None = None):
+        super().__init__(
+            name="products",
+            data_source=t.ListDataSource(data=PRODUCTS_DATA),
+            ajax_url=ajax_url,
+            columns=[
+                t.ColumnDefinition(field="id", title="ID", width=90),
+                t.ColumnDefinition(field="name", title="Product"),
+                t.ColumnDefinition(field="category"),
+                t.ColumnDefinition(field="price"),
+                t.ColumnDefinition(
+                    field="in_stock",
+                    title="In Stock",
+                    formatters=[(t.formatters.BooleanFormatter, {})],
+                ),
+                t.ColumnDefinition(field="supplier"),
+            ],
+            table_actions=[
+                t.TableActionDefinition(
+                    action="recreate_products",
+                    label="Recreate Products",
+                    icon="fa fa-refresh",
+                    callback=self.recreate_products,
+                ),
+            ],
+            exporters=t.ALL_EXPORTERS,
+        )
+
+    def recreate_products(self) -> t.ActionHandlerResult:
+        """Callback to recreate the mock products."""
+        PRODUCTS_DATA[:] = generate_mock_products(10000)
+        return t.ActionHandlerResult(success=True, message="Products recreated.")

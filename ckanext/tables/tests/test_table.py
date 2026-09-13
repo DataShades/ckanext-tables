@@ -60,6 +60,27 @@ class TestColumnDefinition:
 
 
 @pytest.mark.usefixtures("with_request_context")
+class TestTableDefinitionName:
+    @pytest.mark.parametrize("name", ["my_table", "my-table", "Table123", "t"])
+    def test_safe_names_are_accepted(self, name):
+        table = TableDefinition(name=name, data_source=ListDataSource([]))
+        assert table.id.startswith(f"table_{name}_")
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "my table",  # space — starts a CSS descendant combinator
+            "my.table",  # dot — starts a class selector
+            "my#table",  # hash — starts an id selector
+            "",  # empty
+        ],
+    )
+    def test_unsafe_names_are_rejected(self, name):
+        with pytest.raises(ValueError, match="invalid"):
+            TableDefinition(name=name, data_source=ListDataSource([]))
+
+
+@pytest.mark.usefixtures("with_request_context")
 class TestTableDefinitionBasic:
     def test_get_raw_data_returns_all_rows(self, simple_table):
         data = simple_table.get_raw_data(QueryParams(), paginate=False)

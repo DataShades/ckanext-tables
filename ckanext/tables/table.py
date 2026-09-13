@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from ckanext.tables.exporters import ExporterBase
 
 COLUMN_ACTIONS_FIELD = "__table_actions"
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @dataclass
@@ -23,7 +25,14 @@ class TableDefinition:
     """Table definition.
 
     Attributes:
-        name: Unique identifier for the table.
+        name: Unique identifier for the table. Letters, digits, underscore and hyphen
+            only (enforced — see ``_SAFE_NAME_RE``): it becomes part of a CSS id
+            selector on the client (``data-bs-target="#filters-modal-{{ table.id }}"``),
+            so anything else would silently break the filters/columns modals for that
+            table. Also namespaces the URL query params (page, filters, hidden columns)
+            the frontend persists to the address bar and the default export filename —
+            keep it unique on any page that embeds more than one table, or two tables'
+            persisted state will collide.
         data_source: Data source for the table. Mix in
             :class:`~ckanext.tables.cache.CachedDataSourceMixin` on the data
             source to enable caching; the TTL and backend are configured there.
@@ -53,6 +62,12 @@ class TableDefinition:
     table_layout: str = "fitColumns"
 
     def __post_init__(self):
+        if not _SAFE_NAME_RE.match(self.name):
+            raise ValueError(
+                f"TableDefinition.name {self.name!r} is invalid: it must match ^[A-Za-z0-9_-]+$",
+                "(letters, digits, underscore, hyphen only) — no spaces, dots, or other punctuation.",
+            )
+
         self.id = f"table_{self.name}_{uuid.uuid4().hex[:8]}"
 
         # Scratch space formatters may use to memoise per-render work (e.g. a
@@ -83,6 +98,7 @@ class TableDefinition:
         columns = [col.to_dict() for col in self.columns]
 
         options: dict[str, Any] = {
+            "tableName": self.name,
             "columns": columns,
             "placeholder": self.placeholder,
             "sortMode": "remote",
