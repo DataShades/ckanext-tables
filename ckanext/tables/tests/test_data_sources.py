@@ -15,7 +15,13 @@ import ckan.tests.helpers as helpers
 from ckan import model
 from ckan.lib import uploader
 
-from ckanext.tables.cache import FeatherCacheBackend, PickleCacheBackend, RedisCacheBackend
+from ckanext.tables.cache import (
+    CachedDataSourceMixin,
+    FeatherCacheBackend,
+    ParquetCacheBackend,
+    PickleCacheBackend,
+    RedisCacheBackend,
+)
 from ckanext.tables.data_sources import (
     CsvUrlDataSource,
     DatabaseDataSource,
@@ -643,6 +649,185 @@ class TestPandasDataSource:
         assert ds.serialize_value(np.int64(5)) == 5
         # Fallback path
         assert ds.serialize_value(object()) is not None
+
+
+class _ArrowStubDataSource(CachedDataSourceMixin, PandasDataSource):
+    """A PandasDataSource backed by a real Arrow-native cache backend.
+
+    Unlike StubPandasDataSource above (which sets ``_df`` directly and has no
+    cache backend at all, so it always exercises the plain pandas path), this
+    goes through the real ``_ensure_loaded()``/``get_arrow()`` machinery, so
+    ``filter``/``sort``/``paginate``/``count``/``all`` run through DuckDB
+    (PERF-1) exactly as they would for a cached CSV/XLSX/etc. resource.
+    """
+
+    def __init__(self, df: pd.DataFrame, cache_backend, key: str = "arrow-stub"):
+        super().__init__()
+        self.cache_backend = cache_backend
+        self.cache_ttl = 3600
+        self._source_df = df
+        self._key = key
+
+    def get_cache_key(self) -> str:
+        return self._key
+
+    def fetch_dataframe(self) -> pd.DataFrame:
+        return self._source_df
+
+
+@pytest.fixture(params=[FeatherCacheBackend, ParquetCacheBackend])
+def arrow_cache_backend(request, tmp_path):
+    return request.param(cache_dir=str(tmp_path))
+
+
+@pytest.fixture
+def arrow_ds(arrow_cache_backend):
+    df = pd.DataFrame(
+        {
+            "fruit": ["apple", "banana", "cherry"],
+            "count": [10, 5, 20],
+        }
+    )
+    return _ArrowStubDataSource(df, arrow_cache_backend)
+
+
+class TestPandasDataSourceArrowPath:
+    """DuckDB-pushdown path (PERF-1) must behave identically to the pandas path above.
+
+    Every case here mirrors a case in ``TestPandasDataSource`` — same inputs,
+    same expected outputs — the only difference is the cache backend, which
+    is what actually selects the arrow-vs-pandas code path inside
+    ``PandasDataSource``.
+    """
+
+    def test_uses_the_arrow_path(self, arrow_ds):
+        arrow_ds.filter([])
+        assert arrow_ds._arrow is not None
+
+    def test_all_returns_records(self, arrow_ds):
+        result = arrow_ds.filter([]).all()
+        assert len(result) == 3
+
+    def test_filter_eq(self, arrow_ds):
+        result = arrow_ds.filter([FilterItem("fruit", "=", "apple")]).all()
+        assert len(result) == 1
+        assert result[0]["fruit"] == "apple"
+
+    def test_filter_not_eq(self, arrow_ds):
+        result = arrow_ds.filter([FilterItem("fruit", "!=", "apple")]).all()
+        assert len(result) == 2
+
+    def test_filter_like(self, arrow_ds):
+        result = arrow_ds.filter([FilterItem("fruit", "like", "an")]).all()
+        assert len(result) == 1
+        assert result[0]["fruit"] == "banana"
+
+    def test_filter_numeric_lt(self, arrow_ds):
+        result = arrow_ds.filter([FilterItem("count", "<", "10")]).all()
+        assert len(result) == 1
+
+    def test_filter_numeric_gte(self, arrow_ds):
+        result = arrow_ds.filter([FilterItem("count", ">=", "10")]).all()
+        assert len(result) == 2
+
+    def test_filter_non_numeric_value_against_numeric_column_is_skipped(self, arrow_ds):
+        # Matches the pandas path's behaviour for an ordering operator against
+        # a value that doesn't parse as a number: skip the filter rather than
+        # raising or binding a mismatched type.
+        result = arrow_ds.filter([FilterItem("count", "<", "not-a-number")]).all()
+        assert len(result) == 3
+
+    def test_filter_unknown_field_ignored(self, arrow_ds):
+        result = arrow_ds.filter([FilterItem("nonexistent", "=", "value")]).all()
+        assert len(result) == 3
+
+    def test_sort_asc(self, arrow_ds):
+        result = arrow_ds.filter([]).sort("fruit", "asc").all()
+        assert result[0]["fruit"] == "apple"
+
+    def test_sort_desc(self, arrow_ds):
+        result = arrow_ds.filter([]).sort("count", "desc").all()
+        assert result[0]["count"] == 20
+
+    def test_sort_unknown_field(self, arrow_ds):
+        result = arrow_ds.filter([]).sort("nonexistent", "asc").all()
+        assert len(result) == 3
+
+    def test_paginate(self, arrow_ds):
+        result = arrow_ds.filter([]).paginate(1, 2).all()
+        assert len(result) == 2
+
+    def test_paginate_page2(self, arrow_ds):
+        result = arrow_ds.filter([]).paginate(2, 2).all()
+        assert len(result) == 1
+
+    def test_count(self, arrow_ds):
+        arrow_ds.filter([])
+        assert arrow_ds.count() == 3
+
+    def test_count_after_filter(self, arrow_ds):
+        arrow_ds.filter([FilterItem("fruit", "=", "apple")])
+        assert arrow_ds.count() == 1
+
+    def test_get_columns(self, arrow_ds):
+        cols = arrow_ds.get_columns()
+        assert "fruit" in cols
+        assert "count" in cols
+
+    def test_all_empty_df(self, arrow_cache_backend):
+        ds = _ArrowStubDataSource(pd.DataFrame(), arrow_cache_backend, key="empty")
+        ds.filter([])
+        assert ds.all() == []
+
+    def test_count_empty_df(self, arrow_cache_backend):
+        ds = _ArrowStubDataSource(pd.DataFrame(), arrow_cache_backend, key="empty-count")
+        ds.filter([])
+        assert ds.count() == 0
+
+    def test_repeated_query_on_same_instance_is_stable(self, arrow_ds):
+        # get_data() and get_total_count() both call filter() on the same
+        # instance within one request (table.py) — the second call must not
+        # re-trigger a cache read or lose the loaded table.
+        first = arrow_ds.filter([]).sort("fruit", "asc").all()
+        second = arrow_ds.filter([]).sort("fruit", "asc").all()
+        assert first == second
+
+    def test_matches_pandas_path_on_a_larger_frame(self, arrow_cache_backend, tmp_path):
+        """Cross-check: identical filter/sort/paginate/count results to the pandas path.
+
+        Not a timing assertion (CI timing is flaky) — just a parity guard so
+        the two implementations can't silently drift apart.
+        """
+        rng = np.random.default_rng(0)
+        n = 50_000
+        df = pd.DataFrame(
+            {
+                "id": np.arange(n),
+                "name": [f"user_{i}" for i in range(n)],
+                "score": rng.integers(0, 1000, size=n),
+                "category": rng.choice(["alpha", "beta", "gamma", "delta"], size=n),
+            }
+        )
+
+        arrow_source = _ArrowStubDataSource(df, arrow_cache_backend, key="parity")
+
+        pickle_backend = PickleCacheBackend(cache_dir=str(tmp_path / "pickle"))
+
+        class PandasPathSource(_ArrowStubDataSource):
+            def _use_arrow_path(self) -> bool:
+                return False
+
+        pandas_source = PandasPathSource(df, pickle_backend, key="parity-pandas")
+
+        filters = [FilterItem("category", "=", "alpha"), FilterItem("score", ">", "200")]
+
+        arrow_rows = arrow_source.filter(filters).sort("id", "asc").paginate(3, 25).all()
+        pandas_rows = pandas_source.filter(filters).sort("id", "asc").paginate(3, 25).all()
+        assert arrow_rows == pandas_rows
+
+        arrow_count = _ArrowStubDataSource(df, arrow_cache_backend, key="parity").filter(filters).count()
+        pandas_count = PandasPathSource(df, pickle_backend, key="parity-pandas").filter(filters).count()
+        assert arrow_count == pandas_count
 
 
 class TestCsvDelimiterSniffing:

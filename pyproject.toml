@@ -18,6 +18,7 @@ classifiers = [
 keywords = [ "CKAN", ]
 dependencies = [
     "pandas[parquet, feather]",
+    "duckdb",
 ]
 
 [project.optional-dependencies]

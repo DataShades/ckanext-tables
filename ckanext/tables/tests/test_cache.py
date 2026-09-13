@@ -9,6 +9,7 @@ from unittest import mock
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from ckanext.tables import cache
@@ -176,6 +177,37 @@ class TestParquetCacheBackend:
         parquet_backend.set("bad", df, ttl=60)
         assert parquet_backend.get("bad") is None
 
+    def test_get_arrow_returns_pyarrow_table(self, parquet_backend):
+        data = [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
+        parquet_backend.set("key1", data, ttl=60)
+
+        table = parquet_backend.get_arrow("key1")
+
+        assert isinstance(table, pa.Table)
+        assert table.to_pylist() == data
+
+    def test_get_arrow_and_get_do_not_collide(self, parquet_backend):
+        # get() and get_arrow() are backed by separate memos (_memo vs
+        # _arrow_memo) — reading a key through both must not return the
+        # wrong type for either.
+        data = [{"a": 1, "b": "x"}]
+        parquet_backend.set("key1", data, ttl=60)
+
+        table = parquet_backend.get_arrow("key1")
+        df = parquet_backend.get("key1")
+
+        assert isinstance(table, pa.Table)
+        assert isinstance(df, pd.DataFrame)
+
+    def test_get_arrow_miss_returns_none(self, parquet_backend):
+        assert parquet_backend.get_arrow("nonexistent") is None
+
+    def test_get_arrow_expired_returns_none(self, parquet_backend):
+        parquet_backend.set("expiring", [{"x": 1}], ttl=1)
+        meta_path = parquet_backend._meta_path("expiring")
+        _expire(meta_path)
+        assert parquet_backend.get_arrow("expiring") is None
+
 
 class TestFeatherCacheBackend:
     def test_set_and_get(self, feather_backend):
@@ -229,6 +261,42 @@ class TestFeatherCacheBackend:
         df = pd.DataFrame({"mixed": [1, "two", 3.0]})
         feather_backend.set("bad", df, ttl=60)
         assert feather_backend.get("bad") is None
+
+    def test_get_arrow_returns_pyarrow_table(self, feather_backend):
+        data = [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
+        feather_backend.set("key1", data, ttl=60)
+
+        table = feather_backend.get_arrow("key1")
+
+        assert isinstance(table, pa.Table)
+        assert table.to_pylist() == data
+
+    def test_get_arrow_and_get_do_not_collide(self, feather_backend):
+        data = [{"a": 1, "b": "x"}]
+        feather_backend.set("key1", data, ttl=60)
+
+        table = feather_backend.get_arrow("key1")
+        df = feather_backend.get("key1")
+
+        assert isinstance(table, pa.Table)
+        assert isinstance(df, pd.DataFrame)
+
+    def test_get_arrow_miss_returns_none(self, feather_backend):
+        assert feather_backend.get_arrow("nonexistent") is None
+
+    def test_get_arrow_expired_returns_none(self, feather_backend):
+        feather_backend.set("expiring", [{"x": 1}], ttl=1)
+        meta_path = feather_backend._meta_path("expiring")
+        _expire(meta_path)
+        assert feather_backend.get_arrow("expiring") is None
+
+
+class TestPickleCacheBackendHasNoArrowPath:
+    def test_no_get_arrow(self, pickle_backend):
+        # PickleCacheBackend doesn't store an Arrow-native format, so it
+        # deliberately doesn't implement get_arrow() — PandasDataSource
+        # detects this via hasattr() to fall back to the plain pandas path.
+        assert not hasattr(pickle_backend, "get_arrow")
 
 
 @pytest.mark.usefixtures("clean_redis")
@@ -288,6 +356,12 @@ class TestRedisCacheBackend:
 
         backend.delete("memo_key3")
         assert backend.get("memo_key3") is None
+
+    def test_no_get_arrow(self):
+        # RedisCacheBackend stores JSON records, not an Arrow-native format,
+        # so it deliberately doesn't implement get_arrow() — PandasDataSource
+        # detects this via hasattr() to fall back to the plain pandas path.
+        assert not hasattr(RedisCacheBackend(), "get_arrow")
 
 
 class TestFileCacheBackendUnsafeDir:

@@ -8,12 +8,14 @@ import logging
 import os
 import re
 import tempfile
+import threading
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from itertools import islice
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlparse
 
+import duckdb
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -252,21 +254,94 @@ class ListDataSource(BaseDataSource):
         return list(self.data[0].keys()) if self.data else []
 
 
+def _quote_ident(name: str) -> str:
+    """Quote *name* as a DuckDB identifier, escaping any embedded quote.
+
+    Only ever called with a field name already validated against the table's
+    known schema (see ``PandasDataSource._filter_arrow``/``_sort_arrow``) —
+    this is defense in depth, not the actual injection guard.
+    """
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _get_arrow_from_cache(backend: CacheBackend, key: str) -> pa.Table | None:  # pyright: ignore[reportUnknownParameterType]
+    """Return *key* from *backend* as a pyarrow Table, if the backend supports it.
+
+    Only ``ParquetCacheBackend``/``FeatherCacheBackend`` implement ``get_arrow``
+    (see ``cache.py``) — every other backend (Redis, Pickle) has no such
+    method, so this returns ``None`` for them via ``getattr``'s default
+    rather than requiring ``CacheBackend`` itself to declare it.
+    """
+    get_arrow = getattr(backend, "get_arrow", None)
+    return get_arrow(key) if get_arrow is not None else None
+
+
+_thread_local = threading.local()
+
+
+def _get_duckdb_connection() -> duckdb.DuckDBPyConnection:
+    """Return a DuckDB connection reused for the lifetime of the current thread.
+
+    ``duckdb.connect()`` itself costs several milliseconds (measured) — creating
+    one per request would eat into exactly the per-request latency this
+    pushdown path exists to cut. Each worker thread gets its own connection
+    (mirroring how CKAN's own ``model.Session`` is thread-scoped and reused
+    across requests), and every ``PandasDataSource`` registers its table under
+    the same view name (``"t"``) on it — DuckDB's ``register()`` replaces an
+    existing binding by name in place, so reusing one connection across many
+    requests/tables never accumulates state.
+    """
+    con = getattr(_thread_local, "con", None)
+    if con is None:
+        con = duckdb.connect()
+        _thread_local.con = con
+    return con
+
+
 class PandasDataSource(BaseDataSource):
     """Base class for data sources that use a pandas DataFrame.
 
     Subclasses must implement :meth:`fetch_dataframe`. Caching is **not**
     included here — mix in :class:`~ckanext.tables.cache.CachedDataSourceMixin`
     and set ``cache_backend`` if you want it.
+
+    When the configured cache backend exposes ``get_arrow()`` (the Arrow-native
+    file backends — Parquet, Feather), filtering/sorting/pagination/counting
+    are pushed down to DuckDB running against the cached ``pyarrow.Table``
+    instead of pandas scanning the full in-memory frame on every call — see
+    the ``*_arrow`` methods below. Every other cache backend (Redis, Pickle,
+    or none) keeps using the plain pandas implementation (the ``*_pandas``
+    methods), unchanged.
     """
 
     def __init__(self):
         self._df: pd.DataFrame | None = None
         self._filtered_df: pd.DataFrame | None = None
 
+        self._arrow: pa.Table | None = None
+        self._con: duckdb.DuckDBPyConnection | None = None
+        self._where_sql = ""
+        self._where_params: list[Any] = []
+        self._order_sql = ""
+        self._limit_sql = ""
+        self._limit_params: list[Any] = []
+
     def fetch_dataframe(self) -> pd.DataFrame:
         """Fetch the data and return it as a pandas DataFrame."""
         raise NotImplementedError
+
+    def _use_arrow_path(self) -> bool:
+        return isinstance(self, CachedDataSourceMixin) and hasattr(self.cache_backend, "get_arrow")
+
+    def _set_arrow(self, table: pa.Table) -> None:  # pyright: ignore[reportUnknownParameterType]
+        self._arrow = table
+        self._con = _get_duckdb_connection()
+        self._con.register("t", table)
+
+    def _require_con(self) -> duckdb.DuckDBPyConnection:
+        if self._con is None:
+            raise RuntimeError("Arrow query connection is not available")
+        return self._con
 
     def _load_from_cache(self) -> bool:
         """Attempt to restore the dataframe from cache. Returns True on success."""
@@ -287,32 +362,74 @@ class PandasDataSource(BaseDataSource):
 
         return False
 
-    def _ensure_loaded(self) -> None:
-        """Load the dataframe, using the cache backend when available."""
+    def _ensure_loaded(self) -> None:  # noqa: C901
+        """Load the data, using the cache backend when available.
+
+        Uses ``get_arrow()`` when the cache backend supports it — everything
+        downstream then queries ``self._arrow`` via DuckDB instead of loading
+        a full pandas DataFrame. Otherwise falls back to the plain-pandas
+        path (``self._df``/``self._filtered_df``), same as before.
+        """
+        if self._arrow is not None or self._df is not None:
+            if self._arrow is None:
+                self._filtered_df = self._df
+            return
+
+        if isinstance(self, CachedDataSourceMixin) and hasattr(self.cache_backend, "get_arrow"):
+            try:
+                arrow = _get_arrow_from_cache(self.cache_backend, self.get_cache_key())
+            except (ValueError, TypeError, OSError):
+                log.debug("Failed to restore Arrow table from cache", exc_info=True)
+                arrow = None
+
+            if arrow is not None:
+                self._set_arrow(arrow)
+                return
+
         if self._load_from_cache():
             self._filtered_df = self._df
             return
 
-        if self._df is None:
-            self._df = self.fetch_dataframe()
+        self._df = self.fetch_dataframe()
 
-            # Defensive: fetch_dataframe() is a public override point, so a misbehaving
-            # subclass could violate its own "-> pd.DataFrame" contract at runtime.
-            is_loaded = self._df is not None and not self._df.empty  # pyright: ignore[reportUnnecessaryComparison]
-            if isinstance(self, CachedDataSourceMixin) and is_loaded:
-                try:
-                    self.cache_backend.set(
-                        self.get_cache_key(),
-                        self._df,
-                        self.cache_ttl,
-                    )
-                except (OSError, ValueError, TypeError):
-                    log.warning("Failed to write DataFrame to cache", exc_info=True)
+        # Defensive: fetch_dataframe() is a public override point, so a misbehaving
+        # subclass could violate its own "-> pd.DataFrame" contract at runtime.
+        is_loaded = self._df is not None and not self._df.empty  # pyright: ignore[reportUnnecessaryComparison]
+        if isinstance(self, CachedDataSourceMixin) and is_loaded:
+            try:
+                self.cache_backend.set(
+                    self.get_cache_key(),
+                    self._df,
+                    self.cache_ttl,
+                )
+            except (OSError, ValueError, TypeError):
+                log.warning("Failed to write DataFrame to cache", exc_info=True)
+
+        if self._use_arrow_path() and is_loaded:
+            # Even a cold cache gets the fast query path from here on — no need
+            # to re-read the file just written, converting what's already in
+            # hand is cheaper than a round trip through disk. A DataFrame that
+            # failed the same conversion above (mixed-type object column) hits
+            # it again here — fall back to the plain pandas path rather than
+            # letting a *second* attempt at the identical conversion 500.
+            try:
+                self._set_arrow(pa.Table.from_pandas(self._df, preserve_index=False))
+            except (pa.ArrowException, ValueError, TypeError):
+                log.debug("Failed to convert DataFrame to Arrow; falling back to pandas", exc_info=True)
+            else:
+                return
 
         self._filtered_df = self._df
 
-    def filter(self, filters: list[FilterItem]) -> Self:  # noqa: C901
+    def filter(self, filters: list[FilterItem]) -> Self:
         self._ensure_loaded()
+
+        if self._arrow is not None:
+            return self._filter_arrow(filters)
+
+        return self._filter_pandas(filters)
+
+    def _filter_pandas(self, filters: list[FilterItem]) -> Self:  # noqa: C901
         self._filtered_df = self._df  # Reset filtering
 
         if self._filtered_df is None or self._filtered_df.empty:
@@ -367,7 +484,83 @@ class PandasDataSource(BaseDataSource):
         self._filtered_df = df  # pyright: ignore[reportAttributeAccessIssue]
         return self
 
+    _ARROW_OPERATORS: ClassVar[dict[str, str]] = {
+        "=": "=",
+        "!=": "!=",
+        "<": "<",
+        "<=": "<=",
+        ">": ">",
+        ">=": ">=",
+    }
+
+    def _build_arrow_clause(
+        self,
+        schema: pa.Schema,  # pyright: ignore[reportUnknownParameterType]
+        filter_item: FilterItem,
+    ) -> tuple[str | None, list[Any]]:
+        ident = _quote_ident(filter_item.field)
+
+        if filter_item.operator == "like":
+            # Cast to VARCHAR so LIKE works on numeric columns too, matching the
+            # pandas path's series.astype(str) + str.contains(case=False).
+            return f"CAST({ident} AS VARCHAR) ILIKE ?", [f"%{filter_item.value}%"]
+
+        sql_op = self._ARROW_OPERATORS.get(filter_item.operator)
+        if sql_op is None:
+            return None, []
+
+        val: Any = filter_item.value
+        field_type = schema.field(filter_item.field).type
+        if pa.types.is_integer(field_type) or pa.types.is_floating(field_type):
+            try:
+                val = float(val)
+            except ValueError:
+                # Matches the pandas path's ordering-operator behaviour when a
+                # non-numeric value is compared against a numeric column: skip
+                # this filter rather than binding a mismatched type DuckDB
+                # would reject at execution time.
+                return None, []
+
+        return f"{ident} {sql_op} ?", [val]
+
+    def _filter_arrow(self, filters: list[FilterItem]) -> Self:
+        self._where_sql = ""
+        self._where_params = []
+
+        if self._arrow is None or self._arrow.num_rows == 0:
+            return self
+
+        schema = self._arrow.schema
+        clauses: list[str] = []
+
+        for filter_item in filters:
+            if filter_item.field not in schema.names:
+                continue
+
+            try:
+                clause, params = self._build_arrow_clause(schema, filter_item)
+            except (ValueError, TypeError):
+                log.debug("Failed to apply filter %s", filter_item, exc_info=True)
+                continue
+
+            if clause is None:
+                continue
+
+            clauses.append(clause)
+            self._where_params.extend(params)
+
+        if clauses:
+            self._where_sql = "WHERE " + " AND ".join(clauses)
+
+        return self
+
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
+        if self._arrow is not None:
+            return self._sort_arrow(sort_by, sort_order)
+
+        return self._sort_pandas(sort_by, sort_order)
+
+    def _sort_pandas(self, sort_by: str | None, sort_order: str | None) -> Self:
         if not sort_by or self._filtered_df is None or self._filtered_df.empty:
             return self
 
@@ -379,7 +572,27 @@ class PandasDataSource(BaseDataSource):
 
         return self
 
+    def _sort_arrow(self, sort_by: str | None, sort_order: str | None) -> Self:
+        self._order_sql = ""
+
+        if not sort_by or self._arrow is None or self._arrow.num_rows == 0:
+            return self
+
+        if sort_by not in self._arrow.schema.names:
+            return self
+
+        direction = "DESC" if (sort_order or "").lower() == "desc" else "ASC"
+        self._order_sql = f"ORDER BY {_quote_ident(sort_by)} {direction}"
+
+        return self
+
     def paginate(self, page: int, size: int) -> Self:
+        if self._arrow is not None:
+            return self._paginate_arrow(page, size)
+
+        return self._paginate_pandas(page, size)
+
+    def _paginate_pandas(self, page: int, size: int) -> Self:
         if self._filtered_df is None or self._filtered_df.empty:
             return self
 
@@ -388,20 +601,72 @@ class PandasDataSource(BaseDataSource):
 
         return self
 
-    def all(self) -> list[dict[str, Any]]:  # noqa: C901
-        if self._filtered_df is None or self._filtered_df.empty:
+    def _paginate_arrow(self, page: int, size: int) -> Self:
+        self._limit_sql = ""
+        self._limit_params = []
+
+        if self._arrow is None or self._arrow.num_rows == 0:
+            return self
+
+        self._limit_sql = "LIMIT ? OFFSET ?"
+        self._limit_params = [size, (page - 1) * size]
+
+        return self
+
+    def all(self) -> list[dict[str, Any]]:
+        if self._arrow is not None:
+            return self._all_arrow()
+
+        return self._all_pandas()
+
+    def _dataframe_to_records(self, df: pd.DataFrame) -> list[dict[str, Any]]:
+        if df.empty:
             return []
 
-        df = self._filtered_df.astype(object).where(self._filtered_df.notnull(), None)
-
-        records = df.to_dict(orient="records")
+        obj_df = df.astype(object).where(df.notnull(), None)
+        records = obj_df.to_dict(orient="records")
         return [self.serialize_value(record) for record in records]
 
+    def _all_pandas(self) -> list[dict[str, Any]]:
+        if self._filtered_df is None:
+            return []
+
+        return self._dataframe_to_records(self._filtered_df)
+
+    def _all_arrow(self) -> list[dict[str, Any]]:
+        if self._arrow is None or self._arrow.num_rows == 0:
+            return []
+
+        # _where_sql/_order_sql/_limit_sql only ever contain quoted identifiers
+        # already validated against self._arrow.schema.names (see
+        # _filter_arrow/_sort_arrow/_quote_ident) and literal SQL keywords —
+        # every value is bound via `?`, never interpolated.
+        sql = f"SELECT * FROM t {self._where_sql} {self._order_sql} {self._limit_sql}"  # noqa: S608
+        params = [*self._where_params, *self._limit_params]
+        df = self._require_con().execute(sql, params).fetch_df()
+
+        return self._dataframe_to_records(df)
+
     def count(self) -> int:
+        if self._arrow is not None:
+            return self._count_arrow()
+
         return len(self._filtered_df) if self._filtered_df is not None else 0
+
+    def _count_arrow(self) -> int:
+        if self._arrow is None or self._arrow.num_rows == 0:
+            return 0
+
+        sql = f"SELECT COUNT(*) FROM t {self._where_sql}"  # noqa: S608 — see _all_arrow
+        result = self._require_con().execute(sql, self._where_params).fetchone()
+        return result[0] if result else 0
 
     def get_columns(self) -> list[str]:
         self._ensure_loaded()
+
+        if self._arrow is not None:
+            return list(self._arrow.schema.names)
+
         return list(self._df.columns) if self._df is not None else []
 
     def serialize_value(self, val: Any) -> Any:  # noqa: PLR0911

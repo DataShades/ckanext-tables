@@ -20,6 +20,8 @@ from typing import Any
 
 import pandas as pd
 import pyarrow as pa
+import pyarrow.parquet as pq
+from pyarrow import feather
 
 import ckan.plugins.toolkit as tk
 from ckan.lib.redis import connect_to_redis
@@ -201,6 +203,16 @@ class _FileCacheBackend(CacheBackend, ABC):
     _memo: OrderedDict[str, tuple[float, Any]] = OrderedDict()
     _memo_lock = threading.Lock()
 
+    # A second, separate memo for the Arrow-native read path (see
+    # get_arrow() on the Arrow-capable subclasses below). Kept apart from
+    # _memo so a DataFrame read via get() and a pyarrow.Table read via
+    # get_arrow() of the same path can never be confused for one another —
+    # every backend carries this (even ones that never populate it, e.g.
+    # PickleCacheBackend) so the shared eviction code in delete()/
+    # clean_expired() doesn't need to know which backends support it.
+    _arrow_memo: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+    _arrow_memo_lock = threading.Lock()
+
     def __init__(self, cache_dir: str | None = None) -> None:
         self.cache_dir: str | None = get_cache_dir(cache_dir)
 
@@ -210,27 +222,31 @@ class _FileCacheBackend(CacheBackend, ABC):
     @abstractmethod
     def _write_data(self, value: Any, path: str) -> None: ...
 
-    def _memo_get(self, path: str, mtime: float) -> tuple[bool, Any]:
+    def _memo_get(
+        self, memo: OrderedDict[str, tuple[float, Any]], lock: threading.Lock, path: str, mtime: float
+    ) -> tuple[bool, Any]:
         """Return ``(True, value)`` if *path* has a memoised copy as of *mtime*."""
-        with self._memo_lock:
-            entry = self._memo.get(path)
+        with lock:
+            entry = memo.get(path)
             if entry is not None and entry[0] == mtime:
-                self._memo.move_to_end(path)
+                memo.move_to_end(path)
                 return True, entry[1]
 
         return False, None
 
-    def _memo_set(self, path: str, mtime: float, value: Any) -> None:
-        with self._memo_lock:
-            self._memo[path] = (mtime, value)
-            self._memo.move_to_end(path)
+    def _memo_set(
+        self, memo: OrderedDict[str, tuple[float, Any]], lock: threading.Lock, path: str, mtime: float, value: Any
+    ) -> None:
+        with lock:
+            memo[path] = (mtime, value)
+            memo.move_to_end(path)
 
-            while len(self._memo) > _MEMO_MAX_ENTRIES:
-                self._memo.popitem(last=False)
+            while len(memo) > _MEMO_MAX_ENTRIES:
+                memo.popitem(last=False)
 
-    def _memo_delete(self, path: str) -> None:
-        with self._memo_lock:
-            self._memo.pop(path, None)
+    def _memo_delete(self, memo: OrderedDict[str, tuple[float, Any]], lock: threading.Lock, path: str) -> None:
+        with lock:
+            memo.pop(path, None)
 
     def _require_cache_dir(self) -> str:
         """Return ``self.cache_dir``, which callers must have already checked is not ``None``.
@@ -270,7 +286,22 @@ class _FileCacheBackend(CacheBackend, ABC):
                 os.remove(tmp_path)
             raise
 
-    def get(self, key: str) -> Any:  # noqa: PLR0911
+    def get(self, key: str) -> Any:
+        return self._get_with_reader(key, self._read_data, self._memo, self._memo_lock)
+
+    def _get_with_reader(  # noqa: PLR0911
+        self,
+        key: str,
+        read_fn: Callable[[str], Any],
+        memo: OrderedDict[str, tuple[float, Any]],
+        lock: threading.Lock,
+    ) -> Any:
+        """Shared ``get()`` logic, parameterised over the deserialiser and memo used.
+
+        Lets ``get()`` (via ``_read_data``/``_memo``) and the Arrow-native
+        subclasses' ``get_arrow()`` (via ``_read_arrow``/``_arrow_memo``) share
+        the meta/expiry/memo/error-handling logic without duplicating it.
+        """
         if self.cache_dir is None:
             return None
 
@@ -295,7 +326,7 @@ class _FileCacheBackend(CacheBackend, ABC):
 
         path = self._cache_path(key)
 
-        hit, value = self._memo_get(path, expires_at)
+        hit, value = self._memo_get(memo, lock, path, expires_at)
         if hit:
             return value
 
@@ -303,12 +334,12 @@ class _FileCacheBackend(CacheBackend, ABC):
             return None
 
         try:
-            value = self._read_data(path)
+            value = read_fn(path)
         except (OSError, ValueError):
             log.debug("Failed to read %s cache %s", self._file_extension, path, exc_info=True)
             return None
 
-        self._memo_set(path, expires_at, value)
+        self._memo_set(memo, lock, path, expires_at, value)
         return value
 
     def set(self, key: str, value: Any, ttl: int) -> None:
@@ -345,10 +376,12 @@ class _FileCacheBackend(CacheBackend, ABC):
         if self.cache_dir is None:
             return
 
-        self._memo_delete(self._cache_path(key))
+        path = self._cache_path(key)
+        self._memo_delete(self._memo, self._memo_lock, path)
+        self._memo_delete(self._arrow_memo, self._arrow_memo_lock, path)
 
         with contextlib.suppress(FileNotFoundError):
-            os.remove(self._cache_path(key))
+            os.remove(path)
         with contextlib.suppress(FileNotFoundError):
             os.remove(self._meta_path(key))
 
@@ -416,7 +449,8 @@ class _FileCacheBackend(CacheBackend, ABC):
                 with contextlib.suppress(FileNotFoundError):
                     os.remove(data_path)
 
-                self._memo_delete(data_path)
+                self._memo_delete(self._memo, self._memo_lock, data_path)
+                self._memo_delete(self._arrow_memo, self._arrow_memo_lock, data_path)
 
             with contextlib.suppress(FileNotFoundError):
                 os.remove(entry.path)
@@ -462,7 +496,28 @@ class PickleCacheBackend(_FileCacheBackend):
             pickle.dump(value, f)
 
 
-class ParquetCacheBackend(_DataFrameFileCacheBackend):
+class _ArrowCacheBackend(_FileCacheBackend, ABC):
+    """Mixin for file cache backends whose on-disk format is Arrow-native.
+
+    Adds ``get_arrow()``, which returns the cached value as a ``pyarrow.Table``
+    instead of a pandas DataFrame — skipping the pandas conversion ``get()``
+    (via ``_read_data``/``_read_df``) does, so a caller that only wants to run
+    a DuckDB query over the data (see ``PandasDataSource`` in
+    ``data_sources.py``) never has to materialise a full pandas DataFrame for
+    it. Only ``ParquetCacheBackend`` and ``FeatherCacheBackend`` implement
+    this; ``PickleCacheBackend`` and ``RedisCacheBackend`` don't, since
+    neither stores an Arrow-native format — callers detect support with
+    ``hasattr(backend, "get_arrow")``.
+    """
+
+    @abstractmethod
+    def _read_arrow(self, path: str) -> pa.Table: ...  # pyright: ignore[reportUnknownParameterType]
+
+    def get_arrow(self, key: str) -> pa.Table | None:  # pyright: ignore[reportUnknownParameterType]
+        return self._get_with_reader(key, self._read_arrow, self._arrow_memo, self._arrow_memo_lock)
+
+
+class ParquetCacheBackend(_ArrowCacheBackend, _DataFrameFileCacheBackend):
     """Cache backend that stores data as parquet files on disk."""
 
     _file_extension = ".parquet"
@@ -473,8 +528,11 @@ class ParquetCacheBackend(_DataFrameFileCacheBackend):
     def _write_df(self, df: pd.DataFrame, path: str) -> None:
         df.to_parquet(path, engine="pyarrow")
 
+    def _read_arrow(self, path: str) -> pa.Table:  # pyright: ignore[reportUnknownParameterType]
+        return pq.read_table(path)
 
-class FeatherCacheBackend(_DataFrameFileCacheBackend):
+
+class FeatherCacheBackend(_ArrowCacheBackend, _DataFrameFileCacheBackend):
     """Cache backend that stores data as feather (Arrow IPC) files on disk."""
 
     _file_extension = ".feather"
@@ -484,6 +542,9 @@ class FeatherCacheBackend(_DataFrameFileCacheBackend):
 
     def _write_df(self, df: pd.DataFrame, path: str) -> None:
         df.to_feather(path)
+
+    def _read_arrow(self, path: str) -> pa.Table:  # pyright: ignore[reportUnknownParameterType]
+        return feather.read_table(path)
 
 
 def get_cache_backend() -> CacheBackend:
