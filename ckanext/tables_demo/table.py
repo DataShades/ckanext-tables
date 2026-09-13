@@ -1,3 +1,7 @@
+from sqlalchemy import select
+
+from ckan import model
+
 import ckanext.tables.shared as t
 from ckanext.tables_demo.utils import generate_mock_data, generate_mock_products
 
@@ -130,3 +134,49 @@ class ProductsTable(t.TableDefinition):
         """Callback to recreate the mock products."""
         PRODUCTS_DATA[:] = generate_mock_products(10000)
         return t.ActionHandlerResult(success=True, message="Products recreated.")
+
+
+class PackagesTable(t.TableDefinition):
+    """Demo table definition backed by a real database query (CKAN's package table).
+
+    Unlike ``PeopleTable``/``ProductsTable``, which use ``ListDataSource`` over
+    in-memory mock data, this one uses ``DatabaseDataSource`` to demonstrate
+    filtering/sorting/pagination pushed down to SQL against a real table.
+    """
+
+    def __init__(self, ajax_url: str | None = None):
+        stmt = select(
+            model.Package.name,
+            model.Package.title,
+            model.Package.type,
+            model.Package.state,
+            model.Package.private,
+            model.Package.creator_user_id,
+            model.Package.metadata_created,
+            model.Package.metadata_modified,
+        )
+
+        super().__init__(
+            name="packages",
+            data_source=t.DatabaseDataSource(stmt),
+            ajax_url=ajax_url,
+            columns=[
+                t.ColumnDefinition(field="name"),
+                t.ColumnDefinition(field="title"),
+                t.ColumnDefinition(field="type"),
+                t.ColumnDefinition(field="state"),
+                t.ColumnDefinition(field="private", formatters=[(t.formatters.BooleanFormatter, {})]),
+                t.ColumnDefinition(
+                    field="creator_user_id",
+                    title="Creator",
+                    formatters=[(t.formatters.UserLinkFormatter, {})],
+                    tabulator_formatter="html"
+                ),
+                t.ColumnDefinition(
+                    field="metadata_modified",
+                    title="Last Modified",
+                    formatters=[(t.formatters.DateFormatter, {"date_format": "%d %B %Y"})],
+                ),
+            ],
+            exporters=t.ALL_EXPORTERS,
+        )

@@ -44,27 +44,7 @@ _ALLOWED_URL_SCHEMES = ("http", "https")
 
 _CSV_SNIFF_LINES = 10
 
-
-def _sniff_csv_delimiter(path: str) -> str | None:
-    """Detect a local CSV file's delimiter from its first few lines.
-
-    Returns ``None`` if sniffing fails (e.g. a single-column file, or too few
-    rows to compare), so the caller can fall back to pandas' own slower but
-    more thorough auto-detection instead of guessing wrong.
-    """
-    try:
-        with open(path, encoding="utf-8", errors="replace", newline="") as f:
-            sample = "".join(islice(f, _CSV_SNIFF_LINES))
-    except OSError:
-        return None
-
-    if not sample:
-        return None
-
-    try:
-        return csv.Sniffer().sniff(sample).delimiter
-    except csv.Error:
-        return None
+_thread_local = threading.local()
 
 
 class DataSourceError(Exception):
@@ -192,17 +172,6 @@ class DatabaseDataSource(BaseDataSource):
         return [c.name for c in self.stmt.selected_columns]
 
 
-def _numeric_or_string_pair(row_value: Any, filter_value: Any) -> tuple[Any, Any]:
-    """Compare two values numerically when both parse as numbers, else as strings."""
-    if not isinstance(row_value, bool) and not isinstance(filter_value, bool):
-        try:
-            return float(row_value), float(filter_value)
-        except (TypeError, ValueError):
-            pass
-
-    return str(row_value), str(filter_value)
-
-
 class ListDataSource(BaseDataSource):
     """A data source that uses a list of dictionaries as the data source.
 
@@ -280,50 +249,6 @@ class ListDataSource(BaseDataSource):
 
     def get_columns(self) -> list[str]:
         return list(self.data[0].keys()) if self.data else []
-
-
-def _quote_ident(name: str) -> str:
-    """Quote *name* as a DuckDB identifier, escaping any embedded quote.
-
-    Only ever called with a field name already validated against the table's
-    known schema (see ``PandasDataSource._filter_arrow``/``_sort_arrow``) —
-    this is defense in depth, not the actual injection guard.
-    """
-    return '"' + name.replace('"', '""') + '"'
-
-
-def _get_arrow_from_cache(backend: CacheBackend, key: str) -> pa.Table | None:  # pyright: ignore[reportUnknownParameterType]
-    """Return *key* from *backend* as a pyarrow Table, if the backend supports it.
-
-    Only ``FeatherCacheBackend`` implements ``get_arrow`` (see ``cache.py``)
-    — every other backend (Redis) has no such method, so this returns
-    ``None`` for them via ``getattr``'s default rather than requiring
-    ``CacheBackend`` itself to declare it.
-    """
-    get_arrow = getattr(backend, "get_arrow", None)
-    return get_arrow(key) if get_arrow is not None else None
-
-
-_thread_local = threading.local()
-
-
-def _get_duckdb_connection() -> duckdb.DuckDBPyConnection:
-    """Return a DuckDB connection reused for the lifetime of the current thread.
-
-    ``duckdb.connect()`` itself costs several milliseconds (measured) — creating
-    one per request would eat into exactly the per-request latency this
-    pushdown path exists to cut. Each worker thread gets its own connection
-    (mirroring how CKAN's own ``model.Session`` is thread-scoped and reused
-    across requests), and every ``PandasDataSource`` registers its table under
-    the same view name (``"t"``) on it — DuckDB's ``register()`` replaces an
-    existing binding by name in place, so reusing one connection across many
-    requests/tables never accumulates state.
-    """
-    con = getattr(_thread_local, "con", None)
-    if con is None:
-        con = duckdb.connect()
-        _thread_local.con = con
-    return con
 
 
 class PandasDataSource(BaseDataSource):
@@ -717,16 +642,6 @@ class PandasDataSource(BaseDataSource):
             return self.serialize_value(val.item())
 
         return str(val)
-
-
-def resource_cache_key(resource_id: str) -> str:
-    """Return the cache key a resource's cached DataFrame is stored under.
-
-    Shared with ``plugin.py``'s ``before_resource_update``/``before_resource_delete``
-    hooks so cache invalidation always targets the same key ``get_cache_key()``
-    below writes under, without hand-copying the ``"resource-"`` prefix.
-    """
-    return f"resource-{resource_id}"
 
 
 class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
@@ -1125,3 +1040,87 @@ class DataStoreDataSource(BaseDataSource):
             return [f["id"] for f in result.get("fields", []) if f["id"] != "_id"]
         except (tk.ObjectNotFound, tk.NotAuthorized):
             return []
+
+
+def _sniff_csv_delimiter(path: str) -> str | None:
+    """Detect a local CSV file's delimiter from its first few lines.
+
+    Returns ``None`` if sniffing fails (e.g. a single-column file, or too few
+    rows to compare), so the caller can fall back to pandas' own slower but
+    more thorough auto-detection instead of guessing wrong.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace", newline="") as f:
+            sample = "".join(islice(f, _CSV_SNIFF_LINES))
+    except OSError:
+        return None
+
+    if not sample:
+        return None
+
+    try:
+        return csv.Sniffer().sniff(sample).delimiter
+    except csv.Error:
+        return None
+
+
+def _numeric_or_string_pair(row_value: Any, filter_value: Any) -> tuple[Any, Any]:
+    """Compare two values numerically when both parse as numbers, else as strings."""
+    if not isinstance(row_value, bool) and not isinstance(filter_value, bool):
+        try:
+            return float(row_value), float(filter_value)
+        except (TypeError, ValueError):
+            pass
+
+    return str(row_value), str(filter_value)
+
+
+def resource_cache_key(resource_id: str) -> str:
+    """Return the cache key a resource's cached DataFrame is stored under.
+
+    Shared with ``plugin.py``'s ``before_resource_update``/``before_resource_delete``
+    hooks so cache invalidation always targets the same key ``get_cache_key()``
+    below writes under, without hand-copying the ``"resource-"`` prefix.
+    """
+    return f"resource-{resource_id}"
+
+
+def _quote_ident(name: str) -> str:
+    """Quote *name* as a DuckDB identifier, escaping any embedded quote.
+
+    Only ever called with a field name already validated against the table's
+    known schema (see ``PandasDataSource._filter_arrow``/``_sort_arrow``) —
+    this is defense in depth, not the actual injection guard.
+    """
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _get_arrow_from_cache(backend: CacheBackend, key: str) -> pa.Table | None:  # pyright: ignore[reportUnknownParameterType]
+    """Return *key* from *backend* as a pyarrow Table, if the backend supports it.
+
+    Only ``FeatherCacheBackend`` implements ``get_arrow`` (see ``cache.py``)
+    — every other backend (Redis) has no such method, so this returns
+    ``None`` for them via ``getattr``'s default rather than requiring
+    ``CacheBackend`` itself to declare it.
+    """
+    get_arrow = getattr(backend, "get_arrow", None)
+    return get_arrow(key) if get_arrow is not None else None
+
+
+def _get_duckdb_connection() -> duckdb.DuckDBPyConnection:
+    """Return a DuckDB connection reused for the lifetime of the current thread.
+
+    ``duckdb.connect()`` itself costs several milliseconds (measured) — creating
+    one per request would eat into exactly the per-request latency this
+    pushdown path exists to cut. Each worker thread gets its own connection
+    (mirroring how CKAN's own ``model.Session`` is thread-scoped and reused
+    across requests), and every ``PandasDataSource`` registers its table under
+    the same view name (``"t"``) on it — DuckDB's ``register()`` replaces an
+    existing binding by name in place, so reusing one connection across many
+    requests/tables never accumulates state.
+    """
+    con = getattr(_thread_local, "con", None)
+    if con is None:
+        con = duckdb.connect()
+        _thread_local.con = con
+    return con
