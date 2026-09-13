@@ -23,6 +23,10 @@ class TestTablesPlugin:
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "CSV"}}) is True
 
+    def test_can_view_tsv(self):
+        plugin = TablesPlugin()
+        assert plugin.can_view({"resource": {"format": "tsv"}}) is True
+
     def test_can_view_xlsx(self):
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "xlsx"}}) is True
@@ -30,6 +34,10 @@ class TestTablesPlugin:
     def test_can_view_xls(self):
         plugin = TablesPlugin()
         assert plugin.can_view({"resource": {"format": "xls"}}) is True
+
+    def test_can_view_ods(self):
+        plugin = TablesPlugin()
+        assert plugin.can_view({"resource": {"format": "ods"}}) is True
 
     def test_can_view_unsupported(self):
         plugin = TablesPlugin()

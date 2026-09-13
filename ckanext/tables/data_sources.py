@@ -894,6 +894,17 @@ class CsvUrlDataSource(BaseResourceDataSource):
         return list(self._read_csv(path, nrows=0).columns)
 
 
+class TsvUrlDataSource(CsvUrlDataSource):
+    """Reads a tab-separated file.
+
+    ``CsvUrlDataSource``'s delimiter sniffer already detects tabs from the
+    file's content, so this only needs to override ``_format_name`` for
+    accurate error messages/logging.
+    """
+
+    _format_name = "TSV"
+
+
 class XlsxUrlDataSource(BaseResourceDataSource):
     _format_name = "XLSX"
 
@@ -914,6 +925,17 @@ class XlsUrlDataSource(XlsxUrlDataSource):
     """
 
     _format_name = "XLS"
+
+
+class OdsUrlDataSource(XlsxUrlDataSource):
+    """Reads the first sheet of an OpenDocument Spreadsheet (``.ods``).
+
+    Like ``.xls``, ``pd.read_excel`` picks the right engine (``odf`` here) by
+    sniffing the file's content, so this only needs to override
+    ``_format_name``.
+    """
+
+    _format_name = "ODS"
 
 
 class OrcUrlDataSource(BaseResourceDataSource):

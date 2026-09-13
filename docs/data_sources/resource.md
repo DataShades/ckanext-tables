@@ -29,6 +29,23 @@ source = CsvUrlDataSource(resource=resource_dict)
 
 ---
 
+### TsvUrlDataSource
+
+Reads a tab-separated file. Reuses `CsvUrlDataSource`'s delimiter sniffer, which already detects tabs from the file's content.
+
+```python
+from ckanext.tables.shared import TsvUrlDataSource
+
+source = TsvUrlDataSource(url="https://example.com/data.tsv")
+```
+
+::: tables.data_sources.TsvUrlDataSource
+    options:
+      show_source: true
+      show_bases: false
+
+---
+
 ### XlsxUrlDataSource
 
 Reads the first sheet of an Excel workbook (`.xlsx`).
@@ -57,6 +74,23 @@ source = XlsUrlDataSource(url="https://example.com/legacy-report.xls")
 ```
 
 ::: tables.data_sources.XlsUrlDataSource
+    options:
+      show_source: true
+      show_bases: false
+
+---
+
+### OdsUrlDataSource
+
+Reads the first sheet of an OpenDocument Spreadsheet (`.ods`).
+
+```python
+from ckanext.tables.shared import OdsUrlDataSource
+
+source = OdsUrlDataSource(url="https://example.com/report.ods")
+```
+
+::: tables.data_sources.OdsUrlDataSource
     options:
       show_source: true
       show_bases: false

@@ -14,8 +14,10 @@ from ckanext.tables.data_sources import (
     DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
+    OdsUrlDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
+    TsvUrlDataSource,
     XlsUrlDataSource,
     XlsxUrlDataSource,
 )
@@ -27,8 +29,10 @@ FILTER_RE = re.compile(r"^filter\[(\d+)\]\[(\w+)\]$")
 
 DATA_SOURCE_BY_FORMAT = {
     "csv": CsvUrlDataSource,
+    "tsv": TsvUrlDataSource,
     "xlsx": XlsxUrlDataSource,
     "xls": XlsUrlDataSource,
+    "ods": OdsUrlDataSource,
     "orc": OrcUrlDataSource,
     "parquet": ParquetUrlDataSource,
     "feather": FeatherUrlDataSource,

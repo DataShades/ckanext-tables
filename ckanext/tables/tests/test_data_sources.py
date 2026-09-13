@@ -28,9 +28,11 @@ from ckanext.tables.data_sources import (
     DataStoreDataSource,
     FeatherUrlDataSource,
     ListDataSource,
+    OdsUrlDataSource,
     OrcUrlDataSource,
     PandasDataSource,
     ParquetUrlDataSource,
+    TsvUrlDataSource,
     XlsUrlDataSource,
     XlsxUrlDataSource,
     _sniff_csv_delimiter,
@@ -319,6 +321,50 @@ class TestXlsUrlDataSource:
 
     def test_format_name(self):
         assert XlsUrlDataSource(url="http://example.com/legacy.xls")._format_name == "XLS"
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_fetch_remote_file")
+class TestOdsUrlDataSource:
+    """OdsUrlDataSource only overrides XlsxUrlDataSource's `_format_name`.
+
+    pandas picks the `odf` engine from the file's actual bytes, not its
+    extension.
+    """
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_excel")
+    def test_fetch_and_parse(self, mock_read_excel):
+        mock_read_excel.return_value = pd.DataFrame([{"id": "1", "name": "Alice"}])
+
+        ds = OdsUrlDataSource(url="http://example.com/report.ods")
+        data = ds.filter([]).all()
+
+        assert data == [{"id": "1", "name": "Alice"}]
+
+    def test_format_name(self):
+        assert OdsUrlDataSource(url="http://example.com/report.ods")._format_name == "ODS"
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_fetch_remote_file")
+class TestTsvUrlDataSource:
+    """TsvUrlDataSource only overrides CsvUrlDataSource's `_format_name`.
+
+    The delimiter sniffer (`_sniff_csv_delimiter`) already detects tabs from
+    the file's content.
+    """
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    @mock.patch("ckanext.tables.data_sources._sniff_csv_delimiter", return_value="\t")
+    def test_fetch_and_parse(self, _, mock_read_csv):
+        mock_read_csv.return_value = pd.DataFrame([{"id": "1", "name": "Alice"}])
+
+        ds = TsvUrlDataSource(url="http://example.com/data.tsv")
+        data = ds.filter([]).all()
+
+        assert data == [{"id": "1", "name": "Alice"}]
+        mock_read_csv.assert_called_once_with("/tmp/mocked-source", sep="\t")
+
+    def test_format_name(self):
+        assert TsvUrlDataSource(url="http://example.com/data.tsv")._format_name == "TSV"
 
 
 class TestSerialization:
@@ -993,6 +1039,18 @@ class TestUrlDataSourceErrorPaths:
     @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
     def test_xls_error_raises(self, _):
         ds = XlsUrlDataSource(url="http://example.com/file.xls")
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
+    def test_ods_error_raises(self, _):
+        ds = OdsUrlDataSource(url="http://example.com/file.ods")
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv", side_effect=OSError("boom"))
+    def test_tsv_error_raises(self, _):
+        ds = TsvUrlDataSource(url="http://example.com/file.tsv")
         with pytest.raises(DataSourceError):
             ds.fetch_dataframe()
 

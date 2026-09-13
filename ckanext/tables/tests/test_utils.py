@@ -11,8 +11,10 @@ from ckanext.tables.data_sources import (
     DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
+    OdsUrlDataSource,
     OrcUrlDataSource,
     ParquetUrlDataSource,
+    TsvUrlDataSource,
     XlsUrlDataSource,
     XlsxUrlDataSource,
 )
@@ -167,6 +169,11 @@ class TestTablesGuessDataSource:
         ds = tables_guess_data_source(resource)
         assert isinstance(ds, CsvUrlDataSource)
 
+    def test_tsv_format(self):
+        resource = {"format": "TSV", "url": "http://example.com/data.tsv", "id": "res-1b"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, TsvUrlDataSource)
+
     def test_xlsx_format(self):
         resource = {"format": "XLSX", "url": "http://example.com/data.xlsx", "id": "res-2"}
         ds = tables_guess_data_source(resource)
@@ -176,6 +183,11 @@ class TestTablesGuessDataSource:
         resource = {"format": "XLS", "url": "http://example.com/data.xls", "id": "res-2b"}
         ds = tables_guess_data_source(resource)
         assert isinstance(ds, XlsUrlDataSource)
+
+    def test_ods_format(self):
+        resource = {"format": "ODS", "url": "http://example.com/data.ods", "id": "res-2c"}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, OdsUrlDataSource)
 
     def test_orc_format(self):
         resource = {"format": "ORC", "url": "http://example.com/data.orc", "id": "res-3"}
