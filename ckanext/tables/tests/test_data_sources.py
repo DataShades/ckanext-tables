@@ -1,13 +1,14 @@
 import contextlib
 import decimal
 import os
+import uuid
 from datetime import datetime  # noqa: DTZ001
 from unittest import mock
 
 import numpy as np
 import pandas as pd
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Date, Float, Numeric, Uuid, column, select
 
 import ckan.plugins.toolkit as tk
 import ckan.tests.factories as factories
@@ -1062,6 +1063,49 @@ class TestDatabaseDataSource:
         ds = DatabaseDataSource(select(model.Package))
         result = ds.filter([]).all()
         assert len(result) == 10
+
+    def test_build_filter_numeric_column_casts_value(self):
+        """COR-18: a Numeric column used to be compared as a string, which Postgres rejects."""
+        ds = DatabaseDataSource(select(model.User))
+        col = column("amount", Numeric())
+        assert ds.build_filter(col, "=", "10.5") is not None
+
+    def test_build_filter_numeric_column_invalid_value_is_skipped(self):
+        """A non-numeric value against a Numeric column must be dropped, not sent to the DB."""
+        ds = DatabaseDataSource(select(model.User))
+        col = column("amount", Numeric())
+        assert ds.build_filter(col, "=", "not-a-number") is None
+
+    def test_build_filter_float_column_casts_value(self):
+        ds = DatabaseDataSource(select(model.User))
+        col = column("score", Float())
+        assert ds.build_filter(col, ">=", "3.14") is not None
+
+    def test_build_filter_date_column_casts_value(self):
+        ds = DatabaseDataSource(select(model.User))
+        col = column("created", Date())
+        assert ds.build_filter(col, "=", "2024-01-01") is not None
+
+    def test_build_filter_date_column_invalid_value_is_skipped(self):
+        ds = DatabaseDataSource(select(model.User))
+        col = column("created", Date())
+        assert ds.build_filter(col, "=", "not-a-date") is None
+
+    def test_build_filter_uuid_column_casts_value(self):
+        ds = DatabaseDataSource(select(model.User))
+        col = column("id", Uuid())
+        assert ds.build_filter(col, "=", str(uuid.uuid4())) is not None
+
+    def test_build_filter_uuid_column_invalid_value_is_skipped(self):
+        ds = DatabaseDataSource(select(model.User))
+        col = column("id", Uuid())
+        assert ds.build_filter(col, "=", "not-a-uuid") is None
+
+    def test_build_filter_like_on_numeric_column_is_no_longer_dropped(self):
+        """COR-18: `like` used to be silently dropped for any non-string column."""
+        ds = DatabaseDataSource(select(model.User))
+        col = column("amount", Numeric())
+        assert ds.build_filter(col, "like", "10") is not None
 
 
 class TestFilterOperatorsMatchCanonicalList:

@@ -9,8 +9,9 @@ import os
 import re
 import tempfile
 import threading
+import uuid
 from collections.abc import Callable, Iterator
-from datetime import datetime
+from datetime import date, datetime
 from itertools import islice
 from typing import Any, ClassVar
 from urllib.parse import urlparse
@@ -21,7 +22,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from pyarrow import feather, orc
-from sqlalchemy import Boolean, DateTime, Integer
+from sqlalchemy import String, cast
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.sql import Select, func, select
 from sqlalchemy.sql.elements import ColumnElement
@@ -106,16 +107,39 @@ class DatabaseDataSource(BaseDataSource):
         return self
 
     def build_filter(self, column: ColumnElement[Any], operator: str, value: str) -> ColumnElement[bool] | None:
+        if operator == "like":
+            # Cast to text so LIKE works on non-string columns too (numeric, date,
+            # UUID, ...), matching the pandas/arrow data sources' str.contains() /
+            # CAST(... AS VARCHAR) behaviour instead of silently dropping the filter.
+            return cast(column, String).ilike(f"%{value}%")
+
         try:
-            if isinstance(column.type, Boolean):
+            python_type = column.type.python_type
+        except NotImplementedError:
+            # No single Python type for this column (e.g. JSON) — fall back to a
+            # plain string comparison, same as the pre-existing behaviour.
+            python_type = str
+
+        try:
+            if python_type is bool:
                 casted_value = str(value).lower() in ("true", "1", "yes", "y")
-            elif isinstance(column.type, Integer):
+            elif python_type is int:
                 casted_value = int(value)
-            elif isinstance(column.type, DateTime):
+            elif python_type is float or python_type is decimal.Decimal:
+                casted_value = float(value)
+            elif python_type is datetime:
                 casted_value = datetime.fromisoformat(value)
+            elif python_type is date:
+                casted_value = date.fromisoformat(value)
+            elif python_type is uuid.UUID:
+                casted_value = uuid.UUID(str(value))
             else:
                 casted_value = str(value)
-        except ValueError:
+        except (ValueError, TypeError):
+            # A value that doesn't fit the column's type (e.g. a non-numeric
+            # string against a Numeric column) — skip the filter instead of
+            # building a comparison the database would reject at execution time.
+            log.debug("Failed to cast filter value %r for a %s column", value, python_type, exc_info=True)
             return None
 
         operators: dict[
@@ -128,7 +152,6 @@ class DatabaseDataSource(BaseDataSource):
             ">": lambda col, val: col > val,
             ">=": lambda col, val: col >= val,
             "!=": lambda col, val: col != val,
-            "like": lambda col, val: col.ilike(f"%{val}%") if isinstance(val, str) else None,
         }
 
         func = operators.get(operator)
