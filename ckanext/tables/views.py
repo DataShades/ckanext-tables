@@ -1,16 +1,20 @@
 import logging
 from typing import Any
 
-from flask import Blueprint, Response
+from flask import Blueprint, Response, jsonify
 from flask.views import MethodView
+from werkzeug.exceptions import HTTPException
 
 import ckan.plugins.toolkit as tk
 
+from ckanext.tables.data_sources import DataSourceError
 from ckanext.tables.generics import TableDispatchMixin
 from ckanext.tables.table import TableDefinition
 from ckanext.tables.utils import tables_init_temporary_preview_table
 
 log = logging.getLogger(__name__)
+
+_DATA_LOAD_ERROR = tk._("Failed to load table. The resource may be unavailable or in an unsupported format.")
 
 bp = Blueprint("tables", __name__)
 
@@ -61,7 +65,7 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
 
         return tables_init_temporary_preview_table(resource, resource_view)
 
-    def get(self, resource_id: str, resource_view_id: str) -> str | Response:
+    def get(self, resource_id: str, resource_view_id: str) -> str | Response | tuple[Response, int]:
         """Handle AJAX requests for resource view tables.
 
         Args:
@@ -71,11 +75,15 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
         Returns:
             JSON response with table data or export file
         """
-        table = self.get_table_for_resource(resource_id, resource_view_id)
+        try:
+            table = self.get_table_for_resource(resource_id, resource_view_id)
+        except DataSourceError:
+            log.exception("Failed to initialize table for resource %s", resource_id)
+            return jsonify({"error": _DATA_LOAD_ERROR}), 502
 
         return self._dispatch_get(table)
 
-    def post(self, resource_id: str, resource_view_id: str) -> Response:
+    def post(self, resource_id: str, resource_view_id: str) -> Response | tuple[Response, int]:
         """Handle POST requests for resource view tables (actions, refresh).
 
         Args:
@@ -85,7 +93,12 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
         Returns:
             JSON response with action result
         """
-        table = self.get_table_for_resource(resource_id, resource_view_id)
+        try:
+            table = self.get_table_for_resource(resource_id, resource_view_id)
+        except DataSourceError:
+            log.exception("Failed to initialize table for resource %s", resource_id)
+            return jsonify({"error": _DATA_LOAD_ERROR}), 502
+
         self._resource_id = resource_id
 
         return self._dispatch_post(table)
@@ -112,20 +125,42 @@ class ResourceViewDeferredHandler(MethodView):
     discover column names) happens *after* the browser has already rendered the
     page skeleton — avoiding a blank-page experience and production timeouts on
     the initial page request.
+
+    Every failure here — auth, a missing resource, an unreachable/unsupported
+    source — is rendered as a 200 error snippet with a retry affordance instead
+    of a real 403/404/500. HTMX does not swap a non-2xx response into the page
+    by default, so a raw error status would leave the shimmer skeleton (see
+    ``table_preview.html``) spinning forever with no message and nothing to
+    retry — the request "succeeded" from the page's point of view either way,
+    it just has different content to show.
     """
 
     def get(self, resource_id: str, resource_view_id: str) -> str:
-        resource, resource_view = _get_resource_and_view(resource_id, resource_view_id)
+        reload_url = tk.url_for(
+            "tables.resource_table_deferred", resource_id=resource_id, resource_view_id=resource_view_id
+        )
+
+        try:
+            resource, resource_view = _get_resource_and_view(resource_id, resource_view_id)
+        except HTTPException as err:
+            return self._render_error(reload_url, err.description or tk._("Unable to load this table."))
 
         try:
             table = tables_init_temporary_preview_table(resource, resource_view)
         except Exception:
             log.exception("Failed to initialize table for resource %s", resource_id)
-            tk.abort(500, tk._("Failed to load table. The resource may be unavailable or in an unsupported format."))
+            return self._render_error(reload_url, _DATA_LOAD_ERROR)
 
         return tk.render(
             "tables/render_table.html",
             extra_vars={"table": table},
+        )
+
+    @staticmethod
+    def _render_error(reload_url: str, message: str) -> str:
+        return tk.render(
+            "tables/snippets/table_error.html",
+            extra_vars={"message": message, "reload_url": reload_url},
         )
 
 

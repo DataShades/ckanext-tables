@@ -144,16 +144,24 @@ class RedisCacheBackend(CacheBackend):
         if not data:
             return None
 
-        value = json.loads(data)
+        try:
+            value = json.loads(data)
+        except json.JSONDecodeError:
+            log.warning("Corrupted Redis cache entry, deleting: %s", full_key, exc_info=True)
+            self.delete(key)
+            return None
+
         self._memo_set(full_key, version, value)
         return value
 
     def set(self, key: str, value: Any, ttl: int) -> None:
         if isinstance(value, pd.DataFrame):
-            value = value.to_dict(orient="records")
+            # NaN/NaT aren't valid JSON on their own — turn them into a literal
+            # None first, so the common case never needs allow_nan below to save it.
+            value = value.astype(object).where(value.notnull(), None).to_dict(orient="records")
 
         with connect_to_redis() as conn:
-            conn.setex(self._full_key(key), ttl, json.dumps(value, cls=_TablesJSONEncoder))
+            conn.setex(self._full_key(key), ttl, json.dumps(value, cls=_TablesJSONEncoder, allow_nan=False))
             conn.setex(self._version_key(key), ttl, uuid.uuid4().hex)
 
     def delete(self, key: str) -> None:
@@ -342,7 +350,8 @@ class _FileCacheBackend(CacheBackend, ABC):
         try:
             value = read_fn(path)
         except (OSError, ValueError):
-            log.debug("Failed to read %s cache %s", self._file_extension, path, exc_info=True)
+            log.warning("Corrupted %s cache entry, deleting: %s", self._file_extension, path, exc_info=True)
+            self.delete(key)
             return None
 
         self._memo_set(memo, lock, path, expires_at, value)

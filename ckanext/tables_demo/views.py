@@ -12,13 +12,7 @@ bp.add_url_rule("/products", view_func=GenericTableView.as_view("products", tabl
 
 
 def dashboard() -> str:
-    """Render both demo tables stacked on one page.
-
-    Exercises two independent tables sharing a page (ARCH-1): each keeps its own
-    filters/columns/counts/fullscreen state and posts actions to its own existing
-    solo route (via ``ajax_url``) rather than to this page's own URL, which only
-    ever renders — it has no AJAX/action dispatch of its own.
-    """
+    """Render both demo tables stacked on one page."""
     try:
         for table_cls in (PeopleTable, ProductsTable):
             table_cls.check_access({})

@@ -5,7 +5,7 @@ import pytest
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables.data_sources import ListDataSource
+from ckanext.tables.data_sources import DataSourceError, ListDataSource
 from ckanext.tables.exporters import CSVExporter, JSONExporter, XLSXExporter
 from ckanext.tables.generics import AjaxTableMixin, ExportTableMixin, GenericTableView
 from ckanext.tables.table import (
@@ -86,6 +86,18 @@ class TestAjaxTableMixin:
         assert "last_page" in data
         assert "total" in data
         assert data["total"] == 3
+
+    def test_ajax_data_returns_502_on_data_source_error(self, sample_table: TableDefinition):
+        mixin = self._make_mixin()
+        with (
+            mock.patch("ckanext.tables.generics.tables_build_params") as mock_params,
+            mock.patch.object(sample_table, "get_data", side_effect=DataSourceError("boom")),
+        ):
+            mock_params.return_value = QueryParams(page=1, size=10)
+            response, status = mixin._ajax_data(sample_table)
+
+        assert status == 502
+        assert "error" in json.loads(response.get_data(as_text=True))
 
     def test_apply_table_action_not_found(self, sample_table: TableDefinition):
         mixin = self._make_mixin()

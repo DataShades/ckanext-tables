@@ -20,9 +20,15 @@ COLUMN_ACTIONS_FIELD = "__table_actions"
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-@dataclass
+@dataclass(eq=False)
 class TableDefinition:
     """Table definition.
+
+    ``eq=False`` plus the custom ``__repr__`` below replace the dataclass
+    defaults, which would otherwise compare/repr ``data_source`` (arbitrary,
+    possibly stateful) and the action ``callback``s — often bound methods
+    whose default repr would recurse back into this same table instance
+    via ``__self__``.
 
     Attributes:
         name: Unique identifier for the table. Letters, digits, underscore and hyphen
@@ -93,6 +99,9 @@ class TableDefinition:
                     width=50,
                 ),
             ]
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(name={self.name!r}, id={self.id!r})"
 
     def get_tabulator_config(self) -> dict[str, Any]:
         columns = [col.to_dict() for col in self.columns]

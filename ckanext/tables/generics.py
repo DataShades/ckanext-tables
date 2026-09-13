@@ -12,6 +12,7 @@ import ckan.plugins.toolkit as tk
 
 from ckanext.tables import exporters
 from ckanext.tables.config import get_export_max_rows
+from ckanext.tables.data_sources import DataSourceError
 from ckanext.tables.table import TableDefinition
 from ckanext.tables.types import ActionHandlerResult
 from ckanext.tables.utils import tables_build_params
@@ -19,15 +20,22 @@ from ckanext.tables.utils import tables_build_params
 log = logging.getLogger(__name__)
 
 _GENERIC_ACTION_ERROR = tk._("An unexpected error occurred while performing this action.")
+_DATA_LOAD_ERROR = tk._("Failed to load table data. The resource may be unavailable or in an unsupported format.")
 
 
 class AjaxTableMixin:
     """Provides AJAX data loading and action handling."""
 
-    def _ajax_data(self, table: TableDefinition) -> Response:
+    def _ajax_data(self, table: TableDefinition) -> Response | tuple[Response, int]:
         params = tables_build_params()
-        data = table.get_data(params)
-        total = table.get_total_count(params)
+
+        try:
+            data = table.get_data(params)
+            total = table.get_total_count(params)
+        except DataSourceError:
+            log.exception("Failed to load data for table %s", table.name)
+            return jsonify({"error": _DATA_LOAD_ERROR}), 502
+
         return jsonify({"data": data, "last_page": (total + params.size - 1) // params.size, "total": total})
 
     def _apply_table_action(self, table: TableDefinition, action: str) -> Response:
@@ -134,7 +142,7 @@ class TableDispatchMixin(AjaxTableMixin, ExportTableMixin):
     single place that ordering lives so the two views can't drift apart.
     """
 
-    def _dispatch_get(self, table: TableDefinition) -> str | Response:
+    def _dispatch_get(self, table: TableDefinition) -> str | Response | tuple[Response, int]:
         if exporter_name := request.args.get("exporter"):
             return self._export(table, exporter_name)
 
@@ -192,7 +200,7 @@ class GenericTableView(TableDispatchMixin, MethodView):
         self.breadcrumb_label = breadcrumb_label if breadcrumb_label is not None else tk._("Table")
         self.page_title = page_title
 
-    def get(self) -> str | Response:
+    def get(self) -> str | Response | tuple[Response, int]:
         if not self.check_access():
             return tk.abort(403, tk._("You are not authorized to view this table."))
 

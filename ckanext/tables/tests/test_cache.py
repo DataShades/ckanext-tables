@@ -12,6 +12,8 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from ckan.lib.redis import connect_to_redis
+
 from ckanext.tables import cache
 from ckanext.tables.cache import (
     FeatherCacheBackend,
@@ -110,6 +112,23 @@ class TestFeatherCacheBackend:
             f.write(b"notfeather!!!")
         assert feather_backend.get("key") is None
 
+    def test_get_corrupted_file_is_deleted(self, feather_backend):
+        # Left in place, a corrupted file would fail this exact way on every
+        # future request until its TTL happens to expire — deleting it
+        # immediately means the next set() recreates a good file right away.
+        feather_backend.set("key", [{"v": 1}], ttl=60)
+        path = feather_backend.get_cache_path("key")
+        meta_path = feather_backend._meta_path("key")
+        with open(path, "wb") as f:
+            f.write(b"notfeather!!!")
+
+        with mock.patch.object(cache, "log") as mock_log:
+            feather_backend.get("key")
+
+        assert not os.path.exists(path)
+        assert not os.path.exists(meta_path)
+        mock_log.warning.assert_called_once()
+
     def test_set_swallows_arrow_type_error_on_mixed_type_column(self, feather_backend):
         # Feather is the default backend, so an uncaught ArrowTypeError here
         # would 500 every request for the affected resource.
@@ -175,6 +194,30 @@ class TestRedisCacheBackend:
         result = backend.get("decimal_key")
         assert abs(result - 9.99) < 0.001
 
+    def test_set_a_dataframe_with_nan_produces_valid_json(self):
+        backend = RedisCacheBackend()
+        df = pd.DataFrame({"a": [1.0, np.nan], "created": [pd.Timestamp("2024-01-01"), pd.NaT]})
+
+        backend.set("nan_df", df, ttl=60)
+
+        with connect_to_redis() as conn:
+            raw = conn.get(backend._full_key("nan_df"))
+        assert b"NaN" not in raw
+
+        result = backend.get("nan_df")
+        assert result[1]["a"] is None
+        assert result[1]["created"] is None
+
+    def test_set_a_dataframe_with_infinity_raises(self):
+        # +-inf is a real value, not a missing one, and there's no correct
+        # substitute for it — unlike NaN/NaT it's left to raise rather than
+        # silently writing non-standard JSON.
+        backend = RedisCacheBackend()
+        df = pd.DataFrame({"a": [1.0, float("inf")]})
+
+        with pytest.raises(ValueError, match="not JSON compliant"):
+            backend.set("inf_df", df, ttl=60)
+
     def test_get_memoises_after_first_fetch(self):
         # A repeat get() for an unchanged value should skip json.loads on the
         # (potentially large) payload, not just return the same result.
@@ -209,6 +252,24 @@ class TestRedisCacheBackend:
         # so it deliberately doesn't implement get_arrow() — PandasDataSource
         # detects this via hasattr() to fall back to the plain pandas path.
         assert not hasattr(RedisCacheBackend(), "get_arrow")
+
+    def test_get_corrupted_value_is_deleted(self):
+        backend = RedisCacheBackend()
+        full_key = backend._full_key("bad_key")
+        version_key = backend._version_key("bad_key")
+
+        with connect_to_redis() as conn:
+            conn.setex(version_key, 60, "v1")
+            conn.setex(full_key, 60, b"not json!!!")
+
+        with mock.patch.object(cache, "log") as mock_log:
+            result = backend.get("bad_key")
+
+        assert result is None
+        with connect_to_redis() as conn:
+            assert conn.get(full_key) is None
+            assert conn.get(version_key) is None
+        mock_log.warning.assert_called_once()
 
 
 class TestFileCacheBackendUnsafeDir:

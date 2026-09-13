@@ -1,10 +1,14 @@
+import contextlib
 import json
 import urllib.parse
+from unittest import mock
 
+import pandas as pd
 import pytest
 
 from ckanext.tables.data_sources import (
     CsvUrlDataSource,
+    DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
     OrcUrlDataSource,
@@ -196,7 +200,7 @@ class TestTablesGuessDataSource:
     def test_unsupported_format_raises(self):
         resource = {"format": "XML", "url": "http://example.com/data.xml", "id": "res-7"}
 
-        with pytest.raises(ValueError, match="Unsupported format"):
+        with pytest.raises(DataSourceError, match="Unsupported format"):
             tables_guess_data_source(resource)
 
     def test_file_url_overrides_resource_url_and_format(self):
@@ -217,7 +221,7 @@ class TestTablesGuessDataSource:
     def test_file_url_unsupported_extension_raises(self):
         resource = {"format": "CSV", "url": "http://example.com/data.csv", "id": "res-10"}
         resource_view = {"file_url": "http://example.com/data.xml"}
-        with pytest.raises(ValueError, match="Unsupported format"):
+        with pytest.raises(DataSourceError, match="Unsupported format"):
             tables_guess_data_source(resource, resource_view)
 
 
@@ -253,6 +257,13 @@ class TestTablesInitTemporaryPreviewTable:
         resource = self._resource("res-4")
         resource_view = {"id": "view-4", "file_url": "http://example.com/upload.xlsx"}
 
-        tbl = tables_init_temporary_preview_table(resource, resource_view)
+        with (
+            mock.patch(
+                "ckanext.tables.data_sources.fetch_remote_file",
+                return_value=contextlib.nullcontext("/tmp/mocked-source"),
+            ),
+            mock.patch("ckanext.tables.data_sources.pd.read_excel", return_value=pd.DataFrame({"a": [1]})),
+        ):
+            tbl = tables_init_temporary_preview_table(resource, resource_view)
 
         assert isinstance(tbl.data_source, XlsxUrlDataSource)

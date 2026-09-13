@@ -4,7 +4,8 @@ from typing import Any
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables import shared as t
+from ckanext.tables.table import COLUMN_ACTIONS_FIELD
+from ckanext.tables.types import FILTER_OPERATORS, FilterItem
 
 
 def tables_json_dumps(value: Any) -> str:
@@ -19,7 +20,7 @@ def tables_json_dumps(value: Any) -> str:
     return json.dumps(value)
 
 
-def tables_get_filters_from_request() -> list[t.FilterItem]:
+def tables_get_filters_from_request() -> list[FilterItem]:
     """Get the filters from the request arguments.
 
     Returns:
@@ -34,7 +35,7 @@ def tables_get_filters_from_request() -> list[t.FilterItem]:
     for field, op, value in zip(fields, operators, values):  # noqa: B905
         if not field or not op or not value:
             continue
-        filters.append(t.FilterItem(field=field, operator=op, value=value))
+        filters.append(FilterItem(field=field, operator=op, value=value))
 
     return filters
 
@@ -58,7 +59,7 @@ def tables_column_actions_field() -> str:
 
     Lets templates recognise/exclude it without duplicating the constant.
     """
-    return t.COLUMN_ACTIONS_FIELD
+    return COLUMN_ACTIONS_FIELD
 
 
 def tables_filter_operators() -> list[dict[str, str]]:
@@ -68,4 +69,4 @@ def tables_filter_operators() -> list[dict[str, str]]:
     here (render time) rather than baked into the ``FILTER_OPERATORS``
     constant at import time.
     """
-    return [{"value": value, "label": tk._(label)} for value, label in t.FILTER_OPERATORS]
+    return [{"value": value, "label": tk._(label)} for value, label in FILTER_OPERATORS]

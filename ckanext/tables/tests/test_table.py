@@ -116,6 +116,34 @@ class TestTableDefinitionBasic:
         t2 = TableDefinition(name="t", data_source=ListDataSource(simple_data))
         assert t1.id != t2.id
 
+    def test_equality_is_identity_not_field_comparison(self, simple_data):
+        t1 = TableDefinition(name="t", data_source=ListDataSource(simple_data))
+        t2 = TableDefinition(name="t", data_source=ListDataSource(simple_data))
+
+        assert t1 == t1
+        assert t1 != t2
+
+    def test_repr_is_concise(self, simple_data):
+        table = TableDefinition(name="t", data_source=ListDataSource(simple_data))
+
+        assert repr(table) == f"TableDefinition(name='t', id={table.id!r})"
+
+    def test_repr_is_concise_for_a_subclass_with_a_bound_method_callback(self, simple_data):
+        class SubclassedTable(TableDefinition):
+            def __init__(self):
+                super().__init__(
+                    name="sub",
+                    data_source=ListDataSource(simple_data),
+                    row_actions=[RowActionDefinition(action="go", label="Go", callback=self.handle)],
+                )
+
+            def handle(self, row):
+                return {"success": True}
+
+        table = SubclassedTable()
+
+        assert repr(table) == f"SubclassedTable(name='sub', id={table.id!r})"
+
     def test_default_placeholder(self, simple_table):
         assert simple_table.placeholder is not None
 

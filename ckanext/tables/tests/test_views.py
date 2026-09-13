@@ -4,7 +4,7 @@ import pytest
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables.data_sources import ListDataSource
+from ckanext.tables.data_sources import DataSourceError, ListDataSource
 from ckanext.tables.table import TableDefinition
 from ckanext.tables.views import ResourceViewHandler, _get_resource_and_view
 
@@ -141,3 +141,50 @@ class TestResourceViewHandlerRefresh:
 
         assert not mock_check.called
         assert response.get_json()["success"] is False
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestResourceViewHandlerDataSourceErrors:
+    """DataSourceError surfaces as a 502 JSON error."""
+
+    def _make_handler(self):
+        table = TableDefinition(name="t", data_source=ListDataSource([{"a": 1}]))
+        handler = ResourceViewHandler()
+        return handler, table
+
+    def test_get_returns_502_when_the_table_cannot_be_built(self, app):
+        handler, _table = self._make_handler()
+
+        with (
+            app.flask_app.test_request_context("/"),
+            mock.patch.object(handler, "get_table_for_resource", side_effect=DataSourceError("boom")),
+        ):
+            response = handler.get("res-1", "view-1")
+
+        assert response[1] == 502
+        assert "error" in response[0].get_json()
+
+    def test_post_returns_502_when_the_table_cannot_be_built(self, app):
+        handler, _table = self._make_handler()
+
+        with (
+            app.flask_app.test_request_context("/", method="POST", data={"table_action": "whatever"}),
+            mock.patch.object(handler, "get_table_for_resource", side_effect=DataSourceError("boom")),
+        ):
+            response = handler.post("res-1", "view-1")
+
+        assert response[1] == 502
+        assert "error" in response[0].get_json()
+
+    def test_ajax_get_returns_502_when_fetching_data_fails(self, app):
+        handler, table = self._make_handler()
+
+        with (
+            app.flask_app.test_request_context("/", headers={"X-Requested-With": "XMLHttpRequest"}),
+            mock.patch.object(handler, "get_table_for_resource", return_value=table),
+            mock.patch.object(table, "get_data", side_effect=DataSourceError("boom")),
+        ):
+            response = handler.get("res-1", "view-1")
+
+        assert response[1] == 502
+        assert "error" in response[0].get_json()

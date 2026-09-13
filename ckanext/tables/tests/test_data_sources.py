@@ -23,6 +23,7 @@ from ckanext.tables.cache import (
 from ckanext.tables.data_sources import (
     CsvUrlDataSource,
     DatabaseDataSource,
+    DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
     ListDataSource,
@@ -656,7 +657,7 @@ class _ArrowStubDataSource(CachedDataSourceMixin, PandasDataSource):
     cache backend at all, so it always exercises the plain pandas path), this
     goes through the real ``_ensure_loaded()``/``get_arrow()`` machinery, so
     ``filter``/``sort``/``paginate``/``count``/``all`` run through DuckDB
-    (PERF-1) exactly as they would for a cached CSV/XLSX/etc. resource.
+    exactly as they would for a cached CSV/XLSX/etc. resource.
     """
 
     def __init__(self, df: pd.DataFrame, cache_backend, key: str = "arrow-stub"):
@@ -690,7 +691,7 @@ def arrow_ds(arrow_cache_backend):
 
 
 class TestPandasDataSourceArrowPath:
-    """DuckDB-pushdown path (PERF-1) must behave identically to the pandas path above.
+    """DuckDB-pushdown path must behave identically to the pandas path above.
 
     Every case here mirrors a case in ``TestPandasDataSource`` — same inputs,
     same expected outputs — the only difference is the cache backend, which
@@ -958,37 +959,37 @@ class TestUrlDataSourceColumnCaching:
 
 @pytest.mark.usefixtures("mocked_fetch_remote_file")
 class TestUrlDataSourceErrorPaths:
-    """All URL-based sources should return an empty DataFrame on errors."""
+    """A fetch/parse failure raises DataSourceError, not a silent empty table."""
 
     @mock.patch("ckanext.tables.data_sources.pd.read_excel", side_effect=OSError("boom"))
-    def test_xlsx_error_returns_empty(self, _):
+    def test_xlsx_error_raises(self, _):
         ds = XlsxUrlDataSource(url="http://example.com/file.xlsx")
-        df = ds.fetch_dataframe()
-        assert df.empty
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
 
     @mock.patch("ckanext.tables.data_sources.pd.read_orc", side_effect=OSError("boom"))
-    def test_orc_error_returns_empty(self, _):
+    def test_orc_error_raises(self, _):
         ds = OrcUrlDataSource(url="http://example.com/file.orc")
-        df = ds.fetch_dataframe()
-        assert df.empty
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
 
     @mock.patch("ckanext.tables.data_sources.pd.read_parquet", side_effect=OSError("boom"))
-    def test_parquet_error_returns_empty(self, _):
+    def test_parquet_error_raises(self, _):
         ds = ParquetUrlDataSource(url="http://example.com/file.parquet")
-        df = ds.fetch_dataframe()
-        assert df.empty
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
 
     @mock.patch("ckanext.tables.data_sources.pd.read_feather", side_effect=OSError("boom"))
-    def test_feather_error_returns_empty(self, _):
+    def test_feather_error_raises(self, _):
         ds = FeatherUrlDataSource(url="http://example.com/file.feather")
-        df = ds.fetch_dataframe()
-        assert df.empty
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
 
     @mock.patch("ckanext.tables.data_sources.pd.read_csv", side_effect=OSError("boom"))
-    def test_csv_error_returns_empty(self, _):
+    def test_csv_error_raises(self, _):
         ds = CsvUrlDataSource(url="http://example.com/file.csv")
-        df = ds.fetch_dataframe()
-        assert df.empty
+        with pytest.raises(DataSourceError):
+            ds.fetch_dataframe()
 
 
 class TestDatabaseDataSource:

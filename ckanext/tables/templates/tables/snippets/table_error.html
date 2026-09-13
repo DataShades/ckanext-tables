@@ -1,0 +1,17 @@
+<div class="table-error alert alert-danger d-flex align-items-center justify-content-between gap-3 my-3">
+    <span>
+        <i class="fa fa-triangle-exclamation me-1" aria-hidden="true"></i>
+        {{ message }}
+    </span>
+
+    <button
+        type="button"
+        class="btn btn-sm btn-outline-danger flex-shrink-0"
+        hx-get="{{ reload_url }}"
+        hx-target="closest div[data-module='tables-deferred-loader']"
+        hx-swap="innerHTML"
+    >
+        <i class="fa fa-arrows-rotate me-1" aria-hidden="true"></i>
+        {{ _("Retry") }}
+    </button>
+</div>

@@ -11,6 +11,7 @@ from ckanext.tables.config import get_max_page_size
 from ckanext.tables.data_sources import (
     BaseDataSource,
     CsvUrlDataSource,
+    DataSourceError,
     DataStoreDataSource,
     FeatherUrlDataSource,
     OrcUrlDataSource,
@@ -167,7 +168,7 @@ def tables_guess_data_source(
     data_source_class = data_sources.get(fmt)
 
     if not data_source_class:
-        raise ValueError(f"Unsupported format: {fmt}")
+        raise DataSourceError(f"Unsupported format: {fmt}")
 
     if file_url:
         return data_source_class(url=url, cache_backend=cache_backend)

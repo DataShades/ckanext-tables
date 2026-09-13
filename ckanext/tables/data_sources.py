@@ -65,6 +65,10 @@ def _sniff_csv_delimiter(path: str) -> str | None:
         return None
 
 
+class DataSourceError(Exception):
+    """Raised when a data source cannot fetch or parse its data."""
+
+
 class BaseDataSource:
     def filter(self, filters: list[FilterItem]) -> Self: ...
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self: ...
@@ -358,7 +362,7 @@ class PandasDataSource(BaseDataSource):
                     self._df = cached if isinstance(cached, pd.DataFrame) else pd.DataFrame(cached)
                     return True
             except (ValueError, TypeError, OSError):
-                log.debug("Failed to restore DataFrame from cache", exc_info=True)
+                log.warning("Failed to restore DataFrame from cache", exc_info=True)
 
         return False
 
@@ -379,7 +383,8 @@ class PandasDataSource(BaseDataSource):
             try:
                 arrow = _get_arrow_from_cache(self.cache_backend, self.get_cache_key())
             except (ValueError, TypeError, OSError):
-                log.debug("Failed to restore Arrow table from cache", exc_info=True)
+                # See the matching comment in _load_from_cache above.
+                log.warning("Failed to restore Arrow table from cache", exc_info=True)
                 arrow = None
 
             if arrow is not None:
@@ -759,8 +764,55 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         return columns
 
     def _fetch_columns(self) -> list[str]:
-        """Subclass hook: compute the column names, without consulting the cache above."""
+        """Compute the column names, without consulting the cache above.
+
+        Shared by every format: try a schema-only read first (via
+        ``_schema_reader``, cheap — nothing is fully loaded), and only fall
+        back to a full ``_ensure_loaded()`` if that fails or the DataFrame is
+        already cached in this process (in which case reading it back out is
+        cheaper than a second, redundant schema read).
+        """
+        if self._load_from_cache():
+            return list(self._df.columns) if self._df is not None else []
+
+        try:
+            with self._open_source() as path:
+                return self._schema_reader(path)
+        except self._schema_read_errors:
+            log.exception("Failed fast %s schema read, falling back to full load", self._format_name)
+            self._ensure_loaded()
+            return list(self._df.columns) if self._df is not None else []
+
+    # Every format below only needs to fill these four in, instead of
+    # repeating fetch_dataframe/_fetch_columns's shared try/except/fallback
+    # structure five times with just the reader call swapped out.
+    _format_name: ClassVar[str]
+    _schema_read_errors: ClassVar[tuple[type[Exception], ...]] = (OSError, ValueError)
+
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        """Subclass hook: read *path* (a local file) into a DataFrame."""
         raise NotImplementedError
+
+    def _schema_reader(self, path: str) -> list[str]:
+        """Subclass hook: read just *path*'s column names, without loading the full file."""
+        raise NotImplementedError
+
+    def fetch_dataframe(self) -> pd.DataFrame:
+        """Read the source file, or raise ``DataSourceError`` if it can't be read.
+
+        A network error, an auth failure from the remote host, or a file that
+        doesn't parse as this format are all "couldn't load", not "loaded
+        zero rows" — conflating the two used to mean a genuinely
+        broken resource silently rendered as an empty table, indistinguishable
+        from one that's just empty. Callers (the resource-view handlers) catch
+        this specifically and show a real error state instead.
+        """
+        try:
+            with self._open_source() as path:
+                return self._reader(path)
+        except Exception as exc:
+            log.exception("Error fetching %s from %s", self._format_name, self.get_source_path())
+            raise DataSourceError(f"Could not read {self._format_name} data: {exc}") from exc
 
     def get_source_path(self) -> str:
         if self._source_path:
@@ -879,6 +931,9 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
 
 
 class CsvUrlDataSource(BaseResourceDataSource):
+    _format_name = "CSV"
+    _schema_read_errors = (OSError, ValueError, pd.errors.ParserError)
+
     @staticmethod
     def _read_csv(path: str, **kwargs: Any) -> pd.DataFrame:
         """Read a local CSV file, using the fast C engine when possible.
@@ -893,123 +948,54 @@ class CsvUrlDataSource(BaseResourceDataSource):
 
         return pd.read_csv(path, sep=None, engine="python", **kwargs)
 
-    def fetch_dataframe(self) -> pd.DataFrame:
-        try:
-            with self._open_source() as path:
-                return self._read_csv(path)
-        except Exception:
-            log.exception("Error fetching CSV from %s", self.get_source_path())
-            return pd.DataFrame()
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return self._read_csv(path, **kwargs)
 
-    def _fetch_columns(self) -> list[str]:
-        if self._load_from_cache():
-            return list(self._df.columns) if self._df is not None else []
-
-        try:
-            with self._open_source() as path:
-                df_preview = self._read_csv(path, nrows=0)
-        except (OSError, ValueError, pd.errors.ParserError):
-            log.exception("Failed fast CSV schema read, falling back to full load")
-            self._ensure_loaded()
-            return list(self._df.columns) if self._df is not None else []
-
-        return list(df_preview.columns)
+    def _schema_reader(self, path: str) -> list[str]:
+        return list(self._read_csv(path, nrows=0).columns)
 
 
 class XlsxUrlDataSource(BaseResourceDataSource):
-    def fetch_dataframe(self) -> pd.DataFrame:
-        try:
-            with self._open_source() as path:
-                return pd.read_excel(path)
-        except Exception:
-            log.exception("Error fetching XLSX from %s", self.get_source_path())
-            return pd.DataFrame()
+    _format_name = "XLSX"
 
-    def _fetch_columns(self) -> list[str]:
-        if self._load_from_cache():
-            return list(self._df.columns) if self._df is not None else []
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return pd.read_excel(path, **kwargs)
 
-        try:
-            with self._open_source() as path:
-                df_preview = pd.read_excel(path, nrows=0)
-        except (OSError, ValueError):
-            log.exception("Failed fast XLSX schema read, falling back to full load")
-            self._ensure_loaded()
-            return list(self._df.columns) if self._df is not None else []
-
-        return list(df_preview.columns)
+    def _schema_reader(self, path: str) -> list[str]:
+        return list(pd.read_excel(path, nrows=0).columns)
 
 
 class OrcUrlDataSource(BaseResourceDataSource):
-    def fetch_dataframe(self) -> pd.DataFrame:
-        try:
-            with self._open_source() as path:
-                return pd.read_orc(path)
-        except Exception:
-            log.exception("Error fetching ORC from %s", self.get_source_path())
-            return pd.DataFrame()
+    _format_name = "ORC"
+    _schema_read_errors = (OSError, ValueError, pa.ArrowInvalid)
 
-    def _fetch_columns(self) -> list[str]:
-        if self._load_from_cache():
-            return list(self._df.columns) if self._df is not None else []
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return pd.read_orc(path, **kwargs)
 
-        try:
-            with self._open_source() as path:
-                schema_names = orc.ORCFile(path).schema.names
-        except (OSError, ValueError, pa.ArrowInvalid):
-            log.exception("Failed fast ORC schema read, falling back to full load")
-            self._ensure_loaded()
-            return list(self._df.columns) if self._df is not None else []
-
-        return schema_names
+    def _schema_reader(self, path: str) -> list[str]:
+        return orc.ORCFile(path).schema.names
 
 
 class ParquetUrlDataSource(BaseResourceDataSource):
-    def fetch_dataframe(self) -> pd.DataFrame:
-        try:
-            with self._open_source() as path:
-                return pd.read_parquet(path)
-        except Exception:
-            log.exception("Error fetching Parquet from %s", self.get_source_path())
-            return pd.DataFrame()
+    _format_name = "Parquet"
+    _schema_read_errors = (OSError, ValueError, pa.ArrowInvalid)
 
-    def _fetch_columns(self) -> list[str]:
-        if self._load_from_cache():
-            return list(self._df.columns) if self._df is not None else []
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return pd.read_parquet(path, **kwargs)
 
-        try:
-            with self._open_source() as path:
-                schema_names = pq.read_schema(path).names
-        except (OSError, ValueError, pa.ArrowInvalid):
-            log.exception("Failed fast Parquet schema read, falling back to full load")
-            self._ensure_loaded()
-            return list(self._df.columns) if self._df is not None else []
-
-        return schema_names
+    def _schema_reader(self, path: str) -> list[str]:
+        return pq.read_schema(path).names
 
 
 class FeatherUrlDataSource(BaseResourceDataSource):
-    def fetch_dataframe(self) -> pd.DataFrame:
-        try:
-            with self._open_source() as path:
-                return pd.read_feather(path)
-        except Exception:
-            log.exception("Error fetching Feather from %s", self.get_source_path())
-            return pd.DataFrame()
+    _format_name = "Feather"
+    _schema_read_errors = (OSError, ValueError, pa.ArrowInvalid)
 
-    def _fetch_columns(self) -> list[str]:
-        if self._load_from_cache():
-            return list(self._df.columns) if self._df is not None else []
+    def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        return pd.read_feather(path, **kwargs)
 
-        try:
-            with self._open_source() as path:
-                schema_names = feather.read_table(path, columns=[]).schema.names
-        except (OSError, ValueError, pa.ArrowInvalid):
-            log.exception("Failed fast Feather schema read, falling back to full load")
-            self._ensure_loaded()
-            return list(self._df.columns) if self._df is not None else []
-
-        return schema_names
+    def _schema_reader(self, path: str) -> list[str]:
+        return feather.read_table(path, columns=[]).schema.names
 
 
 class DataStoreDataSource(BaseDataSource):
