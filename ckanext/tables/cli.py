@@ -16,7 +16,7 @@ def tables():
 def clean_cache():
     """Delete expired cache entries left on disk by the configured cache backend.
 
-    Only meaningful for the file-based backends (pickle/parquet/feather): an
+    Only meaningful for the file-based backends (parquet/feather): an
     entry whose TTL has passed but that is never read again would otherwise
     keep its file on disk indefinitely. The Redis backend already expires and
     removes its own keys, so this is a no-op there. Safe to run periodically

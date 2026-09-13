@@ -19,7 +19,6 @@ from ckanext.tables.cache import (
     CachedDataSourceMixin,
     FeatherCacheBackend,
     ParquetCacheBackend,
-    PickleCacheBackend,
     RedisCacheBackend,
 )
 from ckanext.tables.data_sources import (
@@ -72,10 +71,10 @@ class TestCSVResourceDataSource:
         assert data[0]["age"] == "30"
 
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
-    def test_caching_pickle(self, mock_read_csv):
+    def test_caching_feather(self, mock_read_csv, tmp_path):
         url = "http://example.com/cached_data.csv"
-        cache_dir = "/tmp/ckan-tables-cache"
-        ds = CsvUrlDataSource(url, cache_backend=PickleCacheBackend(cache_dir=cache_dir))
+        cache_dir = str(tmp_path)
+        ds = CsvUrlDataSource(url, cache_backend=FeatherCacheBackend(cache_dir=cache_dir))
 
         mock_read_csv.return_value = pd.DataFrame([{"id": "1", "name": "Alice", "age": "30"}])
 
@@ -83,7 +82,7 @@ class TestCSVResourceDataSource:
         ds.filter([]).all()
 
         backend = ds.cache_backend
-        assert isinstance(backend, PickleCacheBackend)
+        assert isinstance(backend, FeatherCacheBackend)
 
         cache_file_path = backend.get_cache_path(ds.get_cache_key())
         assert os.path.exists(cache_file_path)
@@ -94,7 +93,7 @@ class TestCSVResourceDataSource:
             ds.cache_ttl,
         )
 
-        ds2 = CsvUrlDataSource(url, cache_backend=PickleCacheBackend(cache_dir=cache_dir))
+        ds2 = CsvUrlDataSource(url, cache_backend=FeatherCacheBackend(cache_dir=cache_dir))
         data = ds2.filter([]).all()
 
         assert len(data) == 2
@@ -151,7 +150,7 @@ class TestCSVResourceDataSource:
 
         ds = CsvUrlDataSource(
             "http://example.com/invalidate.csv",
-            cache_backend=PickleCacheBackend(cache_dir=str(tmp_path)),
+            cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path)),
         )
         ds.filter([]).all()  # populates the cache
         assert ds.cache_backend.get(ds.get_cache_key()) is not None
@@ -811,13 +810,16 @@ class TestPandasDataSourceArrowPath:
 
         arrow_source = _ArrowStubDataSource(df, arrow_cache_backend, key="parity")
 
-        pickle_backend = PickleCacheBackend(cache_dir=str(tmp_path / "pickle"))
+        # Any backend works here — _use_arrow_path() is forced False below regardless
+        # of what it stores — but Feather keeps this test independent of the parquet/
+        # feather split arrow_cache_backend is parametrised over above.
+        pandas_backend = FeatherCacheBackend(cache_dir=str(tmp_path / "pandas-path"))
 
         class PandasPathSource(_ArrowStubDataSource):
             def _use_arrow_path(self) -> bool:
                 return False
 
-        pandas_source = PandasPathSource(df, pickle_backend, key="parity-pandas")
+        pandas_source = PandasPathSource(df, pandas_backend, key="parity-pandas")
 
         filters = [FilterItem("category", "=", "alpha"), FilterItem("score", ">", "200")]
 
@@ -826,7 +828,7 @@ class TestPandasDataSourceArrowPath:
         assert arrow_rows == pandas_rows
 
         arrow_count = _ArrowStubDataSource(df, arrow_cache_backend, key="parity").filter(filters).count()
-        pandas_count = PandasPathSource(df, pickle_backend, key="parity-pandas").filter(filters).count()
+        pandas_count = PandasPathSource(df, pandas_backend, key="parity-pandas").filter(filters).count()
         assert arrow_count == pandas_count
 
 

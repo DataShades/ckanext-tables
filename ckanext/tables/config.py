@@ -65,11 +65,11 @@ def get_cache_dir(cache_dir: str | None = None) -> str | None:
 
     That refusal matters: the file-based cache backends derive a cache file's
     name from a hash of its key (a format documented publicly, e.g.
-    ``resource-<id>``) inside this directory, and ``PickleCacheBackend`` calls
-    ``pickle.load`` on whatever it finds there. A shared or attacker-owned
-    directory would let another local user plant a file at that predictable
-    path and get arbitrary code executed as the CKAN process the next time
-    that resource is previewed.
+    ``resource-<id>``) inside this directory, and read back whatever they
+    find there as trusted cache data. A shared or attacker-owned directory
+    would let another local user plant a file at that predictable path and
+    have it served back as this resource's data the next time it is
+    previewed.
     """
     if not cache_dir:
         cache_dir = tk.config.get(CONF_CACHE_DIR)

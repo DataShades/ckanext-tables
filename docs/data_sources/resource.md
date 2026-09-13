@@ -102,7 +102,7 @@ source = FeatherUrlDataSource(url="https://example.com/data.feather")
 All file-based sources inherit from `BaseResourceDataSource`, which caches the fetched DataFrame to avoid re-downloading on every request. The cache backend and TTL are controlled globally via configuration (see [Configuration](../config.md)):
 
 ```ini
-ckanext.tables.cache.backend = feather  # or "parquet", "pickle", "redis"
+ckanext.tables.cache.backend = feather  # or "parquet", "redis"
 ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
 ```
 

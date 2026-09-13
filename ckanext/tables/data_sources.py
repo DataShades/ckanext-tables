@@ -268,9 +268,9 @@ def _get_arrow_from_cache(backend: CacheBackend, key: str) -> pa.Table | None:  
     """Return *key* from *backend* as a pyarrow Table, if the backend supports it.
 
     Only ``ParquetCacheBackend``/``FeatherCacheBackend`` implement ``get_arrow``
-    (see ``cache.py``) — every other backend (Redis, Pickle) has no such
-    method, so this returns ``None`` for them via ``getattr``'s default
-    rather than requiring ``CacheBackend`` itself to declare it.
+    (see ``cache.py``) — every other backend (Redis) has no such method, so
+    this returns ``None`` for them via ``getattr``'s default rather than
+    requiring ``CacheBackend`` itself to declare it.
     """
     get_arrow = getattr(backend, "get_arrow", None)
     return get_arrow(key) if get_arrow is not None else None
@@ -309,9 +309,9 @@ class PandasDataSource(BaseDataSource):
     file backends — Parquet, Feather), filtering/sorting/pagination/counting
     are pushed down to DuckDB running against the cached ``pyarrow.Table``
     instead of pandas scanning the full in-memory frame on every call — see
-    the ``*_arrow`` methods below. Every other cache backend (Redis, Pickle,
-    or none) keeps using the plain pandas implementation (the ``*_pandas``
-    methods), unchanged.
+    the ``*_arrow`` methods below. Every other cache backend (Redis, or none)
+    keeps using the plain pandas implementation (the ``*_pandas`` methods),
+    unchanged.
     """
 
     def __init__(self):

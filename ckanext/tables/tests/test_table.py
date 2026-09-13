@@ -316,10 +316,10 @@ class TestTableDefinitionCacheIntegration:
         # complete no-op that left the Refresh button doing nothing.
         import contextlib
 
-        from ckanext.tables.cache import PickleCacheBackend
+        from ckanext.tables.cache import FeatherCacheBackend
         from ckanext.tables.data_sources import CsvUrlDataSource
 
-        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        backend = FeatherCacheBackend(cache_dir=str(tmp_path))
 
         with (
             mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read,
@@ -346,10 +346,10 @@ class TestTableDefinitionCacheIntegration:
     def test_refresh_data_invalidates_cached_counts(self, simple_data, tmp_path):
         # A filtered count used to survive refresh_data() indefinitely — only the
         # unfiltered ":count" key was ever cleared.
-        from ckanext.tables.cache import PickleCacheBackend
+        from ckanext.tables.cache import FeatherCacheBackend
         from ckanext.tables.data_sources import CsvUrlDataSource
 
-        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        backend = FeatherCacheBackend(cache_dir=str(tmp_path))
 
         with mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read:
             import pandas as pd

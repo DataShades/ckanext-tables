@@ -8,16 +8,12 @@ groups:
       - key: ckanext.tables.cache.backend
         default: "feather"
         allowed_values:
-          - pickle
           - redis
           - parquet
           - feather
         description: |
           The storage backend used to cache downloaded table data.
 
-          - **`pickle`** — data is cached as pickle files on disk. Simple and requires no additional
-            infrastructure. The cache directory is controlled by
-            `ckanext.tables.cache.cache_dir`.
           - **`redis`** — data is stored in Redis using CKAN's built-in Redis connection.
             Suitable for multi-worker deployments where shared cache is needed.
           - **`parquet`** — data is cached as Apache Parquet files on disk. Scales well for
@@ -43,7 +39,7 @@ groups:
           table caching is disabled (a warning is logged) rather than falling back to a
           shared, predictable location such as the system temp directory — a shared or
           attacker-owned cache directory would let another local user plant a file that
-          gets read back as trusted cache data (notably by the `pickle` backend).
+          gets read back as trusted cache data.
 
         example: "/var/cache/ckanext-tables"
 

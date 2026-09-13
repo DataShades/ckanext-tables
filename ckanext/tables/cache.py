@@ -7,7 +7,6 @@ import hashlib
 import json
 import logging
 import os
-import pickle
 import tempfile
 import threading
 import time
@@ -208,7 +207,7 @@ class _FileCacheBackend(CacheBackend, ABC):
     # _memo so a DataFrame read via get() and a pyarrow.Table read via
     # get_arrow() of the same path can never be confused for one another —
     # every backend carries this (even ones that never populate it, e.g.
-    # PickleCacheBackend) so the shared eviction code in delete()/
+    # RedisCacheBackend) so the shared eviction code in delete()/
     # clean_expired() doesn't need to know which backends support it.
     _arrow_memo: OrderedDict[str, tuple[float, Any]] = OrderedDict()
     _arrow_memo_lock = threading.Lock()
@@ -479,23 +478,6 @@ class _DataFrameFileCacheBackend(_FileCacheBackend, ABC):
         self._write_df(pd.DataFrame(value), path)
 
 
-class PickleCacheBackend(_FileCacheBackend):
-    """Cache backend that stores data as pickle files on disk."""
-
-    _file_extension = ".pkl"
-
-    def _read_data(self, path: str) -> Any:
-        try:
-            with open(path, "rb") as f:
-                return pickle.load(f)  # noqa: S301
-        except pickle.PickleError as err:
-            raise ValueError(str(err)) from err
-
-    def _write_data(self, value: Any, path: str) -> None:
-        with open(path, "wb") as f:
-            pickle.dump(value, f)
-
-
 class _ArrowCacheBackend(_FileCacheBackend, ABC):
     """Mixin for file cache backends whose on-disk format is Arrow-native.
 
@@ -505,8 +487,8 @@ class _ArrowCacheBackend(_FileCacheBackend, ABC):
     a DuckDB query over the data (see ``PandasDataSource`` in
     ``data_sources.py``) never has to materialise a full pandas DataFrame for
     it. Only ``ParquetCacheBackend`` and ``FeatherCacheBackend`` implement
-    this; ``PickleCacheBackend`` and ``RedisCacheBackend`` don't, since
-    neither stores an Arrow-native format — callers detect support with
+    this; ``RedisCacheBackend`` doesn't, since it stores JSON records rather
+    than an Arrow-native format — callers detect support with
     ``hasattr(backend, "get_arrow")``.
     """
 
@@ -555,8 +537,6 @@ def get_cache_backend() -> CacheBackend:
 
     Supported values:
 
-    * ``"pickle"`` — disk-based pickle cache, path controlled by
-      ``ckanext.tables.cache.cache_dir``.
     * ``"redis"`` — CKAN's Redis connection (requires Redis to be configured).
     * ``"parquet"`` — disk-based parquet cache, path controlled by
       ``ckanext.tables.cache.cache_dir``.
@@ -572,9 +552,6 @@ def get_cache_backend() -> CacheBackend:
 
     if backend == "parquet":
         return ParquetCacheBackend()
-
-    if backend == "pickle":
-        return PickleCacheBackend()
 
     if backend != DEFAULT_CACHE_BACKEND:
         log.warning(
@@ -597,14 +574,6 @@ class CachedDataSourceMixin:
     Example — use Redis (default)::
 
         class BaseResourceDataSource(CachedDataSourceMixin, DatabaseDataSource):
-            def get_cache_key(self) -> str:
-                ...
-
-    Example — use pickle files::
-
-        class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
-            cache_backend = PickleCacheBackend("/var/cache/tables")
-
             def get_cache_key(self) -> str:
                 ...
 

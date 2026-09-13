@@ -26,7 +26,6 @@ For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is 
 | ------------ | ------- |
 | `feather` *(default)* | Disk-based feather (Arrow IPC) files |
 | `parquet` | Disk-based parquet files |
-| `pickle` | Disk-based pickle files |
 | `redis` | CKAN's Redis connection |
 
 ```ini

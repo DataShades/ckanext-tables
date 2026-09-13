@@ -4,7 +4,7 @@ import pytest
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables.cache import PickleCacheBackend
+from ckanext.tables.cache import FeatherCacheBackend
 from ckanext.tables.plugin import TablesPlugin
 
 
@@ -99,7 +99,7 @@ class TestResourceControllerHooks:
     """before_resource_update/delete must invalidate both the DataFrame and its counts."""
 
     def test_before_resource_update_invalidates_on_new_upload(self, tmp_path):
-        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        backend = FeatherCacheBackend(cache_dir=str(tmp_path))
         key = "resource-res-1"
         backend.set(key, [{"a": 1}], ttl=60)
 
@@ -115,7 +115,7 @@ class TestResourceControllerHooks:
         assert backend.get(f"{key}:gen") is not None
 
     def test_before_resource_update_skips_upload_without_a_new_file(self, tmp_path):
-        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        backend = FeatherCacheBackend(cache_dir=str(tmp_path))
         key = "resource-res-1"
         backend.set(key, [{"a": 1}], ttl=60)
 
@@ -124,10 +124,10 @@ class TestResourceControllerHooks:
                 {}, current={"id": "res-1"}, resource={"id": "res-1", "url_type": "upload", "upload": None}
             )
 
-        assert backend.get(key) == [{"a": 1}]
+        assert backend.get(key).to_dict(orient="records") == [{"a": 1}]
 
     def test_before_resource_delete_invalidates(self, tmp_path):
-        backend = PickleCacheBackend(cache_dir=str(tmp_path))
+        backend = FeatherCacheBackend(cache_dir=str(tmp_path))
         key = "resource-res-1"
         backend.set(key, [{"a": 1}], ttl=60)
 

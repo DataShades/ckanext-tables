@@ -16,7 +16,6 @@ from ckanext.tables import cache
 from ckanext.tables.cache import (
     FeatherCacheBackend,
     ParquetCacheBackend,
-    PickleCacheBackend,
     RedisCacheBackend,
     _TablesJSONEncoder,
     get_cache_backend,
@@ -63,11 +62,6 @@ class TestTablesJSONEncoder:
 
 
 @pytest.fixture
-def pickle_backend(tmp_path):
-    return PickleCacheBackend(cache_dir=str(tmp_path))
-
-
-@pytest.fixture
 def parquet_backend(tmp_path):
     return ParquetCacheBackend(cache_dir=str(tmp_path))
 
@@ -75,52 +69,6 @@ def parquet_backend(tmp_path):
 @pytest.fixture
 def feather_backend(tmp_path):
     return FeatherCacheBackend(cache_dir=str(tmp_path))
-
-
-class TestPickleCacheBackend:
-    def test_set_and_get(self, pickle_backend):
-        pickle_backend.set("key1", [1, 2, 3], ttl=60)
-        result = pickle_backend.get("key1")
-        assert result == [1, 2, 3]
-
-    def test_miss_returns_none(self, pickle_backend):
-        assert pickle_backend.get("nonexistent") is None
-
-    def test_expired_returns_none(self, pickle_backend):
-        pickle_backend.set("expiring", {"a": 1}, ttl=1)
-        meta_path = pickle_backend._meta_path("expiring")
-        _expire(meta_path)
-        assert pickle_backend.get("expiring") is None
-
-    def test_delete(self, pickle_backend):
-        pickle_backend.set("to_delete", "value", ttl=60)
-        pickle_backend.delete("to_delete")
-        assert pickle_backend.get("to_delete") is None
-
-    def test_delete_nonexistent_is_noop(self, pickle_backend):
-        pickle_backend.delete("does_not_exist")
-
-    def test_get_cache_path(self, pickle_backend):
-        path = pickle_backend.get_cache_path("mykey")
-        assert path.endswith(".pkl")
-        assert pickle_backend.cache_dir in path
-
-    def test_set_creates_cache_dir(self, tmp_path):
-        new_dir = str(tmp_path / "subdir" / "nested")
-        backend = PickleCacheBackend(cache_dir=new_dir)
-        backend.set("k", "v", ttl=60)
-        assert os.path.isdir(new_dir)
-
-    def test_get_corrupted_file_returns_none(self, pickle_backend):
-        pickle_backend.set("key", [{"v": 1}], ttl=60)
-        path = pickle_backend.get_cache_path("key")
-        with open(path, "wb") as f:
-            f.write(b"notpickle!!!")
-        assert pickle_backend.get("key") is None
-
-    def test_scalar_value(self, pickle_backend):
-        pickle_backend.set("count", 42, ttl=60)
-        assert pickle_backend.get("count") == 42
 
 
 class TestParquetCacheBackend:
@@ -291,14 +239,6 @@ class TestFeatherCacheBackend:
         assert feather_backend.get_arrow("expiring") is None
 
 
-class TestPickleCacheBackendHasNoArrowPath:
-    def test_no_get_arrow(self, pickle_backend):
-        # PickleCacheBackend doesn't store an Arrow-native format, so it
-        # deliberately doesn't implement get_arrow() — PandasDataSource
-        # detects this via hasattr() to fall back to the plain pandas path.
-        assert not hasattr(pickle_backend, "get_arrow")
-
-
 @pytest.mark.usefixtures("clean_redis")
 class TestRedisCacheBackend:
     def test_set_and_get(self):
@@ -366,21 +306,6 @@ class TestRedisCacheBackend:
 
 class TestFileCacheBackendUnsafeDir:
     """A cache directory another local user could write to must disable caching, not use it."""
-
-    def test_pickle_backend_disables_caching_for_unsafe_dir(self, tmp_path):
-        unsafe_dir = tmp_path / "shared"
-        unsafe_dir.mkdir()
-        unsafe_dir.chmod(0o777)
-
-        backend = PickleCacheBackend(cache_dir=str(unsafe_dir))
-        assert backend.cache_dir is None
-
-        # get/set/delete become no-ops rather than writing to the unsafe directory.
-        backend.set("key1", [1, 2, 3], ttl=60)
-        assert backend.get("key1") is None
-        backend.delete("key1")
-
-        assert os.listdir(unsafe_dir) == []
 
     def test_feather_backend_disables_caching_for_unsafe_dir(self, tmp_path):
         unsafe_dir = tmp_path / "shared"
@@ -515,17 +440,17 @@ class TestFileCacheBackendExpiryCleanup:
         different format share the same directory and sidecar format.
         """
         cache_dir = str(tmp_path)
-        pickle_backend = PickleCacheBackend(cache_dir=cache_dir)
-        pickle_backend.set("old", [{"x": 1}], ttl=1)
-        _expire(pickle_backend._meta_path("old"))
-        pkl_path = pickle_backend.get_cache_path("old")
-        assert os.path.exists(pkl_path)
+        parquet_backend = ParquetCacheBackend(cache_dir=cache_dir)
+        parquet_backend.set("old", [{"x": 1}], ttl=1)
+        _expire(parquet_backend._meta_path("old"))
+        parquet_path = parquet_backend.get_cache_path("old")
+        assert os.path.exists(parquet_path)
 
         feather_backend = FeatherCacheBackend(cache_dir=cache_dir)
         removed = feather_backend.clean_expired()
 
         assert removed == 1
-        assert not os.path.exists(pkl_path)
+        assert not os.path.exists(parquet_path)
 
     def test_clean_expired_is_a_noop_for_unsafe_or_missing_dir(self, tmp_path):
         unsafe_dir = tmp_path / "shared"
@@ -670,10 +595,6 @@ class TestGetCacheBackend:
     def test_parquet(self):
         with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "parquet"}):
             assert isinstance(get_cache_backend(), ParquetCacheBackend)
-
-    def test_pickle(self):
-        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "pickle"}):
-            assert isinstance(get_cache_backend(), PickleCacheBackend)
 
     def test_feather_explicit(self):
         with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "feather"}):
