@@ -27,6 +27,7 @@ from sqlalchemy.sql import Select, func, select
 from sqlalchemy.sql.elements import ColumnElement
 from typing_extensions import Self
 
+import ckan.plugins as p
 import ckan.plugins.toolkit as tk
 from ckan import model
 from ckan.lib import uploader
@@ -1010,7 +1011,7 @@ class DataStoreDataSource(BaseDataSource):
         self._limit: int | None = None
         self._offset: int | None = None
 
-        self._datastore_enabled = "datastore" in tk.g.plugins
+        self._datastore_enabled = p.plugin_loaded("datastore")
 
     def filter(self, filters: list[FilterItem]) -> Self:
         self._filters = {}
