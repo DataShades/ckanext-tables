@@ -142,7 +142,6 @@ class TestConfigDeclarationDefaultsAreLiteral:
         live_config = {}
         decl.make_safe(live_config)
 
-        assert live_config[config.CONF_CACHE_BACKEND] == config.DEFAULT_CACHE_BACKEND
         assert live_config[config.CONF_CACHE_TTL] == config.DEFAULT_CACHE_TTL
         assert live_config[config.CONF_FETCH_CONNECT_TIMEOUT] == config.DEFAULT_FETCH_CONNECT_TIMEOUT
         assert live_config[config.CONF_FETCH_READ_TIMEOUT] == config.DEFAULT_FETCH_READ_TIMEOUT

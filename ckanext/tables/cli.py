@@ -16,11 +16,11 @@ def tables():
 def clean_cache():
     """Delete expired cache entries left on disk by the configured cache backend.
 
-    Only meaningful for the file-based backends (parquet/feather): an
-    entry whose TTL has passed but that is never read again would otherwise
-    keep its file on disk indefinitely. The Redis backend already expires and
-    removes its own keys, so this is a no-op there. Safe to run periodically
-    from a cron job.
+    An entry whose TTL has passed but that is never read again would
+    otherwise keep its file on disk indefinitely. Row-count/generation
+    entries in Redis aren't affected by this command — they already expire
+    and remove themselves via their own TTL. Safe to run periodically from
+    a cron job.
     """
     removed = get_cache_backend().clean_expired()
 

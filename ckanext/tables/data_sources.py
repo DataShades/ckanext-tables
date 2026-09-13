@@ -267,10 +267,10 @@ def _quote_ident(name: str) -> str:
 def _get_arrow_from_cache(backend: CacheBackend, key: str) -> pa.Table | None:  # pyright: ignore[reportUnknownParameterType]
     """Return *key* from *backend* as a pyarrow Table, if the backend supports it.
 
-    Only ``ParquetCacheBackend``/``FeatherCacheBackend`` implement ``get_arrow``
-    (see ``cache.py``) — every other backend (Redis) has no such method, so
-    this returns ``None`` for them via ``getattr``'s default rather than
-    requiring ``CacheBackend`` itself to declare it.
+    Only ``FeatherCacheBackend`` implements ``get_arrow`` (see ``cache.py``)
+    — every other backend (Redis) has no such method, so this returns
+    ``None`` for them via ``getattr``'s default rather than requiring
+    ``CacheBackend`` itself to declare it.
     """
     get_arrow = getattr(backend, "get_arrow", None)
     return get_arrow(key) if get_arrow is not None else None
@@ -306,8 +306,8 @@ class PandasDataSource(BaseDataSource):
     and set ``cache_backend`` if you want it.
 
     When the configured cache backend exposes ``get_arrow()`` (the Arrow-native
-    file backends — Parquet, Feather), filtering/sorting/pagination/counting
-    are pushed down to DuckDB running against the cached ``pyarrow.Table``
+    file backend, Feather), filtering/sorting/pagination/counting are pushed
+    down to DuckDB running against the cached ``pyarrow.Table``
     instead of pandas scanning the full in-memory frame on every call — see
     the ``*_arrow`` methods below. Every other cache backend (Redis, or none)
     keeps using the plain pandas implementation (the ``*_pandas`` methods),
@@ -703,9 +703,8 @@ def resource_cache_key(resource_id: str) -> str:
 class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     """A data source that loads resource data from a file or URL.
 
-    The cache backend defaults to the value of ``ckanext.tables.cache.backend``
-    (``"feather"`` by default). Pass an explicit *cache_backend* to
-    override for a specific instance.
+    The cache backend defaults to ``FeatherCacheBackend``. Pass an explicit
+    *cache_backend* to override for a specific instance.
 
     Override ``cache_ttl`` on a subclass or pass it to the constructor to
     change the expiry.

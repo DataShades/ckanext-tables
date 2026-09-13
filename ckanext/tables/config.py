@@ -9,7 +9,6 @@ import ckan.plugins.toolkit as tk
 
 log = logging.getLogger(__name__)
 
-CONF_CACHE_BACKEND = "ckanext.tables.cache.backend"
 CONF_CACHE_DIR = "ckanext.tables.cache.cache_dir"
 CONF_CACHE_TTL = "ckanext.tables.cache.ttl"
 CONF_FETCH_CONNECT_TIMEOUT = "ckanext.tables.fetch.connect_timeout"
@@ -18,7 +17,6 @@ CONF_FETCH_MAX_BYTES = "ckanext.tables.fetch.max_bytes"
 CONF_MAX_PAGE_SIZE = "ckanext.tables.pagination.max_page_size"
 CONF_EXPORT_MAX_ROWS = "ckanext.tables.export.max_rows"
 
-DEFAULT_CACHE_BACKEND = "feather"
 DEFAULT_CACHE_TTL = 3600
 DEFAULT_FETCH_CONNECT_TIMEOUT = 5
 DEFAULT_FETCH_READ_TIMEOUT = 30

@@ -1,5 +1,5 @@
 from . import exporters, formatters
-from .cache import CacheBackend, FeatherCacheBackend, ParquetCacheBackend, RedisCacheBackend
+from .cache import CacheBackend, FeatherCacheBackend, RedisCacheBackend
 from .data_sources import (
     BaseDataSource,
     CsvUrlDataSource,
@@ -70,6 +70,5 @@ __all__ = [
     "FILTER_OPERATORS",
     "CacheBackend",
     "FeatherCacheBackend",
-    "ParquetCacheBackend",
     "RedisCacheBackend",
 ]

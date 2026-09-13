@@ -18,7 +18,6 @@ from ckan.lib import uploader
 from ckanext.tables.cache import (
     CachedDataSourceMixin,
     FeatherCacheBackend,
-    ParquetCacheBackend,
     RedisCacheBackend,
 )
 from ckanext.tables.data_sources import (
@@ -674,9 +673,9 @@ class _ArrowStubDataSource(CachedDataSourceMixin, PandasDataSource):
         return self._source_df
 
 
-@pytest.fixture(params=[FeatherCacheBackend, ParquetCacheBackend])
-def arrow_cache_backend(request, tmp_path):
-    return request.param(cache_dir=str(tmp_path))
+@pytest.fixture
+def arrow_cache_backend(tmp_path):
+    return FeatherCacheBackend(cache_dir=str(tmp_path))
 
 
 @pytest.fixture
@@ -810,9 +809,9 @@ class TestPandasDataSourceArrowPath:
 
         arrow_source = _ArrowStubDataSource(df, arrow_cache_backend, key="parity")
 
-        # Any backend works here — _use_arrow_path() is forced False below regardless
-        # of what it stores — but Feather keeps this test independent of the parquet/
-        # feather split arrow_cache_backend is parametrised over above.
+        # A second, distinct backend instance — _use_arrow_path() is forced False
+        # below regardless of what it stores, but a separate cache_dir keeps it
+        # from sharing state with arrow_cache_backend's own cache entries.
         pandas_backend = FeatherCacheBackend(cache_dir=str(tmp_path / "pandas-path"))
 
         class PandasPathSource(_ArrowStubDataSource):

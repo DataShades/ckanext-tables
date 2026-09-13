@@ -99,12 +99,14 @@ source = FeatherUrlDataSource(url="https://example.com/data.feather")
 
 ## Caching
 
-All file-based sources inherit from `BaseResourceDataSource`, which caches the fetched DataFrame to avoid re-downloading on every request. The cache backend and TTL are controlled globally via configuration (see [Configuration](../config.md)):
+All file-based sources inherit from `BaseResourceDataSource`, which caches the fetched DataFrame (as Feather, on disk) to avoid re-downloading on every request. The cache directory and TTL are controlled globally via configuration (see [Configuration](../config.md)):
 
 ```ini
-ckanext.tables.cache.backend = feather  # or "parquet", "redis"
 ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
+ckanext.tables.cache.ttl = 3600
 ```
+
+Row counts and cache invalidation always go through CKAN's Redis connection directly — see [Caching](../resource_view.md#caching) for why.
 
 You can override the backend or TTL per instance:
 

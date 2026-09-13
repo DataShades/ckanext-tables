@@ -4,7 +4,7 @@ import pytest
 
 import ckan.plugins.toolkit as tk
 
-from ckanext.tables.cache import FeatherCacheBackend
+from ckanext.tables.cache import FeatherCacheBackend, RedisCacheBackend
 from ckanext.tables.plugin import TablesPlugin
 
 
@@ -94,9 +94,15 @@ class TestTablesPlugin:
 
 
 @pytest.mark.ckan_config("ckan.plugins", "tables")
-@pytest.mark.usefixtures("with_plugins", "with_request_context")
+@pytest.mark.usefixtures("with_plugins", "with_request_context", "clean_redis")
 class TestResourceControllerHooks:
-    """before_resource_update/delete must invalidate both the DataFrame and its counts."""
+    """before_resource_update/delete must invalidate both the DataFrame and its counts.
+
+    The generation token these hooks bump always lands in Redis (see
+    ``cache._metadata_backend``), independent of whichever backend holds the
+    DataFrame itself — that's what makes the invalidation visible to every
+    worker, not just the one handling this particular request.
+    """
 
     def test_before_resource_update_invalidates_on_new_upload(self, tmp_path):
         backend = FeatherCacheBackend(cache_dir=str(tmp_path))
@@ -112,7 +118,7 @@ class TestResourceControllerHooks:
             )
 
         assert backend.get(key) is None
-        assert backend.get(f"{key}:gen") is not None
+        assert RedisCacheBackend().get(f"{key}:gen") is not None
 
     def test_before_resource_update_skips_upload_without_a_new_file(self, tmp_path):
         backend = FeatherCacheBackend(cache_dir=str(tmp_path))
@@ -138,4 +144,4 @@ class TestResourceControllerHooks:
             TablesPlugin().before_resource_delete({}, resource={"id": "res-1"}, resources=[])
 
         assert backend.get(key) is None
-        assert backend.get(f"{key}:gen") is not None
+        assert RedisCacheBackend().get(f"{key}:gen") is not None

@@ -20,32 +20,24 @@ If the resource has been pushed to the **CKAN Datastore** (i.e. its `datastore_a
 
 ## Caching
 
-For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is cached with a default TTL of **3600 seconds** (1 hour), configurable via `ckanext.tables.cache.ttl`. The cache backend is configurable:
-
-| Config value | Backend |
-| ------------ | ------- |
-| `feather` *(default)* | Disk-based feather (Arrow IPC) files |
-| `parquet` | Disk-based parquet files |
-| `redis` | CKAN's Redis connection |
+For file-based data sources (CSV, XLSX, ORC, Parquet, Feather), fetched data is cached to disk as Arrow IPC (Feather) files, with a default TTL of **3600 seconds** (1 hour). Both are configurable:
 
 ```ini
-# Switch to Redis
-ckanext.tables.cache.backend = redis
-
-# Or keep the default feather backend and customise the cache directory
-ckanext.tables.cache.backend = feather
+ckanext.tables.cache.ttl = 3600
 ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
 ```
 
+Row counts and cache invalidation are handled separately and always go through CKAN's Redis connection — a file cache is local to one worker/machine and can't otherwise make an invalidation visible everywhere.
+
 The Datastore-backed view does **not** use caching — it queries the Datastore API directly on every request.
 
-An expired entry is deleted the next time it's read, but one that's never read again after expiring (a removed or renamed resource, for example) would otherwise stay on disk indefinitely. For the file-based backends, run the following periodically (e.g. from a cron job) to sweep away anything past its TTL:
+An expired entry is deleted the next time it's read, but one that's never read again after expiring (a removed or renamed resource, for example) would otherwise stay on disk indefinitely. Run the following periodically (e.g. from a cron job) to sweep away anything past its TTL:
 
 ```sh
 ckan -c /etc/ckan/default/ckan.ini tables clean-cache
 ```
 
-The Redis backend already expires and removes its own keys, so this command is a no-op there.
+The row-count/generation entries in Redis already expire and remove themselves via their own TTL, so there's nothing to sweep there.
 
 The **Refresh** button in the table's UI invalidates the cached data for that table, so the next load re-fetches and re-parses the file from its source URL.
 

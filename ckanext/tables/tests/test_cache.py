@@ -15,10 +15,8 @@ import pytest
 from ckanext.tables import cache
 from ckanext.tables.cache import (
     FeatherCacheBackend,
-    ParquetCacheBackend,
     RedisCacheBackend,
     _TablesJSONEncoder,
-    get_cache_backend,
 )
 from ckanext.tables.types import FilterItem
 
@@ -62,99 +60,8 @@ class TestTablesJSONEncoder:
 
 
 @pytest.fixture
-def parquet_backend(tmp_path):
-    return ParquetCacheBackend(cache_dir=str(tmp_path))
-
-
-@pytest.fixture
 def feather_backend(tmp_path):
     return FeatherCacheBackend(cache_dir=str(tmp_path))
-
-
-class TestParquetCacheBackend:
-    def test_set_and_get(self, parquet_backend):
-        data = [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
-        parquet_backend.set("key1", data, ttl=60)
-        result = parquet_backend.get("key1")
-        assert result.to_dict(orient="records") == data
-
-    def test_miss_returns_none(self, parquet_backend):
-        assert parquet_backend.get("nonexistent") is None
-
-    def test_expired_returns_none(self, parquet_backend):
-        parquet_backend.set("expiring", [{"x": 1}], ttl=1)
-        meta_path = parquet_backend._meta_path("expiring")
-        _expire(meta_path)
-        assert parquet_backend.get("expiring") is None
-
-    def test_delete(self, parquet_backend):
-        parquet_backend.set("to_delete", [{"v": 1}], ttl=60)
-        parquet_backend.delete("to_delete")
-        assert parquet_backend.get("to_delete") is None
-
-    def test_delete_nonexistent_is_noop(self, parquet_backend):
-        parquet_backend.delete("does_not_exist")
-
-    def test_get_cache_path(self, parquet_backend):
-        path = parquet_backend.get_cache_path("mykey")
-        assert path.endswith(".parquet")
-        assert parquet_backend.cache_dir in path
-
-    def test_set_creates_cache_dir(self, tmp_path):
-        new_dir = str(tmp_path / "subdir" / "nested")
-        backend = ParquetCacheBackend(cache_dir=new_dir)
-        backend.set("k", [{"v": 1}], ttl=60)
-        assert os.path.isdir(new_dir)
-
-    def test_scalar_value(self, parquet_backend):
-        parquet_backend.set("count", 42, ttl=60)
-        assert parquet_backend.get("count") == 42
-
-    def test_get_corrupted_file_returns_none(self, parquet_backend):
-        parquet_backend.set("key", [{"v": 1}], ttl=60)
-        path = parquet_backend.get_cache_path("key")
-        with open(path, "wb") as f:
-            f.write(b"notparquet!!!")
-        assert parquet_backend.get("key") is None
-
-    def test_set_swallows_arrow_type_error_on_mixed_type_column(self, parquet_backend):
-        # A column with mixed Python types (e.g. numbers and text, as pandas
-        # leaves it for XLSX/CSV input) makes pyarrow raise ArrowTypeError,
-        # which must not propagate out of set().
-        df = pd.DataFrame({"mixed": [1, "two", 3.0]})
-        parquet_backend.set("bad", df, ttl=60)
-        assert parquet_backend.get("bad") is None
-
-    def test_get_arrow_returns_pyarrow_table(self, parquet_backend):
-        data = [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
-        parquet_backend.set("key1", data, ttl=60)
-
-        table = parquet_backend.get_arrow("key1")
-
-        assert isinstance(table, pa.Table)
-        assert table.to_pylist() == data
-
-    def test_get_arrow_and_get_do_not_collide(self, parquet_backend):
-        # get() and get_arrow() are backed by separate memos (_memo vs
-        # _arrow_memo) — reading a key through both must not return the
-        # wrong type for either.
-        data = [{"a": 1, "b": "x"}]
-        parquet_backend.set("key1", data, ttl=60)
-
-        table = parquet_backend.get_arrow("key1")
-        df = parquet_backend.get("key1")
-
-        assert isinstance(table, pa.Table)
-        assert isinstance(df, pd.DataFrame)
-
-    def test_get_arrow_miss_returns_none(self, parquet_backend):
-        assert parquet_backend.get_arrow("nonexistent") is None
-
-    def test_get_arrow_expired_returns_none(self, parquet_backend):
-        parquet_backend.set("expiring", [{"x": 1}], ttl=1)
-        meta_path = parquet_backend._meta_path("expiring")
-        _expire(meta_path)
-        assert parquet_backend.get_arrow("expiring") is None
 
 
 class TestFeatherCacheBackend:
@@ -433,25 +340,6 @@ class TestFileCacheBackendExpiryCleanup:
         assert feather_backend.clean_expired() == 1
         assert not os.path.exists(feather_backend._meta_path("count"))
 
-    def test_clean_expired_cleans_up_a_former_backend_format_too(self, tmp_path):
-        """Sweeping must not assume the current backend wrote every file present.
-
-        If ``ckanext.tables.cache.backend`` was switched, old entries in a
-        different format share the same directory and sidecar format.
-        """
-        cache_dir = str(tmp_path)
-        parquet_backend = ParquetCacheBackend(cache_dir=cache_dir)
-        parquet_backend.set("old", [{"x": 1}], ttl=1)
-        _expire(parquet_backend._meta_path("old"))
-        parquet_path = parquet_backend.get_cache_path("old")
-        assert os.path.exists(parquet_path)
-
-        feather_backend = FeatherCacheBackend(cache_dir=cache_dir)
-        removed = feather_backend.clean_expired()
-
-        assert removed == 1
-        assert not os.path.exists(parquet_path)
-
     def test_clean_expired_is_a_noop_for_unsafe_or_missing_dir(self, tmp_path):
         unsafe_dir = tmp_path / "shared"
         unsafe_dir.mkdir()
@@ -504,8 +392,9 @@ class TestFileCacheBackendAtomicWrite:
         assert RedisCacheBackend().clean_expired() == 0
 
 
+@pytest.mark.usefixtures("clean_redis")
 class TestInvalidateCacheEntry:
-    """invalidate_cache_entry deletes the data key and bumps a generation token."""
+    """invalidate_cache_entry deletes the data key and bumps a generation token in Redis."""
 
     def test_deletes_the_key(self, feather_backend):
         from ckanext.tables.cache import invalidate_cache_entry
@@ -518,14 +407,24 @@ class TestInvalidateCacheEntry:
         from ckanext.tables.cache import invalidate_cache_entry
 
         invalidate_cache_entry(feather_backend, "key1", ttl=60)
-        first_gen = feather_backend.get("key1:gen")
+        first_gen = RedisCacheBackend().get("key1:gen")
         assert first_gen is not None
 
         invalidate_cache_entry(feather_backend, "key1", ttl=60)
-        second_gen = feather_backend.get("key1:gen")
+        second_gen = RedisCacheBackend().get("key1:gen")
 
         assert second_gen is not None
         assert second_gen != first_gen
+
+    def test_generation_token_lands_in_redis_not_the_data_backend(self, feather_backend):
+        # The token must be visible to every worker, not just whichever one ran
+        # invalidate() — a file-based cache_backend can't do that on its own.
+        from ckanext.tables.cache import invalidate_cache_entry
+
+        invalidate_cache_entry(feather_backend, "key1", ttl=60)
+
+        assert feather_backend.get("key1:gen") is None
+        assert RedisCacheBackend().get("key1:gen") is not None
 
 
 class _FakeCachedDataSource(cache.CachedDataSourceMixin):
@@ -540,6 +439,7 @@ class _FakeCachedDataSource(cache.CachedDataSourceMixin):
         return self._key
 
 
+@pytest.mark.usefixtures("clean_redis")
 class TestCachedDataSourceMixinCounts:
     def test_get_cached_count_is_none_on_a_miss(self, feather_backend):
         ds = _FakeCachedDataSource(feather_backend)
@@ -580,36 +480,39 @@ class TestCachedDataSourceMixinCounts:
 
         assert ds.get_cached_count([]) is None
 
+    def test_count_lands_in_redis_regardless_of_the_configured_cache_backend(self, feather_backend):
+        # The DataFrame itself is Feather-backed here, but the count must be
+        # readable straight out of Redis too — that's what makes it visible
+        # to every worker, not just the one that computed it.
+        ds = _FakeCachedDataSource(feather_backend, key="cross-worker-key")
+        ds.set_cached_count([], 7)
 
-class TestGetCacheBackend:
-    """get_cache_backend() selects a backend class from the configured name."""
+        assert RedisCacheBackend().get(ds._count_cache_key([])) == 7
 
-    def test_default_is_feather(self):
-        with mock.patch.object(cache.tk, "config", {}):
-            assert isinstance(get_cache_backend(), FeatherCacheBackend)
 
-    def test_redis(self):
-        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "redis"}):
-            assert isinstance(get_cache_backend(), RedisCacheBackend)
+class TestCacheMetadataResilience:
+    """A Redis outage must degrade count/generation caching, not break the request."""
 
-    def test_parquet(self):
-        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "parquet"}):
-            assert isinstance(get_cache_backend(), ParquetCacheBackend)
+    def test_get_cached_count_returns_none_when_redis_is_unreachable(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
 
-    def test_feather_explicit(self):
-        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "feather"}):
-            assert isinstance(get_cache_backend(), FeatherCacheBackend)
+        with mock.patch.object(cache.RedisCacheBackend, "get", side_effect=cache.RedisError("down")):
+            assert ds.get_cached_count([]) is None
 
-    def test_case_and_whitespace_insensitive(self):
-        with mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "  REDIS  "}):
-            assert isinstance(get_cache_backend(), RedisCacheBackend)
+    def test_set_cached_count_does_not_raise_when_redis_is_unreachable(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
 
-    def test_unknown_value_falls_back_to_feather_with_a_warning(self):
-        with (
-            mock.patch.object(cache.tk, "config", {cache.CONF_CACHE_BACKEND: "not-a-real-backend"}),
-            mock.patch.object(cache, "log") as mock_log,
-        ):
-            backend = get_cache_backend()
+        with mock.patch.object(cache.RedisCacheBackend, "set", side_effect=cache.RedisError("down")):
+            ds.set_cached_count([], 3)  # must not raise
 
-        assert isinstance(backend, FeatherCacheBackend)
-        mock_log.warning.assert_called_once()
+    def test_generation_falls_back_to_the_baseline_when_redis_is_unreachable(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+
+        with mock.patch.object(cache.RedisCacheBackend, "get", side_effect=cache.RedisError("down")):
+            assert ds._generation() == "0"
+
+    def test_invalidate_does_not_raise_when_redis_is_unreachable(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+
+        with mock.patch.object(cache.RedisCacheBackend, "set", side_effect=cache.RedisError("down")):
+            ds.invalidate()  # the Feather delete must still happen, the Redis bump must not raise

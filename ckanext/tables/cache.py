@@ -19,13 +19,12 @@ from typing import Any
 
 import pandas as pd
 import pyarrow as pa
-import pyarrow.parquet as pq
 from pyarrow import feather
+from redis.exceptions import RedisError
 
-import ckan.plugins.toolkit as tk
 from ckan.lib.redis import connect_to_redis
 
-from ckanext.tables.config import CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND, get_cache_dir
+from ckanext.tables.config import get_cache_dir
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -98,6 +97,14 @@ class RedisCacheBackend(CacheBackend):
 
     Values are JSON-serialised before storage so they survive across
     processes and server restarts (as long as Redis persists them).
+
+    Usable directly as a ``CachedDataSourceMixin.cache_backend`` for the
+    DataFrame itself (e.g. a shared-nothing, multi-worker deployment with no
+    common disk for a Feather cache dir), though every request against a
+    Redis-cached table then takes the plain pandas path — this class has no
+    ``get_arrow()``, so it never gets the DuckDB pushdown Feather does. It's
+    also used unconditionally, independent of any ``cache_backend`` choice,
+    as the row-count/generation-token store — see ``_metadata_backend``.
     """
 
     _PREFIX = "ckanext:tables:"
@@ -174,7 +181,7 @@ class _FileCacheBackend(CacheBackend, ABC):
 
     Subclasses only need to define:
 
-    - ``_file_extension`` — e.g. ``".parquet"``
+    - ``_file_extension`` — e.g. ``".feather"``
     - ``_read_data(path)`` — deserialise data from the cache file
     - ``_write_data(value, path)`` — serialise data to the cache file
 
@@ -399,10 +406,8 @@ class _FileCacheBackend(CacheBackend, ABC):
         cron-triggered CLI command), not on every request.
 
         Sweeps every ``.meta`` sidecar regardless of which backend wrote its
-        matching data file (they all share the same sidecar format), so this
-        also cleans up entries left behind by a since-changed
-        ``ckanext.tables.cache.backend`` setting. Returns how many entries
-        were removed.
+        matching data file (they all share the same sidecar format).
+        Returns how many entries were removed.
         """
         if self.cache_dir is None:
             return 0
@@ -486,10 +491,9 @@ class _ArrowCacheBackend(_FileCacheBackend, ABC):
     (via ``_read_data``/``_read_df``) does, so a caller that only wants to run
     a DuckDB query over the data (see ``PandasDataSource`` in
     ``data_sources.py``) never has to materialise a full pandas DataFrame for
-    it. Only ``ParquetCacheBackend`` and ``FeatherCacheBackend`` implement
-    this; ``RedisCacheBackend`` doesn't, since it stores JSON records rather
-    than an Arrow-native format — callers detect support with
-    ``hasattr(backend, "get_arrow")``.
+    it. Only ``FeatherCacheBackend`` implements this; ``RedisCacheBackend``
+    doesn't, since it stores JSON records rather than an Arrow-native format
+    — callers detect support with ``hasattr(backend, "get_arrow")``.
     """
 
     @abstractmethod
@@ -497,21 +501,6 @@ class _ArrowCacheBackend(_FileCacheBackend, ABC):
 
     def get_arrow(self, key: str) -> pa.Table | None:  # pyright: ignore[reportUnknownParameterType]
         return self._get_with_reader(key, self._read_arrow, self._arrow_memo, self._arrow_memo_lock)
-
-
-class ParquetCacheBackend(_ArrowCacheBackend, _DataFrameFileCacheBackend):
-    """Cache backend that stores data as parquet files on disk."""
-
-    _file_extension = ".parquet"
-
-    def _read_df(self, path: str) -> pd.DataFrame:
-        return pd.read_parquet(path)
-
-    def _write_df(self, df: pd.DataFrame, path: str) -> None:
-        df.to_parquet(path, engine="pyarrow")
-
-    def _read_arrow(self, path: str) -> pa.Table:  # pyright: ignore[reportUnknownParameterType]
-        return pq.read_table(path)
 
 
 class FeatherCacheBackend(_ArrowCacheBackend, _DataFrameFileCacheBackend):
@@ -530,65 +519,86 @@ class FeatherCacheBackend(_ArrowCacheBackend, _DataFrameFileCacheBackend):
 
 
 def get_cache_backend() -> CacheBackend:
-    """Return a CacheBackend instance based on the configured backend.
+    """Return the ``CacheBackend`` for the cached DataFrame itself.
 
-    Reads ``ckanext.tables.cache.backend`` and returns the appropriate
-    backend instance.
+    Always a ``FeatherCacheBackend``, path controlled by
+    ``ckanext.tables.cache.cache_dir``. Kept as a function — rather than
+    every call site constructing ``FeatherCacheBackend()`` directly — purely
+    so there's one place to change if a future or custom backend ever
+    replaces it.
 
-    Supported values:
-
-    * ``"redis"`` — CKAN's Redis connection (requires Redis to be configured).
-    * ``"parquet"`` — disk-based parquet cache, path controlled by
-      ``ckanext.tables.cache.cache_dir``.
-    * ``"feather"``  *(default)* — disk-based feather (Arrow IPC) cache, path controlled by
-      ``ckanext.tables.cache.cache_dir``.
-
-    Unknown values fall back to ``"feather"`` with a warning.
+    This governs only the big per-resource table, not the small per-filter
+    row counts or the generation token ``invalidate()`` bumps — those always
+    go through Redis directly (see ``_metadata_backend`` below), since a
+    file cache is local to one worker/machine and can't make an
+    invalidation visible everywhere the way every real CKAN deployment's
+    shared Redis connection already can.
     """
-    backend = tk.config.get(CONF_CACHE_BACKEND, DEFAULT_CACHE_BACKEND).strip().lower()
-
-    if backend == "redis":
-        return RedisCacheBackend()
-
-    if backend == "parquet":
-        return ParquetCacheBackend()
-
-    if backend != DEFAULT_CACHE_BACKEND:
-        log.warning(
-            "Unknown %s value %r — falling back to %r.",
-            CONF_CACHE_BACKEND,
-            backend,
-            DEFAULT_CACHE_BACKEND,
-        )
-
     return FeatherCacheBackend()
+
+
+def _metadata_backend() -> RedisCacheBackend:
+    """Return the backend used for cache-generation/row-count bookkeeping.
+
+    Always Redis, unconditionally — independent of ``get_cache_backend()``'s
+    choice for the big cached DataFrame itself. A file-based cache directory
+    is local to one worker process/machine: after ``invalidate()`` runs on
+    whichever worker handled a resource update, every *other* worker's own
+    on-disk copy has no way to learn about it and keeps serving stale data
+    (and stale counts) until its TTL happens to expire. Every real CKAN
+    deployment already depends on a reachable Redis (background jobs need
+    it, and ``load_environment()`` logs a critical error at startup if it
+    isn't there) — routing this small, hot bookkeeping through it instead
+    makes an invalidation visible to every worker immediately, regardless of
+    which backend holds the table data.
+    """
+    return RedisCacheBackend()
+
+
+def _metadata_get(key: str) -> Any:
+    """Read a generation/count value, treating an unreachable Redis as a cache miss.
+
+    This path is no longer opt-in (see ``_metadata_backend``), so a Redis
+    outage must degrade to "nothing was cached" rather than 500 every table
+    request — matching how every other cache read in this module already
+    tolerates its own failure modes.
+    """
+    try:
+        return _metadata_backend().get(key)
+    except RedisError:
+        log.debug("Redis unavailable for cache metadata read %r", key, exc_info=True)
+        return None
+
+
+def _metadata_set(key: str, value: Any, ttl: int) -> None:
+    """Write a generation/count value, tolerating an unreachable Redis."""
+    try:
+        _metadata_backend().set(key, value, ttl)
+    except RedisError:
+        log.warning("Redis unavailable for cache metadata write %r", key, exc_info=True)
 
 
 class CachedDataSourceMixin:
     """Mixin that adds pluggable caching to a data source.
 
     Mix this into any ``BaseDataSource`` subclass to enable caching.
-    Override ``cache_backend`` to swap the storage engine, and
-    ``cache_ttl`` to change the expiry time.
+    Override ``cache_backend`` to swap the storage engine for the big
+    DataFrame itself, and ``cache_ttl`` to change its expiry time. Row
+    counts and the invalidation generation token are handled separately and
+    always go through Redis — see ``_metadata_backend``.
 
-    Example — use Redis (default)::
-
-        class BaseResourceDataSource(CachedDataSourceMixin, DatabaseDataSource):
-            def get_cache_key(self) -> str:
-                ...
-
-    Example — use parquet files::
-
-        class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
-            cache_backend = ParquetCacheBackend("/var/cache/tables")
-
-            def get_cache_key(self) -> str:
-                ...
-
-    Example — use feather files::
+    Example — use feather files (the default for the built-in resource sources)::
 
         class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
             cache_backend = FeatherCacheBackend("/var/cache/tables")
+
+            def get_cache_key(self) -> str:
+                ...
+
+    Example — mix in a custom backend directly::
+
+        class BaseResourceDataSource(CachedDataSourceMixin, DatabaseDataSource):
+            cache_backend = RedisCacheBackend()
 
             def get_cache_key(self) -> str:
                 ...
@@ -612,16 +622,16 @@ class CachedDataSourceMixin:
 
     def get_cached_count(self, filters: list[FilterItem]) -> int | None:
         """Return the cached row count for *filters*, or ``None`` on a cache miss."""
-        result = self.cache_backend.get(self._count_cache_key(filters))
+        result = _metadata_get(self._count_cache_key(filters))
         return int(result) if result is not None else None
 
     def set_cached_count(self, filters: list[FilterItem], count: int) -> None:
         """Cache *count* for *filters* under the current generation."""
-        self.cache_backend.set(self._count_cache_key(filters), count, self.cache_ttl)
+        _metadata_set(self._count_cache_key(filters), count, self.cache_ttl)
 
     def _generation(self) -> str:
         """Return the current cache generation, bumped by ``invalidate()`` to orphan old counts."""
-        generation = self.cache_backend.get(f"{self.get_cache_key()}:gen")
+        generation = _metadata_get(f"{self.get_cache_key()}:gen")
         return generation if isinstance(generation, str) else "0"
 
     def _count_cache_key(self, filters: list[FilterItem]) -> str:
@@ -637,7 +647,7 @@ class CachedDataSourceMixin:
 
 
 def invalidate_cache_entry(cache_backend: CacheBackend, key: str, ttl: int) -> None:
-    """Delete *key* and make every count cached against it unreachable.
+    """Delete *key* from *cache_backend* and make every count cached against it unreachable.
 
     A count is cached per distinct filter combination a user has applied (see
     ``CachedDataSourceMixin._count_cache_key``) — an unbounded set that can't
@@ -646,6 +656,10 @@ def invalidate_cache_entry(cache_backend: CacheBackend, key: str, ttl: int) -> N
     uses a new key, so a stale one is never served again; the orphaned old
     entries are simply left to expire via their own TTL, like any other
     expired entry.
+
+    The token always goes to Redis (see ``_metadata_backend``), independent
+    of *cache_backend* — that's what makes this call visible to every
+    worker, not just the one handling the request that triggered it.
     """
     cache_backend.delete(key)
-    cache_backend.set(f"{key}:gen", uuid.uuid4().hex, ttl)
+    _metadata_set(f"{key}:gen", uuid.uuid4().hex, ttl)
