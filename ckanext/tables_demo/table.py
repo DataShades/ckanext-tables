@@ -18,6 +18,7 @@ class PeopleTable(t.TableDefinition):
                 t.ColumnDefinition(field="name"),
                 t.ColumnDefinition(field="surname", title="Last Name"),
                 t.ColumnDefinition(field="email"),
+                t.ColumnDefinition(field="sysadmin", formatters=[(t.formatters.BooleanFormatter, {})]),
                 t.ColumnDefinition(
                     field="created",
                     formatters=[(t.formatters.DateFormatter, {"date_format": "%d %B %Y"})],
@@ -28,7 +29,7 @@ class PeopleTable(t.TableDefinition):
                     action="make_sysadmin",
                     label="Promote to Sysadmin",
                     icon="fa fa-user-graduate",
-                    callback=self.pseudo_actions,
+                    callback=self.promote_to_sysadmin,
                     with_confirmation=True,
                 ),
                 t.RowActionDefinition(
@@ -72,8 +73,10 @@ class PeopleTable(t.TableDefinition):
         DATA[:] = [r for r in DATA if r["id"] != row["id"]]
         return t.ActionHandlerResult(success=True, message="User removed.")
 
-    def pseudo_actions(self, row: t.Row) -> t.ActionHandlerResult:
-        return t.ActionHandlerResult(success=True, message="Action isn't implemented.")
+    def promote_to_sysadmin(self, row: t.Row) -> t.ActionHandlerResult:
+        user_data = next((r for r in DATA if r["id"] == row["id"]), None)
+        user_data["sysadmin"] = True  # type: ignore
+        return t.ActionHandlerResult(success=True, message="User has been promoted.")
 
     def remove_users(self, rows: list[t.Row]) -> t.ActionHandlerResult:
         """Callback to remove a user from the data source."""
