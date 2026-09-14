@@ -65,7 +65,18 @@ export function loadCkanModule(
             // Mirrors CKAN's real %(name)s interpolation closely enough for
             // assertions on the resulting message to make sense.
             _: (msgid: string, values?: Record<string, string | number>) =>
-                values ? msgid.replace(/%\(([^)]+)\)s/g, (_match, key) => String(values[key] ?? "")) : msgid,
+                values ? msgid.replace(/%\(([^)]+)\)[sd]/g, (_match, key) => String(values[key] ?? "")) : msgid,
+            ngettext: (
+                singular: string,
+                plural: string,
+                num: number,
+                values?: Record<string, string | number>
+            ) => {
+                const msgid = num === 1 ? singular : plural;
+                return values
+                    ? msgid.replace(/%\(([^)]+)\)[sd]/g, (_match, key) => String(values[key] ?? ""))
+                    : msgid;
+            },
         },
         tablesToast: () => {},
         tablesConfirm: (options: { onConfirm: () => void }) => options.onConfirm(),

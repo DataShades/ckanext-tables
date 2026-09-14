@@ -118,7 +118,11 @@ describe("initialize", () => {
 
         const response = instances[0].config.ajaxResponse("url", {}, { total: 42 });
         expect(response).toEqual({ total: 42 });
-        expect(dom.totalCountEl.innerHTML).toBe("42");
+        expect(dom.totalCountEl.textContent).toBe("42 rows");
+
+        // Singular form uses the right plural branch too.
+        instances[0].config.ajaxResponse("url", {}, { total: 1 });
+        expect(dom.totalCountEl.textContent).toBe("1 row");
     });
 
     it("real click on the apply-filters button runs _onApplyFilters with the module as `this`, thanks to $.proxyAll", () => {

@@ -8,9 +8,15 @@ namespace ckan {
     export var module: (name: string, initializer: ($: any) => any) => any;
     export var i18n: {
         _: (msgid: string, values?: Record<string, string | number>) => string;
+        ngettext: (
+            singular: string,
+            plural: string,
+            num: number,
+            values?: Record<string, string | number>
+        ) => string;
     };
     export var tablesToast: (options: { message: string; type?: string; title?: string, stacking?: boolean }) => void;
-    export var tablesConfirm: (options: { message: string; onConfirm: () => void }) => void;
+    export var tablesConfirm: (options: { message: string; onConfirm: () => void; keyboard?: boolean }) => void;
 }
 
 type TableFilter = {
@@ -177,7 +183,12 @@ ckan.module("tables-tabulator", function ($) {
                 ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
                 ajaxResponse: (_url: string, _params: any, response: any) => {
                     if (this.totalCountEl && response.total !== undefined) {
-                        this.totalCountEl.innerHTML = response.total;
+                        this.totalCountEl.textContent = ckan.i18n.ngettext(
+                            "%(num)d row",
+                            "%(num)d rows",
+                            response.total,
+                            { num: response.total }
+                        );
                     }
                     return response;
                 },
@@ -197,6 +208,7 @@ ckan.module("tables-tabulator", function ($) {
             ckan.tablesConfirm({
                 message: ckan.i18n._("Are you sure you want to perform this action: %(label)s?", { label }),
                 onConfirm: callback,
+                keyboard: true,
             });
         },
 
@@ -367,7 +379,7 @@ ckan.module("tables-tabulator", function ($) {
             this._removeUnfilledFilters();
             this._updateClearButtonsState();
             this._updateUrl();
-            this._refreshData();
+            this.table.setPage(1);
         },
 
         _updateClearButtonsState: function (): void {
@@ -381,7 +393,7 @@ ckan.module("tables-tabulator", function ($) {
             this._updateTableFilters();
             this._updateClearButtonsState();
             this._updateUrl();
-            this._refreshData();
+            this.table.setPage(1);
         },
 
         _onAddFilter: function (): void {
@@ -435,6 +447,12 @@ ckan.module("tables-tabulator", function ($) {
             const action = target.dataset.action;
             const label = target.textContent?.trim() || "";
             if (!action) return;
+
+            if (!this.table.getSelectedData().length) {
+                this._showToast(ckan.i18n._("Select at least one row first."), "danger");
+                return;
+            }
+
             const withConfirmation = target.dataset.withConfirmation !== "false";
             if (withConfirmation) {
                 this._confirmAction(label, () => this._onBulkActionConfirm(action, label));
@@ -620,6 +638,7 @@ ckan.module("tables-tabulator", function ($) {
             btn.className = "btn-header-filter-toggle";
             btn.title = ckan.i18n._("Toggle column filter");
             btn.setAttribute("aria-controls", filterInput.id);
+            btn.setAttribute("aria-expanded", "false");
             btn.innerHTML = '<i class="fa fa-search"></i>';
 
             btn.addEventListener("click", (e: Event) => {
@@ -647,8 +666,10 @@ ckan.module("tables-tabulator", function ($) {
 
         _syncHeaderFilterState: function (colEl: HTMLElement, filterInput: HTMLInputElement, btn: HTMLButtonElement): void {
             const hasValue = Boolean(filterInput.value.trim());
+            const expanded = hasValue || colEl.classList.contains("filter-visible");
             colEl.classList.toggle("filter-active", hasValue);
-            btn.classList.toggle("active", hasValue || colEl.classList.contains("filter-visible"));
+            btn.classList.toggle("active", expanded);
+            btn.setAttribute("aria-expanded", expanded ? "true" : "false");
         },
 
         _onFullscreen: function (): void {

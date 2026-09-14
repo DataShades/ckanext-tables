@@ -76,6 +76,7 @@ describe("_initHeaderFilterToggles", () => {
 
         expect(col.classList.contains("filter-active")).toBe(true);
         expect(btn.classList.contains("active")).toBe(true);
+        expect(btn.getAttribute("aria-expanded")).toBe("true");
     });
 });
 
@@ -113,11 +114,13 @@ describe("_buildFilterToggleButton", () => {
         expect(colEl.classList.contains("filter-visible")).toBe(true);
         expect(table.redraw).toHaveBeenCalledTimes(1);
         expect(focusSpy).toHaveBeenCalledTimes(1);
+        expect(btn.getAttribute("aria-expanded")).toBe("true");
 
         // Clicking again hides it and doesn't re-focus.
         btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(colEl.classList.contains("filter-visible")).toBe(false);
         expect(focusSpy).toHaveBeenCalledTimes(1);
+        expect(btn.getAttribute("aria-expanded")).toBe("false");
     });
 
     it("stops the click from bubbling up to the column header (which would sort it)", () => {

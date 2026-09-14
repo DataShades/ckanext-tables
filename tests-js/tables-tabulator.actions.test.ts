@@ -46,6 +46,9 @@ describe("_confirmAction", () => {
         expect(tablesConfirm).toHaveBeenCalledTimes(1);
         const call = tablesConfirm.mock.calls[0][0];
         expect(call.message).toContain("Delete row");
+        // Esc must close the dialog — both ckan.confirm (2.12+) and the local
+        // fallback default this to false, so it has to be passed explicitly.
+        expect(call.keyboard).toBe(true);
 
         call.onConfirm();
         expect(onConfirm).toHaveBeenCalled();
@@ -194,7 +197,7 @@ describe("_sendActionRequest", () => {
 
 describe("_onApplyBulkAction / _onApplyTableAction", () => {
     it("bulk action confirms by default and reads action/label from dataset", () => {
-        const instance = makeInstance();
+        const instance = makeInstance({ table: { getSelectedData: () => [{ id: 1 }] } });
         const confirmAction = vi.spyOn(instance, "_confirmAction").mockImplementation(() => {});
 
         const target = document.createElement("button");
@@ -207,7 +210,7 @@ describe("_onApplyBulkAction / _onApplyTableAction", () => {
     });
 
     it("bulk action skips confirmation when data-with-confirmation is 'false'", () => {
-        const instance = makeInstance();
+        const instance = makeInstance({ table: { getSelectedData: () => [{ id: 1 }] } });
         const confirmAction = vi.spyOn(instance, "_confirmAction").mockImplementation(() => {});
         const onBulkActionConfirm = vi.spyOn(instance, "_onBulkActionConfirm").mockImplementation(() => {});
 
@@ -220,6 +223,21 @@ describe("_onApplyBulkAction / _onApplyTableAction", () => {
 
         expect(confirmAction).not.toHaveBeenCalled();
         expect(onBulkActionConfirm).toHaveBeenCalledWith("export", "Export");
+    });
+
+    it("shows a toast and never opens the confirmation dialog when nothing is selected", () => {
+        const showToast = vi.fn();
+        const instance = makeInstance({ table: { getSelectedData: () => [] }, _showToast: showToast });
+        const confirmAction = vi.spyOn(instance, "_confirmAction").mockImplementation(() => {});
+
+        const target = document.createElement("button");
+        target.dataset.action = "delete";
+        target.textContent = "Delete selected";
+
+        instance._onApplyBulkAction({ currentTarget: target } as unknown as Event);
+
+        expect(confirmAction).not.toHaveBeenCalled();
+        expect(showToast).toHaveBeenCalledWith(expect.any(String), "danger");
     });
 
     it("does nothing when the button has no data-action", () => {

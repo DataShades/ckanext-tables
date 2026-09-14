@@ -41,7 +41,7 @@ describe("_onApplyFilters", () => {
         const filtersCounter = document.createElement("span");
         const clearFiltersBtn = document.createElement("button");
         const clearFiltersModalBtn = document.createElement("button");
-        const refreshData = vi.fn();
+        const setPage = vi.fn();
 
         const instance = makeInstance({
             filtersContainer,
@@ -49,7 +49,7 @@ describe("_onApplyFilters", () => {
             clearFiltersBtn,
             clearFiltersModalBtn,
             tableName: "r",
-            _refreshData: refreshData,
+            table: { setPage },
         });
 
         instance._onApplyFilters();
@@ -58,7 +58,9 @@ describe("_onApplyFilters", () => {
         expect(filtersContainer.contains(incomplete)).toBe(false);
         expect(clearFiltersBtn.classList.contains("btn-table-disabled")).toBe(false);
         expect(new URL(window.location.href).searchParams.getAll("field-r")).toEqual(["age"]);
-        expect(refreshData).toHaveBeenCalled();
+        // Resets to page 1 instead of replaceData(), so a filtered-down result set
+        // is never left showing an out-of-range (empty) page.
+        expect(setPage).toHaveBeenCalledWith(1);
     });
 });
 
@@ -101,7 +103,7 @@ describe("_onClearFilters", () => {
         const filtersCounter = document.createElement("span");
         const clearFiltersBtn = document.createElement("button");
         const clearFiltersModalBtn = document.createElement("button");
-        const refreshData = vi.fn();
+        const setPage = vi.fn();
 
         const instance = makeInstance({
             filtersContainer,
@@ -109,7 +111,7 @@ describe("_onClearFilters", () => {
             clearFiltersBtn,
             clearFiltersModalBtn,
             tableName: "r",
-            _refreshData: refreshData,
+            table: { setPage },
         });
 
         instance._onClearFilters();
@@ -118,7 +120,7 @@ describe("_onClearFilters", () => {
         expect(instance.tableFilters).toEqual([]);
         expect(clearFiltersBtn.classList.contains("btn-table-disabled")).toBe(true);
         expect(new URL(window.location.href).searchParams.has("field-r")).toBe(false);
-        expect(refreshData).toHaveBeenCalled();
+        expect(setPage).toHaveBeenCalledWith(1);
     });
 });
 
