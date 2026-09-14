@@ -484,6 +484,11 @@ ckan.module("tables-tabulator", function ($) {
             const exportButtons = Array.from(this.tableExportersMenu.querySelectorAll("button")) as HTMLButtonElement[];
             exportButtons.forEach((btn) => (btn.disabled = true));
             toggle?.setAttribute("disabled", "true");
+            toggle?.setAttribute("aria-busy", "true");
+
+            const toggleIcon = toggle?.querySelector("i");
+            const toggleIconClass = toggleIcon?.className;
+            if (toggleIcon) toggleIcon.className = "fa fa-spinner tables-icon-spin";
 
             try {
                 const url = new URL(window.location.href);
@@ -504,7 +509,13 @@ ckan.module("tables-tabulator", function ($) {
 
                 const response = await fetch(fullUrl);
 
-                if (!response.ok) throw new Error(`${target.innerText} export failed`);
+                if (!response.ok) {
+                    const detail = await response
+                        .json()
+                        .then((body: { error?: string }) => body.error)
+                        .catch(() => null);
+                    throw new Error(detail || ckan.i18n._("%(name)s export failed.", { name: target.innerText }));
+                }
 
                 const blob = await response.blob();
                 const filename =
@@ -520,15 +531,13 @@ ckan.module("tables-tabulator", function ($) {
 
                 this._showToast(ckan.i18n._("%(name)s export completed.", { name: target.innerText }), "default", false);
             } catch (error) {
-                this._showToast(
-                    ckan.i18n._("%(name)s export failed. Please try again.", { name: target.innerText }),
-                    "danger",
-                    false
-                );
-                console.error('Export error:', error);
+                this._showToast((error as Error).message, "danger", false);
+                console.error("Export error:", error);
             } finally {
                 exportButtons.forEach((btn) => (btn.disabled = false));
                 toggle?.removeAttribute("disabled");
+                toggle?.removeAttribute("aria-busy");
+                if (toggleIcon && toggleIconClass !== undefined) toggleIcon.className = toggleIconClass;
             }
         },
 

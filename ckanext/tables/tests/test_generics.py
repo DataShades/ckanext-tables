@@ -206,27 +206,26 @@ class TestExportTableMixin:
 
         return ConcreteExport()
 
-    def test_export_not_found_aborts(self, sample_table: TableDefinition):
+    def test_export_not_found_returns_404(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
-        with mock.patch("ckanext.tables.generics.tk.abort") as mock_abort:
-            mock_abort.side_effect = Exception("404")
-            with pytest.raises(Exception, match="404"):
-                mixin._export(sample_table, "nonexistent_exporter")
+        response, status = mixin._export(sample_table, "nonexistent_exporter")
+        assert status == 404
+        data = json.loads(response.get_data(as_text=True))
+        assert data["success"] is False
+        assert "nonexistent_exporter" in data["error"]
 
-    def test_export_missing_dependency_aborts_501(self, sample_table: TableDefinition):
+    def test_export_missing_dependency_returns_501(self, sample_table: TableDefinition):
         # Must be checked before the streamed Response is built — by the time
         # export() would raise inside the generator body, headers (and the 200
         # status) are already committed and can no longer be changed.
         mixin = self._make_mixin()
-        with (
-            mock.patch.object(XLSXExporter, "is_available", return_value=False),
-            mock.patch("ckanext.tables.generics.tk.abort") as mock_abort,
-        ):
-            mock_abort.side_effect = Exception("501")
-            with pytest.raises(Exception, match="501"):
-                mixin._export(sample_table, "xlsx")
+        with mock.patch.object(XLSXExporter, "is_available", return_value=False):
+            response, status = mixin._export(sample_table, "xlsx")
 
-        assert mock_abort.call_args[0][0] == 501
+        assert status == 501
+        data = json.loads(response.get_data(as_text=True))
+        assert data["success"] is False
+        assert data["error"]
 
     def test_export_csv(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
@@ -245,19 +244,19 @@ class TestExportTableMixin:
         data = json.loads(response.data)
         assert isinstance(data, list)
 
-    def test_export_over_row_cap_aborts_without_exporting(self, sample_table: TableDefinition):
+    def test_export_over_row_cap_returns_413_without_exporting(self, sample_table: TableDefinition):
         """A result set larger than the configured cap must be rejected (413), not exported."""
         mixin = self._make_mixin()
         with (
             mock.patch("ckanext.tables.generics.get_export_max_rows", return_value=1),
-            mock.patch("ckanext.tables.generics.tk.abort") as mock_abort,
             mock.patch.object(CSVExporter, "export_stream") as mock_export_stream,
         ):
-            mock_abort.side_effect = Exception("413")
-            with pytest.raises(Exception, match="413"):
-                mixin._export(sample_table, "csv")
+            response, status = mixin._export(sample_table, "csv")
 
-        assert mock_abort.call_args[0][0] == 413
+        assert status == 413
+        data = json.loads(response.get_data(as_text=True))
+        assert data["success"] is False
+        assert data["error"]
         assert not mock_export_stream.called
 
     def test_export_at_row_cap_is_allowed(self, sample_table: TableDefinition):

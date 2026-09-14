@@ -7,3 +7,17 @@
         width: 0%;
     }
 }
+
+@keyframes tables-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.tables-icon-spin {
+    animation: tables-spin 1s linear infinite;
+}

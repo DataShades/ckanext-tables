@@ -114,10 +114,43 @@ describe("_onTableExportClick", () => {
         );
     });
 
+    it("shows a spinner on the toggle icon while exporting and restores it once done", async () => {
+        const { toggle, tableExportersMenu, button } = buildExportersMenu("csv", "CSV");
+        const icon = document.createElement("i");
+        icon.className = "fa fa-download";
+        toggle.appendChild(icon);
+
+        const blob = new Blob(["a,b\n1,2"], { type: "text/csv" });
+        let resolveFetch: (value: unknown) => void = () => {};
+        const fetchMock = vi.fn(() => new Promise((resolve) => (resolveFetch = resolve)));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const instance = makeInstance({
+            tableExportersMenu,
+            table: { getSorters: () => [] },
+            tableFilters: [],
+            sandbox: { client: { url: (u: string) => u } },
+            options: { config: { ajaxURL: "/table" } },
+            _showToast: vi.fn(),
+        });
+
+        const clickPromise = instance._onTableExportClick({ target: button } as unknown as Event);
+        await Promise.resolve();
+
+        expect(icon.className).toBe("fa fa-spinner tables-icon-spin");
+        expect(toggle.getAttribute("aria-busy")).toBe("true");
+
+        resolveFetch({ ok: true, blob: () => Promise.resolve(blob), headers: { get: () => null } });
+        await clickPromise;
+
+        expect(icon.className).toBe("fa fa-download");
+        expect(toggle.hasAttribute("aria-busy")).toBe(false);
+    });
+
     it("shows a failure toast and re-enables controls when the response isn't ok", async () => {
         const { tableExportersMenu, button } = buildExportersMenu("xlsx", "XLSX");
         const showToast = vi.fn();
-        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: () => Promise.resolve({}) }));
         const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
         const instance = makeInstance({
@@ -133,6 +166,58 @@ describe("_onTableExportClick", () => {
 
         expect(showToast).toHaveBeenCalledWith(expect.stringContaining("failed"), "danger", false);
         expect(button.disabled).toBe(false);
+        consoleError.mockRestore();
+    });
+
+    it("shows the server's error detail (e.g. row cap exceeded) instead of a generic message", async () => {
+        const { tableExportersMenu, button } = buildExportersMenu("csv", "CSV");
+        const showToast = vi.fn();
+        const serverMessage = "Cannot export 15000 rows: the maximum is 10000. Add filters to narrow the result set.";
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: false,
+                json: () => Promise.resolve({ success: false, error: serverMessage }),
+            })
+        );
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        const instance = makeInstance({
+            tableExportersMenu,
+            table: { getSorters: () => [] },
+            tableFilters: [],
+            sandbox: { client: { url: (u: string) => u } },
+            options: { config: { ajaxURL: "/table" } },
+            _showToast: showToast,
+        });
+
+        await instance._onTableExportClick({ target: button } as unknown as Event);
+
+        expect(showToast).toHaveBeenCalledWith(serverMessage, "danger", false);
+        consoleError.mockRestore();
+    });
+
+    it("falls back to a generic message when the error body isn't JSON", async () => {
+        const { tableExportersMenu, button } = buildExportersMenu("csv", "CSV");
+        const showToast = vi.fn();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({ ok: false, json: () => Promise.reject(new Error("not json")) })
+        );
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        const instance = makeInstance({
+            tableExportersMenu,
+            table: { getSorters: () => [] },
+            tableFilters: [],
+            sandbox: { client: { url: (u: string) => u } },
+            options: { config: { ajaxURL: "/table" } },
+            _showToast: showToast,
+        });
+
+        await instance._onTableExportClick({ target: button } as unknown as Event);
+
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining("failed"), "danger", false);
         consoleError.mockRestore();
     });
 });

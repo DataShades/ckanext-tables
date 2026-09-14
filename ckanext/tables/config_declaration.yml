@@ -29,6 +29,7 @@ groups:
         example: "/var/cache/ckanext-tables"
 
       - key: ckanext.tables.cache.ttl
+        type: int
         default: 3600
         description: |
           Time-to-live (in seconds) for cached data. After this period, cached
@@ -48,6 +49,7 @@ groups:
       (a maximum size, enforced while streaming).
     options:
       - key: ckanext.tables.fetch.connect_timeout
+        type: int
         default: 5
         description: |
           Maximum time (in seconds) to wait for a connection to the remote host to be established
@@ -55,6 +57,7 @@ groups:
         example: 5
 
       - key: ckanext.tables.fetch.read_timeout
+        type: int
         default: 30
         description: |
           Maximum time (in seconds) to wait between bytes received from the remote host before
@@ -62,6 +65,7 @@ groups:
         example: 30
 
       - key: ckanext.tables.fetch.max_bytes
+        type: int
         default: 209715200
         description: |
           Maximum response size (in bytes) accepted from a remote resource/`file_url`. Enforced
@@ -76,6 +80,7 @@ groups:
       PDF) — since request parameters like page size are controlled by the client, not the server.
     options:
       - key: ckanext.tables.pagination.max_page_size
+        type: int
         default: 100
         description: |
           Maximum number of rows a single AJAX page request (`?size=...`) may return. Requests
@@ -85,6 +90,7 @@ groups:
         example: 100
 
       - key: ckanext.tables.export.max_rows
+        type: int
         default: 50000
         description: |
           Maximum number of rows a single export may contain. Every exporter fetches the full

@@ -100,19 +100,19 @@ class AjaxTableMixin:
 
 
 class ExportTableMixin:
-    def _export(self, table: TableDefinition, exporter_name: str) -> Response:
+    def _export(self, table: TableDefinition, exporter_name: str) -> Response | tuple[Response, int]:
         exporter = table.get_exporter(exporter_name)
 
         if not exporter:
             message = tk._("Exporter %(name)s not found") % {"name": exporter_name}
-            return tk.abort(404, message)
+            return jsonify({"success": False, "error": message}), 404
 
         if not exporter.is_available():
             log.warning("Exporter %s is unavailable: a required dependency is not installed", exporter_name)
             message = tk._("%(label)s export is not available: a required dependency is not installed.") % {
                 "label": exporter.label
             }
-            return tk.abort(501, message)
+            return jsonify({"success": False, "error": message}), 501
 
         params = tables_build_params()
         total = table.get_total_count(params)
@@ -122,7 +122,7 @@ class ExportTableMixin:
             message = tk._(
                 "Cannot export %(total)d rows: the maximum is %(max_rows)d. Add filters to narrow the result set."
             ) % {"total": total, "max_rows": max_rows}
-            return tk.abort(413, message)
+            return jsonify({"success": False, "error": message}), 413
 
         filename = self._prepare_export_filename(table, exporter)
 

@@ -53,6 +53,8 @@ class PeopleTable(TableDefinition):
 | `501` | A requested exporter's optional dependency isn't installed. |
 | `502` | The data source itself failed (`DataSourceError`) — for AJAX data, or while resolving a resource view's table. |
 
+The three export failures (`404`/`413`/`501`) carry a `{"success": false, "error": "..."}` JSON body, same shape as the POST envelope below, so the client can show the real reason (e.g. "Cannot export 15,000 rows: the maximum is 10,000...") instead of a generic failure message. `400`/`403` don't — those come from `tk.abort()` before any table-specific handling runs.
+
 **POST** — table/row/bulk actions and cache refresh — always returns `200` with a fixed JSON envelope, regardless of whether the action succeeded, doesn't exist, or raised:
 
 ```json
