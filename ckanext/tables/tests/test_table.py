@@ -330,20 +330,27 @@ class TestTableDefinitionFormatters:
 
 @pytest.mark.usefixtures("with_request_context", "clean_redis")
 class TestTableDefinitionCacheIntegration:
-    def test_refresh_data_no_error(self, simple_data):
+    def test_refresh_data_on_empty_cache_leaves_it_empty(self, simple_data):
+        """refresh_data() must not raise when there's nothing cached to invalidate."""
         from ckanext.tables.cache import RedisCacheBackend
         from ckanext.tables.data_sources import CsvUrlDataSource
+
+        backend = RedisCacheBackend()
 
         with mock.patch("ckanext.tables.data_sources.pd.read_csv") as mock_read:
             import pandas as pd
 
             mock_read.return_value = pd.DataFrame(simple_data)
-            ds = CsvUrlDataSource(url="http://example.com/data.csv", cache_backend=RedisCacheBackend())
+            ds = CsvUrlDataSource(url="http://example.com/data.csv", cache_backend=backend)
 
-        tbl = TableDefinition(name="cached_tbl", data_source=ds)
-        tbl.refresh_data()  # should not raise even if cache is empty
+        assert backend.get(ds.get_cache_key()) is None
 
-    def test_count_caching_returns_consistent_value(self, simple_data):
+        TableDefinition(name="cached_tbl", data_source=ds).refresh_data()
+
+        assert backend.get(ds.get_cache_key()) is None
+
+    def test_count_caching_avoids_recomputing_the_count(self, simple_data):
+        """A second get_total_count() with the same filters must hit the cache, not recount."""
         from ckanext.tables.cache import RedisCacheBackend
         from ckanext.tables.data_sources import CsvUrlDataSource
 
@@ -357,7 +364,16 @@ class TestTableDefinitionCacheIntegration:
 
         tbl = TableDefinition(name="count_cache_tbl", data_source=ds)
         params = QueryParams()
-        assert tbl.get_total_count(params) == tbl.get_total_count(params)
+
+        assert ds.get_cached_count(params.filters) is None
+
+        with mock.patch.object(ds, "count", wraps=ds.count) as mock_count:
+            first = tbl.get_total_count(params)
+            second = tbl.get_total_count(params)
+
+        assert first == second == len(simple_data)
+        mock_count.assert_called_once()
+        assert ds.get_cached_count(params.filters) == len(simple_data)
 
     def test_refresh_data_invalidates_the_dataframe(self, simple_data, tmp_path):
         # refresh_data() used to delete "table:<name>", a key the DataFrame was never

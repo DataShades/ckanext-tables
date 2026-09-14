@@ -1,6 +1,3 @@
-import os
-import shutil
-
 import pytest
 
 from ckanext.datastore.tests.conftest import clean_datastore  # noqa: F401
@@ -11,28 +8,11 @@ from ckanext.tables.table import ColumnDefinition, TableDefinition
 
 
 @pytest.fixture
-def clear_cache():
-    """Fixture to provide a temporary cache directory."""
-    cache_dir = config.get_cache_dir()
+def clear_cache(tmp_path, monkeypatch):
+    """Point the default (config-driven) cache dir at an isolated tmp_path."""
+    monkeypatch.setitem(config.tk.config, config.CONF_CACHE_DIR, str(tmp_path))
 
-    clear_directory(cache_dir)
-
-    yield cache_dir
-
-    clear_directory(cache_dir)
-
-
-def clear_directory(path):
-    if not os.path.exists(path):
-        os.mkdir(path)
-
-    for entry in os.listdir(path):
-        full_path = os.path.join(path, entry)
-
-        if os.path.isdir(full_path):
-            shutil.rmtree(full_path)
-        else:
-            os.remove(full_path)
+    return str(tmp_path)
 
 
 @pytest.fixture

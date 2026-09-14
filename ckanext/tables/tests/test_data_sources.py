@@ -1179,13 +1179,27 @@ class TestUrlDataSourceErrorPaths:
 class TestDatabaseDataSource:
     """Tests for DatabaseDataSource using CKAN's test DB."""
 
+    @pytest.mark.usefixtures("clean_db")
     def test_filter_sort_paginate(self):
-        """Test filter, sort, and paginate on the CKAN user table."""
-        ds = DatabaseDataSource(select(model.User))
+        """filter/sort/paginate must actually narrow, order, and page the real result set."""
+        factories.User(name="a-user")
+        factories.User(name="b-user")
+        factories.User(name="c-user")
 
-        # Just ensure methods chain without error and return lists
-        result = ds.filter([]).sort(None, None).paginate(1, 5).all()
-        assert isinstance(result, list)
+        # exclude site-user with empty email
+        ds = DatabaseDataSource(select(model.User.name).filter(model.User.email.is_not(None)))
+
+        # paginate(1, 2) returns exactly the first 2 of the 3 rows, in ascending order.
+        page = ds.filter([]).sort("name", "asc").paginate(1, 2).all()
+        assert [row["name"] for row in page] == ["a-user", "b-user"]
+
+        # A filter narrows the result to the matching row only.
+        filtered = ds.filter([FilterItem("name", "=", "b-user")]).all()
+        assert [row["name"] for row in filtered] == ["b-user"]
+
+        # Descending sort reverses the order.
+        desc = ds.filter([]).sort("name", "desc").paginate(1, 3).all()
+        assert [row["name"] for row in desc] == ["c-user", "b-user", "a-user"]
 
     def test_get_columns(self):
         ds = DatabaseDataSource(select(model.User))
@@ -1208,11 +1222,17 @@ class TestDatabaseDataSource:
         assert isinstance(row["created"], str)
         datetime.fromisoformat(row["created"])
 
+    @pytest.mark.usefixtures("clean_db")
     def test_count(self):
-        ds = DatabaseDataSource(select(model.User))
-        ds.filter([])
-        count = ds.count()
-        assert count >= 0
+        """count() must reflect the current filter, not the whole table."""
+        factories.User(name="counted-a")
+        factories.User(name="counted-b")
+
+        ds = DatabaseDataSource(select(model.User.name).filter(model.User.email.is_not(None)))
+
+        assert ds.filter([]).count() == 2
+        assert ds.filter([FilterItem("name", "=", "counted-a")]).count() == 1
+        assert ds.filter([FilterItem("name", "=", "nonexistent")]).count() == 0
 
     def test_build_filter_boolean(self):
         # We only test the type-casting logic via the build_filter method

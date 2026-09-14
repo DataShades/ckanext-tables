@@ -8,8 +8,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
 
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci
+      - name: Run JS/TS tests
+        run: npm test
+      - name: Build and verify compiled assets match source
+        run: |
+          npm run build
+          npm run ts-build
+          git diff --exit-code -- ckanext/tables/assets/js ckanext/tables/assets/css
+
   test:
-    needs: lint
+    needs: [lint, frontend]
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +84,9 @@ jobs:
         run: pytest --ckan-ini=test.ini --cov=ckanext.tables --disable-warnings ckanext/tables
 
       - name: Upload coverage to Coveralls
+        # A PR from a fork doesn't get repo secrets, so COVERALLS_REPO_TOKEN is
+        # never available there — skip instead of failing an otherwise-green run.
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
         run: |
