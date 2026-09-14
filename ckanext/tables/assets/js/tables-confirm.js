@@ -139,7 +139,9 @@
     closeBtn: ".btn-close",
   };
 
-  // Add to ckan namespace
-  ckan.tablesConfirm = confirm;
+  // CKAN 2.12+ ships this same confirm dialog under `ckan.confirm`; prefer it
+  // when present and only fall back to this copy on older CKAN versions (2.11).
+  // Consider removing this fallback when the 2.12 is the minimal CKAN version.
+  ckan.tablesConfirm = ckan.confirm || confirm;
 
 })(this.ckan, this.jQuery);

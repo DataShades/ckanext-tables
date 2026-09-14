@@ -1,10 +1,5 @@
 /**
  * Tabulator integration for ckanext-tables
- *
- * Note:
- *  Replace the `ckan.tablesConfirm` and `ckan.tablesToast` functions with the `ckan.confirm` and `ckan.toast` from CKAN core
- *  when CKAN 2.12 is the minimum supported version.
- *
  */
 
 namespace ckan {

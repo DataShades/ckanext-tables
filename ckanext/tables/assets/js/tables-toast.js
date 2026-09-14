@@ -160,8 +160,8 @@
     const positionClasses = toast.options.positions[position] || toast.options.positions["bottom-right"];
 
     wrapper.classList.add("position-relative");
-    wrapper.setAttribute("role", opts.style === "danger" ? "alert" : "status");
-    wrapper.setAttribute("aria-live", opts.style === "danger" ? "assertive" : "polite");
+    wrapper.setAttribute("role", opts.type === "danger" ? "alert" : "status");
+    wrapper.setAttribute("aria-live", opts.type === "danger" ? "assertive" : "polite");
     wrapper.setAttribute("aria-atomic", "true");
 
     wrapper.innerHTML = `<div id="${containerID}" class="toast-container position-fixed pb-1 ${positionClasses}"></div>`;
@@ -191,7 +191,8 @@
     return progressEl;
   };
 
-  // add the toast function to the sandbox and ckan namespace
-  ckan.tablesToast = toast;
+  // CKAN 2.12+ ships this same toast under `ckan.toast`; prefer it when present
+  // and only fall back to this copy on older CKAN versions (2.11).
+  ckan.tablesToast = ckan.toast || toast;
 
 })(this.ckan, this.jQuery);
