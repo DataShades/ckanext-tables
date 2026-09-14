@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import csv
 import decimal
+import importlib
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ import re
 import tempfile
 import threading
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from datetime import date, datetime
 from itertools import islice
 from typing import Any, ClassVar
@@ -23,8 +24,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from pyarrow import feather, orc
 from sqlalchemy import String, cast
-from sqlalchemy.engine import RowMapping
-from sqlalchemy.sql import Select, func, select
+from sqlalchemy.sql import func, select
 from sqlalchemy.sql.elements import ColumnElement
 from typing_extensions import Self
 
@@ -95,7 +95,8 @@ class DatabaseDataSource(BaseDataSource):
         stmt: The SQLAlchemy statement to use as the data source
     """
 
-    def __init__(self, stmt: Select[Any]):
+    def __init__(self, stmt: Any):
+        # Switch `stmt: Any` to `Select[Any]` on CKAN 2.12 min
         self.base_stmt = stmt
         self.stmt = stmt
 
@@ -114,7 +115,7 @@ class DatabaseDataSource(BaseDataSource):
 
         return self
 
-    def build_filter(self, column: ColumnElement[Any], operator: str, value: str) -> ColumnElement[bool] | None:
+    def build_filter(self, column: ColumnElement[Any], operator: str, value: str) -> ColumnElement[Any] | None:
         if operator == "like":
             # Cast to text so LIKE works on non-string columns too (numeric, date,
             # UUID, ...), matching the pandas/arrow data sources' str.contains() /
@@ -152,7 +153,7 @@ class DatabaseDataSource(BaseDataSource):
 
         operators: dict[
             str,
-            Callable[[ColumnElement[Any], Any], ColumnElement[bool] | None],
+            Callable[[ColumnElement[Any], Any], ColumnElement[Any] | None],
         ] = {
             "=": lambda col, val: col == val,
             "<": lambda col, val: col < val,
@@ -190,7 +191,7 @@ class DatabaseDataSource(BaseDataSource):
     def all(self) -> list[dict[str, Any]]:
         return [self.serialize_row(row) for row in model.Session.execute(self.stmt).mappings().all()]
 
-    def serialize_row(self, row: RowMapping) -> dict[str, Any]:
+    def serialize_row(self, row: Mapping[Any, Any]) -> dict[str, Any]:
         return {k: self.serialize_value(v) for k, v in row.items()}
 
     def count(self) -> int:
@@ -866,7 +867,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
             yield local_path
             return
 
-        from ckan.lib import files  # noqa: PLC0415 — only importable on CKAN 2.12+
+        files = importlib.import_module("ckan.lib.files")
 
         fd, tmp_path = tempfile.mkstemp(prefix="ckanext-tables-")
 
