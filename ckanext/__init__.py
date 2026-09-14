@@ -1,7 +1,8 @@
 # this is a namespace package
-try:
-    import pkg_resources  # pyright: ignore
+import importlib
 
+try:
+    pkg_resources = importlib.import_module("pkg_resources")
     pkg_resources.declare_namespace(__name__)
 except ImportError:
     import pkgutil

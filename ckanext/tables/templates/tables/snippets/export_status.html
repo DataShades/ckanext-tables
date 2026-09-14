@@ -1,0 +1,36 @@
+{#
+    Status of one background export job — see ExportStatusHandler
+    (views.py) and export_jobs.py. Rendered both as a full page (direct
+    navigation, e.g. from the "export started" toast's link) and as the
+    self-polling htmx fragment that page embeds.
+
+    Vars:
+    - status: "queued" | "started" | "finished" | "failed" | "not_found"
+    - result: the job's result dict (only set for "finished"/"failed"), or None
+    - download_url: set only when status == "finished" and the job succeeded
+    - self_url: this same status endpoint's URL, for the "still running" poll
+#}
+{% if status in ("queued", "started") %}
+    <div class="table-export-status d-flex align-items-center gap-2"
+        hx-get="{{ self_url }}" hx-trigger="every 2s" hx-swap="outerHTML">
+        <i class="fa fa-spinner tables-icon-spin" aria-hidden="true"></i>
+        <span>{{ _("Rendering your export…") }}</span>
+    </div>
+{% elif status == "finished" and download_url %}
+    <div class="table-export-status alert alert-success d-flex align-items-center justify-content-between gap-3">
+        <span><i class="fa fa-circle-check me-1" aria-hidden="true"></i> {{ _("Your export is ready.") }}</span>
+        <a class="btn btn-sm btn-success" href="{{ download_url }}">
+            <i class="fa fa-download me-1" aria-hidden="true"></i> {{ _("Download") }}
+        </a>
+    </div>
+{% elif status == "failed" %}
+    <div class="table-export-status alert alert-danger d-flex align-items-center gap-2">
+        <i class="fa fa-triangle-exclamation me-1" aria-hidden="true"></i>
+        <span>{{ result.error if result else _("This export failed.") }}</span>
+    </div>
+{% else %}
+    <div class="table-export-status alert alert-secondary d-flex align-items-center gap-2">
+        <i class="fa fa-circle-question me-1" aria-hidden="true"></i>
+        <span>{{ _("This export no longer exists — it may have expired.") }}</span>
+    </div>
+{% endif %}

@@ -101,3 +101,36 @@ groups:
           is refused (HTTP 413) rather than silently truncated; narrow the result set with
           filters instead.
         example: 50000
+
+  - annotation: Background export settings
+    description: >
+      HTML, PDF, and XLSX exports render their whole output synchronously (WeasyPrint/openpyxl
+      have no incremental mode), so these run as a background job via CKAN's existing RQ worker
+      instead of inside the request. CSV, TSV, JSON, YAML, and NDJSON stream directly and are
+      unaffected by these options.
+    options:
+      - key: ckanext.tables.export.export_dir
+        placeholder: "%(ckan.storage_path)s/tables-exports"
+        description: |
+          Directory where finished background-export files are written, read back from by the
+          download endpoint once a job completes.
+
+          Defaults to a `tables-exports` subdirectory of `ckan.storage_path`, or of the system
+          temp directory if that is not configured — a sibling of the resource-data cache dir,
+          not a subdirectory of it, so an export job id and a cache key never share a directory.
+
+          Same safety model as `ckanext.tables.cache.cache_dir`: created automatically with
+          permissions restricted to the CKAN process user (mode `0700`) if it doesn't exist; if
+          it already exists but is owned by another user or is writable by other users/groups,
+          it is refused (a warning is logged) rather than falling back to a shared location.
+        example: "/var/cache/ckanext-tables-exports"
+
+      - key: ckanext.tables.export.job_ttl
+        type: int
+        default: 3600
+        description: |
+          How long (in seconds) a finished background export's file and job record are kept
+          before `ckan tables clean-exports` sweeps them. Not enforced automatically — nothing
+          deletes a finished export just because this TTL has passed until that command runs;
+          schedule it from cron the same way as `ckan tables clean-cache`.
+        example: 3600

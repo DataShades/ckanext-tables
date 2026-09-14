@@ -4,6 +4,7 @@ import json
 import logging
 from datetime import datetime as dt
 from datetime import timezone as tz
+from typing import Any
 
 from flask import Response, jsonify, request, stream_with_context
 from flask.views import MethodView
@@ -11,10 +12,11 @@ from flask.views import MethodView
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables import exporters
-from ckanext.tables.config import get_export_max_rows
+from ckanext.tables.config import get_export_dir, get_export_max_rows
 from ckanext.tables.data_sources import DataSourceError
+from ckanext.tables.export_jobs import run_export_job
 from ckanext.tables.table import TableDefinition
-from ckanext.tables.types import ActionHandlerResult
+from ckanext.tables.types import ActionHandlerResult, QueryParams
 from ckanext.tables.utils import tables_build_params
 
 log = logging.getLogger(__name__)
@@ -124,6 +126,9 @@ class ExportTableMixin:
             ) % {"total": total, "max_rows": max_rows}
             return jsonify({"success": False, "error": message}), 413
 
+        if exporter.is_background and (locator := self._export_locator(table)):
+            return self._enqueue_export(table, exporter, params, locator)
+
         filename = self._prepare_export_filename(table, exporter)
 
         return Response(
@@ -131,6 +136,59 @@ class ExportTableMixin:
             mimetype=exporter.mime_type,
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    def _export_locator(self, table: TableDefinition) -> dict[str, Any] | None:
+        """Return a JSON-serialisable locator a background job can rebuild *table* from.
+
+        ``None`` means this view doesn't support background exports — see
+        ``run_export_job``'s docstring for what a locator needs to contain.
+        Overridden by ``ResourceViewHandler`` and ``GenericTableView`` below.
+        """
+        return None
+
+    def _export_status_url(self, job_id: str) -> str:
+        """Build the status-page URL for a background export job.
+
+        Job status/download routes take only a job id — see
+        ``export_jobs.check_export_locator_access``, which re-derives the
+        access check from the job's own locator instead of needing anything
+        view-specific in the URL — so this one implementation covers every
+        view.
+        """
+        return tk.url_for("tables.table_export_status", job_id=job_id)
+
+    def _enqueue_export(
+        self,
+        table: TableDefinition,
+        exporter: type[exporters.ExporterBase],
+        params: QueryParams,
+        locator: dict[str, Any],
+    ) -> tuple[Response, int]:
+        export_dir = get_export_dir()
+
+        if export_dir is None:
+            message = tk._("Background export is not available right now: no usable export directory.")
+            return jsonify({"success": False, "error": message}), 503
+
+        params_dict = {
+            "filters": [{"field": f.field, "operator": f.operator, "value": f.value} for f in params.filters],
+            "sort_by": params.sort_by,
+            "sort_order": params.sort_order,
+        }
+
+        job = tk.enqueue_job(
+            run_export_job,
+            args=[locator, exporter.name, params_dict, export_dir],
+            title=f"{table.name} {exporter.name} export",
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "job_id": job.id,
+                "status_url": self._export_status_url(job.id),
+            }
+        ), 202
 
     def _prepare_export_filename(self, table: TableDefinition, exporter: type[exporters.ExporterBase]) -> str:
         timestamp = dt.now(tz.utc).strftime("%Y-%m-%d %H-%M-%S")
@@ -203,6 +261,10 @@ class GenericTableView(TableDispatchMixin, MethodView):
         self.table = table
         self.breadcrumb_label = breadcrumb_label if breadcrumb_label is not None else tk._("Table")
         self.page_title = page_title
+
+    def _export_locator(self, table: TableDefinition) -> dict[str, Any]:
+        cls = self.table
+        return {"kind": "generic", "table_class": f"{cls.__module__}.{cls.__qualname__}"}
 
     def get(self) -> str | Response | tuple[Response, int]:
         if not self.check_access():

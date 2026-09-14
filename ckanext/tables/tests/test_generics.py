@@ -6,6 +6,7 @@ import pytest
 import ckan.plugins.toolkit as tk
 
 from ckanext.tables.data_sources import DataSourceError, ListDataSource
+from ckanext.tables.export_jobs import run_export_job
 from ckanext.tables.exporters import CSVExporter, JSONExporter, XLSXExporter
 from ckanext.tables.generics import (
     _GENERIC_ACTION_ERROR as GENERIC_ACTION_ERROR,
@@ -266,6 +267,61 @@ class TestExportTableMixin:
             response = mixin._export(sample_table, "csv")
         assert "text/csv" in response.content_type
 
+    def test_background_exporter_runs_synchronously_when_the_view_has_no_locator(self, sample_table: TableDefinition):
+        """The base _export_locator returns None for a view that never overrides it.
+
+        A background-flagged exporter must still work there, just synchronously,
+        rather than the request failing outright.
+        """
+        mixin = self._make_mixin()
+        with mock.patch.object(XLSXExporter, "is_available", return_value=True):
+            response = mixin._export(sample_table, "xlsx")
+
+        assert response.status_code == 200
+        assert response.mimetype == XLSXExporter.mime_type
+
+    def test_background_exporter_enqueues_a_job_when_the_view_has_a_locator(self, sample_table: TableDefinition):
+        mixin = self._make_mixin()
+        locator = {"kind": "resource_view", "resource_id": "res-1", "resource_view_id": "view-1"}
+        mixin._export_locator = mock.Mock(return_value=locator)
+        mixin._export_status_url = mock.Mock(return_value="/status/job-1")
+
+        fake_job = mock.Mock(id="job-1")
+
+        with (
+            mock.patch.object(XLSXExporter, "is_available", return_value=True),
+            mock.patch("ckanext.tables.generics.get_export_dir", return_value="/tmp/exports"),
+            mock.patch("ckanext.tables.generics.tk.enqueue_job", return_value=fake_job) as mock_enqueue,
+        ):
+            response, status = mixin._export(sample_table, "xlsx")
+
+        assert status == 202
+        data = json.loads(response.get_data(as_text=True))
+        assert data == {"success": True, "job_id": "job-1", "status_url": "/status/job-1"}
+
+        mock_enqueue.assert_called_once()
+        fn = mock_enqueue.call_args.args[0]
+        job_args = mock_enqueue.call_args.kwargs["args"]
+        assert fn is run_export_job
+        assert job_args[0] == locator
+        assert job_args[1] == "xlsx"
+        assert job_args[3] == "/tmp/exports"
+
+    def test_background_export_returns_503_without_a_usable_export_dir(self, sample_table: TableDefinition):
+        mixin = self._make_mixin()
+        mixin._export_locator = mock.Mock(return_value={"kind": "resource_view"})
+
+        with (
+            mock.patch.object(XLSXExporter, "is_available", return_value=True),
+            mock.patch("ckanext.tables.generics.get_export_dir", return_value=None),
+        ):
+            response, status = mixin._export(sample_table, "xlsx")
+
+        assert status == 503
+        data = json.loads(response.get_data(as_text=True))
+        assert data["success"] is False
+        assert data["error"]
+
     def test_prepare_export_filename(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
         filename = mixin._prepare_export_filename(sample_table, CSVExporter)
@@ -314,6 +370,13 @@ class TestGenericTableView:
 
     def test_check_access_allowed(self, view):
         assert view.check_access() is True
+
+    def test_export_locator_uses_the_registered_table_class(self, view):
+        tbl = view.table()
+
+        locator = view._export_locator(tbl)
+
+        assert locator == {"kind": "generic", "table_class": f"{view.table.__module__}.{view.table.__qualname__}"}
 
     def test_check_access_denied(self, simple_data: list[dict[str, str | int]]):
         class RestrictedTable(TableDefinition):

@@ -124,6 +124,28 @@ def parse_tabulator_filters() -> list[FilterItem]:
     ]
 
 
+def tables_get_resource_and_view(resource_id: str, resource_view_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fetch and authorise a resource and a resource view, confirming they actually belong together."""
+    try:
+        resource = tk.get_action("resource_show")({"ignore_auth": False}, {"id": resource_id})
+    except tk.ObjectNotFound:
+        return tk.abort(404, tk._("Resource not found"))
+    except tk.NotAuthorized:
+        return tk.abort(403, tk._("Not authorized to view this resource"))
+
+    try:
+        resource_view = tk.get_action("resource_view_show")({"ignore_auth": False}, {"id": resource_view_id})
+    except tk.ObjectNotFound:
+        return tk.abort(404, tk._("Resource view not found"))
+    except tk.NotAuthorized:
+        return tk.abort(403, tk._("Not authorized to view this resource"))
+
+    if resource_view["resource_id"] != resource["id"]:
+        return tk.abort(404, tk._("Resource view not found"))
+
+    return resource, resource_view
+
+
 def tables_init_temporary_preview_table(
     resource: dict[str, Any],
     resource_view: dict[str, Any],

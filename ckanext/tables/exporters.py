@@ -36,6 +36,7 @@ class ExporterBase:
     name: str
     label: str
     mime_type: str
+    is_background: bool = False
 
     @classmethod
     def is_available(cls) -> bool:
@@ -127,6 +128,7 @@ class XLSXExporter(ExporterBase):
     name = "xlsx"
     label = tk._("Excel")
     mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    is_background = True
 
     @classmethod
     def is_available(cls) -> bool:
@@ -215,6 +217,7 @@ class HTMLExporter(ExporterBase):
     name = "html"
     label = tk._("HTML")
     mime_type = "text/html"
+    is_background = True
 
     @classmethod
     def export(cls, table: "TableDefinition", params: "QueryParams") -> bytes:
@@ -241,6 +244,7 @@ class PDFExporter(ExporterBase):
     name = "pdf"
     label = tk._("PDF")
     mime_type = "application/pdf"
+    is_background = True
 
     @classmethod
     def is_available(cls) -> bool:

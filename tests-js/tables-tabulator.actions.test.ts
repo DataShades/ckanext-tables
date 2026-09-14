@@ -33,6 +33,17 @@ describe("_showToast", () => {
 
         expect(tablesToast).toHaveBeenCalledWith(expect.objectContaining({ type: "default", stacking: true }));
     });
+
+    it("passes delay through only when given, leaving ckan.tablesToast's own default otherwise", () => {
+        const tablesToast = vi.fn();
+        const instance = makeInstance({}, undefined, { tablesToast });
+
+        instance._showToast("Saved");
+        expect(tablesToast.mock.calls[0][0]).not.toHaveProperty("delay");
+
+        instance._showToast("Saved", "default", true, 10000);
+        expect(tablesToast.mock.calls[1][0]).toHaveProperty("delay", 10000);
+    });
 });
 
 describe("_confirmAction", () => {

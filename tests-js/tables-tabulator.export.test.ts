@@ -25,6 +25,7 @@ beforeEach(() => {
 afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
 });
 
 describe("_onTableExportClick", () => {
@@ -147,6 +148,44 @@ describe("_onTableExportClick", () => {
         expect(toggle.hasAttribute("aria-busy")).toBe(false);
     });
 
+    it("shows a toast with a link to the status page for a background export (202), and starts tracking it, without downloading anything itself", async () => {
+        const { tableExportersMenu, button } = buildExportersMenu("pdf", "PDF");
+        const showToast = vi.fn();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: true,
+                status: 202,
+                json: () => Promise.resolve({ success: true, job_id: "abc123", status_url: "/export-status/abc123" }),
+            })
+        );
+
+        const instance = makeInstance({
+            tableExportersMenu,
+            table: { getSorters: () => [] },
+            tableFilters: [],
+            sandbox: { client: { url: (u: string) => u } },
+            options: { config: { ajaxURL: "/table" } },
+            _showToast: showToast,
+        });
+        // The poll loop itself has its own dedicated tests below — stub it out
+        // here so this test isn't also on the hook for controlling its timers.
+        const pollExportStatus = vi.spyOn(instance, "_pollExportStatus").mockImplementation(() => {});
+
+        await instance._onTableExportClick({ target: button } as unknown as Event);
+
+        expect((URL.createObjectURL as any)).not.toHaveBeenCalled();
+        expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+
+        const backgroundToastCall = showToast.mock.calls.find((call) => String(call[0]).includes("/export-status/abc123"));
+        expect(backgroundToastCall).toBeDefined();
+        expect(backgroundToastCall![1]).toBe("default");
+        expect(backgroundToastCall![2]).toBe(false);
+        expect(backgroundToastCall![3]).toBe(10000);
+
+        expect(pollExportStatus).toHaveBeenCalledWith("/export-status/abc123", "PDF", expect.any(Function));
+    });
+
     it("shows a failure toast and re-enables controls when the response isn't ok", async () => {
         const { tableExportersMenu, button } = buildExportersMenu("xlsx", "XLSX");
         const showToast = vi.fn();
@@ -219,6 +258,128 @@ describe("_onTableExportClick", () => {
 
         expect(showToast).toHaveBeenCalledWith(expect.stringContaining("failed"), "danger", false);
         consoleError.mockRestore();
+    });
+});
+
+describe("_pollExportStatus", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    it("auto-downloads and toasts once the job finishes", async () => {
+        const showToast = vi.fn();
+        const resetUi = vi.fn();
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            json: () =>
+                Promise.resolve({ status: "finished", download_url: "/export-download/abc123", error: null }),
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const instance = makeInstance({ _showToast: showToast });
+
+        instance._pollExportStatus("/export-status/abc123", "PDF", resetUi);
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(fetchMock).toHaveBeenCalledWith("/export-status/abc123", {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        expect((HTMLAnchorElement.prototype.click as any).mock.contexts[0].href).toContain(
+            "/export-download/abc123"
+        );
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining("PDF"), "default", false);
+        expect(resetUi).toHaveBeenCalledTimes(1);
+
+        // Nothing further is scheduled once the job has reached a terminal state.
+        fetchMock.mockClear();
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("toasts the server's error and stops when the job fails", async () => {
+        const showToast = vi.fn();
+        const resetUi = vi.fn();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ status: "failed", download_url: null, error: "Disk full" }),
+            })
+        );
+
+        const instance = makeInstance({ _showToast: showToast });
+
+        instance._pollExportStatus("/export-status/abc123", "PDF", resetUi);
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+        expect(showToast).toHaveBeenCalledWith("Disk full", "danger", false);
+        expect(resetUi).toHaveBeenCalledTimes(1);
+    });
+
+    it("toasts and stops when the job id is no longer known to the server", async () => {
+        const showToast = vi.fn();
+        const resetUi = vi.fn();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ status: "not_found", download_url: null, error: null }),
+            })
+        );
+
+        const instance = makeInstance({ _showToast: showToast });
+
+        instance._pollExportStatus("/export-status/abc123", "PDF", resetUi);
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining("PDF"), "danger", false);
+        expect(resetUi).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives up and toasts a timeout after the max number of attempts", async () => {
+        const showToast = vi.fn();
+        const resetUi = vi.fn();
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ status: "started", download_url: null, error: null }),
+            })
+        );
+
+        const instance = makeInstance({ _showToast: showToast });
+
+        instance._pollExportStatus("/export-status/abc123", "PDF", resetUi);
+        await vi.advanceTimersByTimeAsync(instance._EXPORT_POLL_INTERVAL_MS * instance._EXPORT_POLL_MAX_ATTEMPTS);
+
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining("longer than expected"), "danger", false);
+        expect(resetUi).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps polling through a transient network error and finishes on the next tick", async () => {
+        const showToast = vi.fn();
+        const resetUi = vi.fn();
+        const fetchMock = vi
+            .fn()
+            .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+            .mockResolvedValueOnce({
+                ok: true,
+                json: () =>
+                    Promise.resolve({ status: "finished", download_url: "/export-download/abc123", error: null }),
+            });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const instance = makeInstance({ _showToast: showToast });
+
+        instance._pollExportStatus("/export-status/abc123", "PDF", resetUi);
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(resetUi).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(showToast).toHaveBeenCalledWith(expect.stringContaining("PDF"), "default", false);
+        expect(resetUi).toHaveBeenCalledTimes(1);
     });
 });
 

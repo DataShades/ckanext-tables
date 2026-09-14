@@ -15,7 +15,13 @@ namespace ckan {
             values?: Record<string, string | number>
         ) => string;
     };
-    export var tablesToast: (options: { message: string; type?: string; title?: string, stacking?: boolean }) => void;
+    export var tablesToast: (options: {
+        message: string;
+        type?: string;
+        title?: string;
+        stacking?: boolean;
+        delay?: number;
+    }) => void;
     export var tablesConfirm: (options: { message: string; onConfirm: () => void; keyboard?: boolean }) => void;
 }
 
@@ -195,12 +201,18 @@ ckan.module("tables-tabulator", function ($) {
             });
         },
 
-        _showToast: function (message: string, type: string = "default", stacking: boolean = true): void {
+        _showToast: function (
+            message: string,
+            type: string = "default",
+            stacking: boolean = true,
+            delay?: number
+        ): void {
             ckan.tablesToast({
                 message,
                 type,
                 title: ckan.i18n._("Tables"),
                 stacking,
+                ...(delay !== undefined ? { delay } : {}),
             });
         },
 
@@ -508,6 +520,13 @@ ckan.module("tables-tabulator", function ($) {
             const toggleIconClass = toggleIcon?.className;
             if (toggleIcon) toggleIcon.className = "fa fa-spinner tables-icon-spin";
 
+            const resetUi = () => {
+                exportButtons.forEach((btn) => (btn.disabled = false));
+                toggle?.removeAttribute("disabled");
+                toggle?.removeAttribute("aria-busy");
+                if (toggleIcon && toggleIconClass !== undefined) toggleIcon.className = toggleIconClass;
+            };
+
             try {
                 const url = new URL(window.location.href);
                 url.searchParams.set("exporter", exporter);
@@ -517,13 +536,13 @@ ckan.module("tables-tabulator", function ($) {
                     url.searchParams.set(`sort[0][dir]`, s.dir);
                 });
 
-                this._showToast(ckan.i18n._("%(name)s export started.", { name: target.innerText }));
-
                 const targetUrl = new URL(this.sandbox.client.url(this.options.config.ajaxURL), window.location.origin);
                 url.searchParams.forEach((value, key) => {
                     targetUrl.searchParams.append(key, value);
                 });
                 const fullUrl = targetUrl.toString();
+
+                this._showToast(ckan.i18n._("Preparing %(name)s export…", { name: target.innerText }));
 
                 const response = await fetch(fullUrl);
 
@@ -533,6 +552,24 @@ ckan.module("tables-tabulator", function ($) {
                         .then((body: { error?: string }) => body.error)
                         .catch(() => null);
                     throw new Error(detail || ckan.i18n._("%(name)s export failed.", { name: target.innerText }));
+                }
+
+                if (response.status === 202) {
+                    // HTML/PDF/XLSX render as a background job — there's no file yet.
+                    // Keep tracking it from *this* tab (see _pollExportStatus) — the
+                    // status page (statusUrl) is a fallback for if this tab gets
+                    // closed before the job finishes, not the only way to track it.
+                    const { status_url: statusUrl } = (await response.json()) as { status_url: string };
+                    this._showToast(
+                        `${ckan.i18n._("%(name)s export started.", { name: target.innerText })} ` +
+                            `<a href="${statusUrl}">${ckan.i18n._("Track its progress")}</a>`,
+                        "default",
+                        false,
+                        10000
+                    );
+
+                    this._pollExportStatus(statusUrl, target.innerText, resetUi);
+                    return;
                 }
 
                 const blob = await response.blob();
@@ -548,15 +585,83 @@ ckan.module("tables-tabulator", function ($) {
                 URL.revokeObjectURL(a.href);
 
                 this._showToast(ckan.i18n._("%(name)s export completed.", { name: target.innerText }), "default", false);
+                resetUi();
             } catch (error) {
                 this._showToast((error as Error).message, "danger", false);
                 console.error("Export error:", error);
-            } finally {
-                exportButtons.forEach((btn) => (btn.disabled = false));
-                toggle?.removeAttribute("disabled");
-                toggle?.removeAttribute("aria-busy");
-                if (toggleIcon && toggleIconClass !== undefined) toggleIcon.className = toggleIconClass;
+                resetUi();
             }
+        },
+
+        _EXPORT_POLL_INTERVAL_MS: 2000,
+        _EXPORT_POLL_MAX_ATTEMPTS: 150, // ~5 minutes at the interval above
+
+        _pollExportStatus: function (statusUrl: string, exporterLabel: string, resetUi: () => void): void {
+            let attempt = 0;
+
+            const poll = async (): Promise<void> => {
+                attempt += 1;
+
+                let body: { status: string; download_url: string | null; error: string | null } | null = null;
+                try {
+                    const response = await fetch(statusUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+                    if (response.ok) body = await response.json();
+                } catch {
+                    // A transient network blip shouldn't abandon tracking — just retry
+                    // on the next tick, same as a "still running" response would.
+                }
+
+                if (body?.status === "finished" && body.download_url) {
+                    const a = document.createElement("a");
+                    a.href = body.download_url;
+                    a.download = "";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    this._showToast(
+                        ckan.i18n._("%(name)s export ready — downloading.", { name: exporterLabel }),
+                        "default",
+                        false
+                    );
+                    resetUi();
+                    return;
+                }
+
+                if (body?.status === "failed") {
+                    this._showToast(
+                        body.error || ckan.i18n._("%(name)s export failed.", { name: exporterLabel }),
+                        "danger",
+                        false
+                    );
+                    resetUi();
+                    return;
+                }
+
+                if (body?.status === "not_found") {
+                    this._showToast(
+                        ckan.i18n._("%(name)s export is no longer available.", { name: exporterLabel }),
+                        "danger",
+                        false
+                    );
+                    resetUi();
+                    return;
+                }
+
+                if (attempt >= this._EXPORT_POLL_MAX_ATTEMPTS) {
+                    this._showToast(
+                        ckan.i18n._("%(name)s export is taking longer than expected.", { name: exporterLabel }),
+                        "danger",
+                        false
+                    );
+                    resetUi();
+                    return;
+                }
+
+                // Still queued/started (or a network blip just now) — keep polling.
+                setTimeout(poll, this._EXPORT_POLL_INTERVAL_MS);
+            };
+
+            setTimeout(poll, this._EXPORT_POLL_INTERVAL_MS);
         },
 
         // The server names the export (see ExportTableMixin._prepare_export_filename)

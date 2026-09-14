@@ -91,6 +91,58 @@ class TestGetCacheDir:
             assert config._default_cache_dir() == os.path.join(tempfile.gettempdir(), "tables-cache")
 
 
+class TestGetExportDir:
+    """get_export_dir shares its safety-check implementation with get_cache_dir.
+
+    See TestGetCacheDir for the exhaustive private-dir/permission/ownership
+    cases (_get_private_dir); these just confirm get_export_dir is wired to
+    the right config key and default.
+    """
+
+    def test_returns_existing_private_dir(self, tmp_path):
+        with mock.patch.object(config.tk, "config", {config.CONF_EXPORT_DIR: str(tmp_path)}):
+            assert config.get_export_dir() == str(tmp_path)
+
+    def test_creates_dir_if_not_exists(self, tmp_path):
+        new_dir = str(tmp_path / "new_export_dir")
+        with mock.patch.object(config.tk, "config", {config.CONF_EXPORT_DIR: new_dir}):
+            result = config.get_export_dir()
+
+        assert result is not None
+        assert os.path.isdir(result)
+
+    def test_refuses_group_or_world_writable_dir(self, tmp_path):
+        unsafe_dir = tmp_path / "shared"
+        unsafe_dir.mkdir()
+        unsafe_dir.chmod(0o777)
+
+        with mock.patch.object(config.tk, "config", {config.CONF_EXPORT_DIR: str(unsafe_dir)}):
+            assert config.get_export_dir() is None
+
+    def test_default_uses_ckan_storage_path(self):
+        with mock.patch.object(config.tk, "config", {"ckan.storage_path": "/srv/ckan"}):
+            assert config._default_export_dir() == os.path.join("/srv/ckan", "tables-exports")
+
+    def test_default_falls_back_to_tempdir_without_storage_path(self):
+        with mock.patch.object(config.tk, "config", {}):
+            assert config._default_export_dir() == os.path.join(tempfile.gettempdir(), "tables-exports")
+
+    def test_default_dir_differs_from_cache_dir(self):
+        """A sibling, not a subdirectory — an export job id and a cache key must never collide."""
+        with mock.patch.object(config.tk, "config", {"ckan.storage_path": "/srv/ckan"}):
+            assert config._default_export_dir() != config._default_cache_dir()
+
+
+class TestGetExportJobTtl:
+    def test_returns_configured_value(self):
+        with mock.patch.object(config.tk, "config", {config.CONF_EXPORT_JOB_TTL: 7200}):
+            assert config.get_export_job_ttl() == 7200
+
+    def test_defaults_to_one_hour(self):
+        with mock.patch.object(config.tk, "config", {}):
+            assert config.get_export_job_ttl() == 3600
+
+
 class TestConfigDeclarationDefaultsAreLiteral:
     """A declaration's ``default`` is applied to the live config verbatim.
 
@@ -148,7 +200,10 @@ class TestConfigDeclarationDefaultsAreLiteral:
         assert live_config[config.CONF_FETCH_MAX_BYTES] == config.DEFAULT_FETCH_MAX_BYTES
         assert live_config[config.CONF_MAX_PAGE_SIZE] == config.DEFAULT_MAX_PAGE_SIZE
         assert live_config[config.CONF_EXPORT_MAX_ROWS] == config.DEFAULT_EXPORT_MAX_ROWS
+        assert live_config[config.CONF_EXPORT_JOB_TTL] == config.DEFAULT_EXPORT_JOB_TTL
 
-        # The one option whose real default is computed in Python, not declared —
-        # CKAN must leave it unset (None) so get_cache_dir()'s fallback actually runs.
+        # The options whose real default is computed in Python, not declared —
+        # CKAN must leave them unset (None) so get_cache_dir()/get_export_dir()'s
+        # own fallback actually runs.
         assert live_config[config.CONF_CACHE_DIR] is None
+        assert live_config[config.CONF_EXPORT_DIR] is None

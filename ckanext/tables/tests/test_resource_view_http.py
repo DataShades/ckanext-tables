@@ -8,6 +8,7 @@ resource + resource view, and the real Flask test client.
 """
 
 import json
+from unittest import mock
 
 import pytest
 
@@ -255,6 +256,105 @@ class TestGenericTableViewHTTP:
         assert response.status_code == 200
         data = response.json
         assert data["success"] is False
+
+
+def _export_status_url(job_id: str) -> str:
+    return tk.url_for("tables.table_export_status", job_id=job_id)
+
+
+def _export_download_url(job_id: str) -> str:
+    return tk.url_for("tables.table_export_download", job_id=job_id)
+
+
+def _fake_export_job(status: str, result: dict | None = None):
+    job = mock.Mock()
+    job.get_status.return_value = status
+    job.result = result
+    job.args = [{"kind": "resource_view", "resource_id": "res-1", "resource_view_id": "view-1"}]
+    return job
+
+
+def _allow_resource_view_access():
+    resource = {"id": "res-1", "url": "http://example.com/data.csv", "format": "csv"}
+    resource_view = {"id": "view-1", "resource_id": "res-1", "file_url": ""}
+
+    def get_action(name):
+        def resource_show(context, data_dict):
+            if data_dict["id"] != resource["id"]:
+                raise tk.ObjectNotFound
+            return resource
+
+        def resource_view_show(context, data_dict):
+            if data_dict["id"] != resource_view["id"]:
+                raise tk.ObjectNotFound
+            return resource_view
+
+        return {"resource_show": resource_show, "resource_view_show": resource_view_show}[name]
+
+    return mock.patch("ckanext.tables.utils.tk.get_action", side_effect=get_action)
+
+
+@pytest.mark.ckan_config("ckan.plugins", "tables")
+@pytest.mark.usefixtures("with_plugins", "clean_db")
+class TestExportStatusHandlerHTTP:
+    """The full-page/HTML branch of ExportStatusHandler.
+
+    Needs real routing (see ``test_views.py``'s ``TestExportStatusHandler``
+    docstring): CKAN's ``page.html`` chrome relies on state a bare
+    ``test_request_context()`` never sets up.
+    """
+
+    def test_in_progress_job_has_no_download_link_and_carries_its_own_poll_trigger(self, app):
+        with (
+            _allow_resource_view_access(),
+            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_export_job("started")),
+        ):
+            response = app.get(_export_status_url("job-1"))
+
+        html = response.get_data(as_text=True)
+        assert 'hx-trigger="every 2s"' in html
+        assert "Download" not in html
+
+    def test_finished_job_shows_a_download_link(self, app):
+        job = _fake_export_job("finished", {"success": True, "filename": "t.csv"})
+
+        with (
+            _allow_resource_view_access(),
+            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+        ):
+            response = app.get(_export_status_url("job-1"))
+
+        html = response.get_data(as_text=True)
+        assert _export_download_url("job-1") in html
+        assert "every 2s" not in html
+
+    def test_failed_job_shows_the_error_without_a_download_link(self, app):
+        job = _fake_export_job("failed", {"success": False, "error": "Something broke"})
+
+        with (
+            _allow_resource_view_access(),
+            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+        ):
+            response = app.get(_export_status_url("job-1"))
+
+        html = response.get_data(as_text=True)
+        assert "Something broke" in html
+        assert "Download" not in html
+
+    def test_unknown_job_shows_not_found(self, app):
+        with mock.patch("ckanext.tables.views.tk.job_from_id", side_effect=KeyError("no such job")):
+            response = app.get(_export_status_url("job-1"))
+
+        assert "no longer exists" in response.get_data(as_text=True)
+
+    def test_plain_navigation_gets_the_full_page(self, app):
+        with (
+            _allow_resource_view_access(),
+            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_export_job("started")),
+        ):
+            response = app.get(_export_status_url("job-1"))
+
+        assert "Export status" in response.get_data(as_text=True)
 
 
 @pytest.mark.ckan_config("ckan.plugins", "tables")
