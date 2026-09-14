@@ -3,7 +3,7 @@ import decimal
 import json
 import os
 import uuid
-from datetime import datetime  # noqa: DTZ001
+from datetime import date, datetime  # noqa: DTZ001
 from unittest import mock
 
 import numpy as np
@@ -800,6 +800,7 @@ class TestPandasDataSource:
         assert ds.serialize_value("text") == "text"
         assert ds.serialize_value(b"bytes") == "bytes"
         assert isinstance(ds.serialize_value(datetime(2024, 1, 1)), str)
+        assert ds.serialize_value(date(2024, 1, 1)) == "2024-01-01"
         assert isinstance(ds.serialize_value(decimal.Decimal("1.5")), float)
         assert ds.serialize_value([1, 2]) == [1, 2]
         assert ds.serialize_value((1, 2)) == [1, 2]
@@ -1190,6 +1191,22 @@ class TestDatabaseDataSource:
         ds = DatabaseDataSource(select(model.User))
         cols = ds.get_columns()
         assert isinstance(cols, list)
+
+    @pytest.mark.usefixtures("clean_db")
+    def test_all_serializes_values_like_other_data_sources(self):
+        """A raw datetime must come out as the same ISO string PandasDataSource produces.
+
+        Without this, a column with no formatter renders differently
+        depending on which data source backs the table, and a custom
+        formatter written against one source's shape breaks on the other.
+        """
+        factories.User()
+
+        ds = DatabaseDataSource(select(model.User.id, model.User.created))
+        row = ds.filter([]).all()[0]
+
+        assert isinstance(row["created"], str)
+        datetime.fromisoformat(row["created"])
 
     def test_count(self):
         ds = DatabaseDataSource(select(model.User))

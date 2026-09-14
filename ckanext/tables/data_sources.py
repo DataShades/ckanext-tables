@@ -59,6 +59,34 @@ class BaseDataSource:
     def count(self) -> int: ...
     def get_columns(self) -> list[str]: ...
 
+    def serialize_value(self, val: Any) -> Any:  # noqa: PLR0911
+        """Normalise one cell value to a JSON-safe, source-independent shape.
+
+        Shared by every concrete data source's ``all()`` so a formatter (or the
+        client, for a column with none) sees the same type for the same logical
+        value no matter which data source produced it — e.g. a date always comes
+        out as an ISO 8601 string, never a raw ``datetime``/``date`` that a JSON
+        encoder would otherwise render its own way.
+        """
+        if val is None:
+            return None
+        if isinstance(val, (bool, int, float, str)):
+            return val
+        if isinstance(val, bytes):
+            return val.decode("utf-8", errors="replace")
+        if isinstance(val, (datetime, date, pd.Timestamp)):
+            return val.isoformat()
+        if isinstance(val, decimal.Decimal):
+            return float(val)
+        if isinstance(val, (list, tuple, np.ndarray)):
+            return [self.serialize_value(x) for x in val]
+        if isinstance(val, dict):
+            return {k: self.serialize_value(v) for k, v in val.items()}
+        if hasattr(val, "item"):
+            return self.serialize_value(val.item())
+
+        return str(val)
+
 
 class DatabaseDataSource(BaseDataSource):
     """A data source that uses a SQLAlchemy statement as the data source.
@@ -163,7 +191,7 @@ class DatabaseDataSource(BaseDataSource):
         return [self.serialize_row(row) for row in model.Session.execute(self.stmt).mappings().all()]
 
     def serialize_row(self, row: RowMapping) -> dict[str, Any]:
-        return dict(row)
+        return {k: self.serialize_value(v) for k, v in row.items()}
 
     def count(self) -> int:
         return model.Session.execute(select(func.count()).select_from(self.stmt.subquery())).scalar_one()
@@ -176,7 +204,10 @@ class ListDataSource(BaseDataSource):
     """A data source that uses a list of dictionaries as the data source.
 
     This is useful for testing and demo purposes, when you already have data
-    on your hand.
+    on your hand. Unlike ``DatabaseDataSource``/``PandasDataSource``, ``all()``
+    returns each row's values unchanged rather than running them through
+    ``serialize_value()`` — the caller already fully controls the shape of
+    this data, so nothing here needs normalising to match another source.
 
     Args:
         data: The list of dictionaries to use as the data source
@@ -622,26 +653,6 @@ class PandasDataSource(BaseDataSource):
             return list(self._arrow.schema.names)
 
         return list(self._df.columns) if self._df is not None else []
-
-    def serialize_value(self, val: Any) -> Any:  # noqa: PLR0911
-        if val is None:
-            return None
-        if isinstance(val, (bool, int, float, str)):
-            return val
-        if isinstance(val, bytes):
-            return val.decode("utf-8", errors="replace")
-        if isinstance(val, (datetime, pd.Timestamp)):
-            return val.isoformat()
-        if isinstance(val, decimal.Decimal):
-            return float(val)
-        if isinstance(val, (list, tuple, np.ndarray)):
-            return [self.serialize_value(x) for x in val]
-        if isinstance(val, dict):
-            return {k: self.serialize_value(v) for k, v in val.items()}
-        if hasattr(val, "item"):
-            return self.serialize_value(val.item())
-
-        return str(val)
 
 
 class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
