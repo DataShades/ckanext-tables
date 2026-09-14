@@ -97,7 +97,7 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
             table = self.get_table_for_resource(resource_id, resource_view_id)
         except DataSourceError:
             log.exception("Failed to initialize table for resource %s", resource_id)
-            return jsonify({"error": _DATA_LOAD_ERROR}), 502
+            return jsonify({"success": False, "error": _DATA_LOAD_ERROR}), 502
 
         self._resource_id = resource_id
 

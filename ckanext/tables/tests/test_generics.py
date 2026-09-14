@@ -7,6 +7,9 @@ import ckan.plugins.toolkit as tk
 
 from ckanext.tables.data_sources import DataSourceError, ListDataSource
 from ckanext.tables.exporters import CSVExporter, JSONExporter, XLSXExporter
+from ckanext.tables.generics import (
+    _GENERIC_ACTION_ERROR as GENERIC_ACTION_ERROR,
+)
 from ckanext.tables.generics import AjaxTableMixin, ExportTableMixin, GenericTableView
 from ckanext.tables.table import (
     BulkActionDefinition,
@@ -119,8 +122,7 @@ class TestAjaxTableMixin:
             response = mixin._apply_table_action(sample_table, "fail_action")
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
-        assert "boom" not in str(data.get("errors", ""))
-        assert data.get("errors")
+        assert data["error"] == GENERIC_ACTION_ERROR
 
     def test_apply_row_action_not_found(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
@@ -152,8 +154,7 @@ class TestAjaxTableMixin:
             response = mixin._apply_row_action(sample_table, "fail_row", '{"name": "Alice"}')
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
-        assert "row boom" not in str(data.get("error", ""))
-        assert data.get("error")
+        assert data["error"] == GENERIC_ACTION_ERROR
 
     def test_apply_bulk_action_not_found(self, sample_table: TableDefinition):
         mixin = self._make_mixin()
@@ -186,8 +187,7 @@ class TestAjaxTableMixin:
             response = mixin._apply_bulk_action(sample_table, "bulk_fail", '[{"name": "Alice"}]')
         data = json.loads(response.get_data(as_text=True))
         assert data["success"] is False
-        assert "bulk boom" not in str(data.get("error", ""))
-        assert data.get("error")
+        assert data["error"] == GENERIC_ACTION_ERROR
 
     # --- refresh ---
 

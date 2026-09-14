@@ -38,61 +38,65 @@ class AjaxTableMixin:
 
         return jsonify({"data": data, "last_page": (total + params.size - 1) // params.size, "total": total})
 
+    def _action_result(self, result: ActionHandlerResult) -> Response:
+        return jsonify(
+            {
+                "success": result.get("success", False),
+                "error": result.get("error"),
+                "message": result.get("message"),
+                "redirect": result.get("redirect"),
+            }
+        )
+
+    def _action_error(self, message: str) -> Response:
+        return self._action_result(ActionHandlerResult(success=False, error=message))
+
     def _apply_table_action(self, table: TableDefinition, action: str) -> Response:
         table_action = table.get_table_action(action)
         if not table_action:
-            return jsonify(
-                {
-                    "success": False,
-                    "errors": tk._("The table action is not implemented"),
-                }
-            )
+            return self._action_error(tk._("The table action is not implemented"))
 
         try:
             result = table_action()
         except Exception:
             log.exception("Error during table action %s", action)
-            return jsonify({"success": False, "errors": _GENERIC_ACTION_ERROR})
-        return jsonify(result)
+            return self._action_error(_GENERIC_ACTION_ERROR)
+
+        return self._action_result(result)
 
     def _apply_row_action(self, table: TableDefinition, action: str, row: str | None) -> Response:
         row_action_func = table.get_row_action(action) if action else None
         if not row_action_func or not row:
-            return jsonify({"success": False, "error": [tk._("The row action is not implemented")]})
+            return self._action_error(tk._("The row action is not implemented"))
 
         try:
             result = row_action_func(json.loads(row))
         except Exception:
             log.exception("Error during row action %s", action)
-            return jsonify({"success": False, "error": _GENERIC_ACTION_ERROR})
+            return self._action_error(_GENERIC_ACTION_ERROR)
 
-        return jsonify(ActionHandlerResult(**result))
+        return self._action_result(result)
 
     def _apply_bulk_action(self, table: TableDefinition, action: str, rows: str | None) -> Response:
         bulk_action_func = table.get_bulk_action(action) if action else None
 
         if not bulk_action_func or not rows:
-            return jsonify(
-                {
-                    "success": False,
-                    "errors": [tk._("The bulk action is not implemented")],
-                }
-            )
+            return self._action_error(tk._("The bulk action is not implemented"))
 
         try:
             rows_list = json.loads(rows)
             result = bulk_action_func(rows_list)
         except Exception:
             log.exception("Error during bulk action %s", action)
-            return jsonify({"success": False, "error": _GENERIC_ACTION_ERROR})
+            return self._action_error(_GENERIC_ACTION_ERROR)
 
-        return jsonify(ActionHandlerResult(**result))
+        return self._action_result(result)
 
     def _refresh_data(self, table: TableDefinition) -> Response:
         """Refresh the table data cache."""
         table.refresh_data()
 
-        return jsonify({"success": True, "error": None})
+        return self._action_result(ActionHandlerResult(success=True))
 
 
 class ExportTableMixin:
@@ -172,7 +176,7 @@ class TableDispatchMixin(AjaxTableMixin, ExportTableMixin):
         if refresh:
             return self._handle_refresh(table)
 
-        return jsonify({"success": False, "error": "No action specified"})
+        return self._action_error(tk._("No action specified"))
 
     def _handle_refresh(self, table: TableDefinition) -> Response:
         return self._refresh_data(table)

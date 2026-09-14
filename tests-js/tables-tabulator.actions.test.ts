@@ -158,19 +158,18 @@ describe("_sendActionRequest", () => {
         expect(refreshData).not.toHaveBeenCalled();
     });
 
-    it("shows the server error message and a suppressed-errors notice for multiple errors", async () => {
+    it("shows the server error message in full and does not refresh", async () => {
         const { instance, showToast, refreshData } = setup();
         vi.stubGlobal(
             "fetch",
             vi.fn().mockResolvedValue({
-                json: () => Promise.resolve({ success: false, errors: ["bad field", "also bad"] }),
+                json: () => Promise.resolve({ success: false, error: "bad field" }),
             })
         );
 
         await instance._sendActionRequest(new FormData(), "Done!");
 
         expect(showToast).toHaveBeenCalledWith("bad field", "danger");
-        expect(showToast).toHaveBeenCalledWith("Multiple errors occurred and were suppressed", "error");
         expect(refreshData).not.toHaveBeenCalled();
     });
 

@@ -28,6 +28,13 @@ type TabulatorRow = {
     getData: () => Record<string, any>;
 };
 
+type ActionResponse = {
+    success: boolean;
+    error?: string | null;
+    message?: string | null;
+    redirect?: string | null;
+};
+
 type TabulatorAction = {
     name: string;
     label: string;
@@ -220,22 +227,20 @@ ckan.module("tables-tabulator", function ($) {
                 headers: { "X-CSRFToken": this._getCSRFToken() },
             })
                 .then((resp) => resp.json())
-                .then((resp) => {
+                .then((resp: ActionResponse) => {
                     if (!resp.success) {
-                        const err = resp.error || resp.errors?.[0] || "Unknown error";
-                        this._showToast(err, "danger");
-                        if (resp.errors?.length > 1) {
-                            this._showToast(ckan.i18n._("Multiple errors occurred and were suppressed"), "error");
-                        }
-                    } else {
-                        if (resp.redirect) {
-                            window.location.href = resp.redirect;
-                            return;
-                        }
-                        this._refreshData().then(() => {
-                            this._showToast(resp.message || successMessage);
-                        });
+                        this._showToast(resp.error || ckan.i18n._("Unknown error"), "danger");
+                        return;
                     }
+
+                    if (resp.redirect) {
+                        window.location.href = resp.redirect;
+                        return;
+                    }
+
+                    this._refreshData().then(() => {
+                        this._showToast(resp.message || successMessage);
+                    });
                 })
                 .catch((error) => this._showToast(error.message, "danger"));
         },
