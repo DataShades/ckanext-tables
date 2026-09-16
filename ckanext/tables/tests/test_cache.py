@@ -3,6 +3,7 @@ from __future__ import annotations
 import decimal
 import json
 import os
+import threading
 import time
 from datetime import date, datetime
 from unittest import mock
@@ -451,6 +452,135 @@ class TestFileCacheBackendAtomicWrite:
 
     def test_redis_backend_clean_expired_is_a_noop(self):
         assert RedisCacheBackend().clean_expired() == 0
+
+
+class TestCacheBackendDefaultLock:
+    """The base ``CacheBackend.lock`` can't coordinate anything on its own."""
+
+    def test_default_lock_always_yields_false(self):
+        class DummyBackend(cache.CacheBackend):
+            def get(self, key):
+                return None
+
+            def set(self, key, value, ttl):
+                pass
+
+            def delete(self, key):
+                pass
+
+        with DummyBackend().lock("key1") as acquired:
+            assert acquired is False
+
+
+class TestFileCacheBackendLock:
+    """Guards the cache-miss fetch-and-populate critical section."""
+
+    def test_lock_is_acquired_when_uncontended(self, feather_backend):
+        with feather_backend.lock("key1") as acquired:
+            assert acquired is True
+
+    def test_lock_excludes_concurrent_holders(self, feather_backend):
+        """A second waiter must not see ``acquired`` while the first holds the lock.
+
+        The simulated "work" (the sleep) must happen *inside* the lock, and the
+        increment/decrement bracketing it — otherwise this only measures how many
+        threads have passed through a fast critical section, not how many were
+        simultaneously holding the lock.
+        """
+        max_concurrent = 0
+        concurrent = 0
+        state_lock = threading.Lock()
+
+        def worker():
+            nonlocal max_concurrent, concurrent
+            with feather_backend.lock("shared-key", timeout=2):
+                with state_lock:
+                    concurrent += 1
+                    max_concurrent = max(max_concurrent, concurrent)
+                time.sleep(0.05)
+                with state_lock:
+                    concurrent -= 1
+
+        threads = [threading.Thread(target=worker) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert max_concurrent == 1
+
+    def test_lock_gives_up_after_timeout_and_still_yields(self, feather_backend):
+        """A waiter that can't acquire the lock in time proceeds unlocked (acquired=False)."""
+        released = threading.Event()
+
+        def holder():
+            with feather_backend.lock("busy-key"):
+                released.wait(timeout=5)
+
+        t = threading.Thread(target=holder)
+        t.start()
+        try:
+            time.sleep(0.05)  # let the holder acquire first
+            start = time.monotonic()
+            with feather_backend.lock("busy-key", timeout=0.2) as acquired:
+                elapsed = time.monotonic() - start
+                assert acquired is False
+                assert elapsed >= 0.2
+        finally:
+            released.set()
+            t.join()
+
+    def test_lock_is_a_noop_for_unsafe_dir(self, tmp_path):
+        unsafe_dir = tmp_path / "shared"
+        unsafe_dir.mkdir()
+        unsafe_dir.chmod(0o777)
+
+        backend = FeatherCacheBackend(cache_dir=str(unsafe_dir))
+        assert backend.cache_dir is None
+
+        with backend.lock("key1") as acquired:
+            assert acquired is False
+
+
+@pytest.mark.usefixtures("clean_redis")
+class TestRedisCacheBackendLock:
+    def test_lock_is_acquired_when_uncontended(self):
+        backend = RedisCacheBackend()
+        with backend.lock("key1") as acquired:
+            assert acquired is True
+
+    def test_lock_excludes_a_concurrent_holder(self):
+        backend = RedisCacheBackend()
+        holder_ready = threading.Event()
+        release = threading.Event()
+        second_acquired = {}
+
+        def holder():
+            with backend.lock("shared-key"):
+                holder_ready.set()
+                release.wait(timeout=5)
+
+        t = threading.Thread(target=holder)
+        t.start()
+        holder_ready.wait(timeout=5)
+
+        try:
+            with backend.lock("shared-key", timeout=0.2) as acquired:
+                second_acquired["value"] = acquired
+        finally:
+            release.set()
+            t.join()
+
+        assert second_acquired["value"] is False
+
+    def test_lock_released_is_acquirable_again(self):
+        backend = RedisCacheBackend()
+
+        with backend.lock("key1") as acquired:
+            assert acquired is True
+
+        with backend.lock("key1", timeout=0.2) as acquired:
+            assert acquired is True
 
 
 @pytest.mark.usefixtures("clean_redis")

@@ -264,7 +264,7 @@ class TestExportStatusHandler:
 
         with (
             app.flask_app.test_request_context(url, headers={"X-Requested-With": "XMLHttpRequest"}),
-            mock.patch("ckanext.tables.views.tk.job_from_id", side_effect=KeyError("no such job")),
+            mock.patch("ckanext.tables.views.job_from_id", side_effect=KeyError("no such job")),
         ):
             response = handler.get("job-1")
 
@@ -277,7 +277,7 @@ class TestExportStatusHandler:
         with (
             app.flask_app.test_request_context(url, headers={"X-Requested-With": "XMLHttpRequest"}),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_job("started")),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=_fake_job("started")),
         ):
             response = handler.get("job-1")
 
@@ -291,7 +291,7 @@ class TestExportStatusHandler:
         with (
             app.flask_app.test_request_context(url, headers={"X-Requested-With": "XMLHttpRequest"}),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
         ):
             response = handler.get("job-1")
 
@@ -307,7 +307,7 @@ class TestExportStatusHandler:
         with (
             app.flask_app.test_request_context(url, headers={"X-Requested-With": "XMLHttpRequest"}),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
         ):
             response = handler.get("job-1")
 
@@ -320,7 +320,7 @@ class TestExportStatusHandler:
         with (
             app.flask_app.test_request_context(url, headers={"HX-Request": "true"}),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_job("started")),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=_fake_job("started")),
         ):
             html = handler.get("job-1")
 
@@ -339,7 +339,7 @@ class TestExportStatusHandler:
             app.flask_app.test_request_context(url),
             mock.patch("ckanext.tables.utils.tk.get_action", side_effect=tk.NotAuthorized),
             mock.patch("ckanext.tables.utils.tk.abort", side_effect=tk.ObjectNotFound) as mock_abort,
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
             pytest.raises(tk.ObjectNotFound),
         ):
             handler.get("job-1")
@@ -363,7 +363,7 @@ class TestExportDownloadHandler:
 
         with (
             app.flask_app.test_request_context(url),
-            mock.patch("ckanext.tables.views.tk.job_from_id", side_effect=KeyError("no such job")),
+            mock.patch("ckanext.tables.views.job_from_id", side_effect=KeyError("no such job")),
             mock.patch("ckanext.tables.views.tk.abort", side_effect=tk.ObjectNotFound) as mock_abort,
             pytest.raises(tk.ObjectNotFound),
         ):
@@ -377,7 +377,7 @@ class TestExportDownloadHandler:
         with (
             app.flask_app.test_request_context(url),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_job("started")),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=_fake_job("started")),
             mock.patch("ckanext.tables.views.tk.abort", side_effect=tk.ObjectNotFound) as mock_abort,
             pytest.raises(tk.ObjectNotFound),
         ):
@@ -392,7 +392,7 @@ class TestExportDownloadHandler:
         with (
             app.flask_app.test_request_context(url),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
             mock.patch("ckanext.tables.views.tk.abort", side_effect=tk.ObjectNotFound) as mock_abort,
             pytest.raises(tk.ObjectNotFound),
         ):
@@ -407,7 +407,7 @@ class TestExportDownloadHandler:
         with (
             app.flask_app.test_request_context(url),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
             mock.patch("ckanext.tables.views.get_export_dir", return_value=str(tmp_path)),
             mock.patch("ckanext.tables.views.tk.abort", side_effect=tk.ObjectNotFound) as mock_abort,
             pytest.raises(tk.ObjectNotFound),
@@ -427,7 +427,7 @@ class TestExportDownloadHandler:
         with (
             app.flask_app.test_request_context(url),
             self._allow_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
             mock.patch("ckanext.tables.views.get_export_dir", return_value=str(tmp_path)),
         ):
             response = handler.get("job-1")

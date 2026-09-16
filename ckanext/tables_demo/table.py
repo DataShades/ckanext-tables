@@ -170,7 +170,7 @@ class PackagesTable(t.TableDefinition):
                     field="creator_user_id",
                     title="Creator",
                     formatters=[(t.formatters.UserLinkFormatter, {})],
-                    tabulator_formatter="html"
+                    tabulator_formatter="html",
                 ),
                 t.ColumnDefinition(
                     field="metadata_modified",

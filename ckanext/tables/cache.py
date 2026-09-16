@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import decimal
+import fcntl
 import glob
 import hashlib
 import json
@@ -13,7 +14,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import date, datetime
 from typing import Any
 
@@ -37,6 +38,16 @@ _MEMO_MAX_ENTRIES = 32
 # How old a leftover _atomic_write ".tmp-*" file must be before clean_expired
 # treats it as abandoned (from a crashed write) rather than one still in progress.
 _STALE_TMP_FILE_AGE = 3600
+
+# How long a cache-miss lock (see CacheBackend.lock) is waited for before the
+# caller gives up and proceeds unlocked — a bounded worst case rather than
+# risking a pile-up if the lock holder never releases it.
+_LOCK_WAIT_TIMEOUT = 10.0
+_LOCK_POLL_INTERVAL = 0.1
+
+# Redis locks auto-expire after this many seconds so a worker that crashes
+# while holding one doesn't wedge every other worker forever.
+_REDIS_LOCK_TTL = 60
 
 
 class CacheBackend(ABC):
@@ -72,6 +83,16 @@ class CacheBackend(ABC):
         its own keys via ``SETEX``, so it does not.
         """
         return 0
+
+    @contextlib.contextmanager
+    def lock(self, key: str, timeout: float = _LOCK_WAIT_TIMEOUT) -> Iterator[bool]:
+        """Best-effort per-key lock guarding a cache-miss fetch-and-populate.
+
+        The default implementation is a no-op that always yields ``False``
+        immediately: it cannot coordinate anything on its own. Backends that
+        can (file-based, Redis) override it.
+        """
+        yield False
 
 
 class _TablesJSONEncoder(json.JSONEncoder):
@@ -170,6 +191,31 @@ class RedisCacheBackend(CacheBackend):
             conn.delete(self._version_key(key))
 
         self._memo_delete(self._full_key(key))
+
+    @contextlib.contextmanager
+    def lock(self, key: str, timeout: float = _LOCK_WAIT_TIMEOUT) -> Iterator[bool]:
+        """Distributed lock via Redis ``SET NX PX`` (``redis-py``'s ``Lock`` helper).
+
+        The lock itself expires after ``_REDIS_LOCK_TTL`` seconds so a worker
+        that crashes while holding it doesn't wedge every other worker; *timeout*
+        only bounds how long this call waits to acquire it before giving up and
+        proceeding unlocked.
+        """
+        conn = connect_to_redis()
+        redis_lock = conn.lock(self._full_key(f"lock:{key}"), timeout=_REDIS_LOCK_TTL, blocking_timeout=timeout)
+
+        acquired = False
+        try:
+            with contextlib.suppress(Exception):
+                acquired = redis_lock.acquire(blocking=True)
+
+            yield acquired
+        finally:
+            if acquired:
+                with contextlib.suppress(Exception):
+                    redis_lock.release()
+            with contextlib.suppress(Exception):
+                conn.close()
 
     def _memo_set(self, full_key: str, version: bytes, value: Any) -> None:
         with self._memo_lock:
@@ -282,6 +328,54 @@ class _FileCacheBackend(CacheBackend, ABC):
     def _meta_path(self, key: str) -> str:
         key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
         return os.path.join(self._require_cache_dir(), f"{key_hash}.meta")
+
+    def _lock_path(self, key: str) -> str:
+        key_hash = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        return os.path.join(self._require_cache_dir(), f"{key_hash}.lock")
+
+    @contextlib.contextmanager
+    def lock(self, key: str, timeout: float = _LOCK_WAIT_TIMEOUT) -> Iterator[bool]:
+        """Cross-process lock via ``fcntl.flock`` on a per-key lock file.
+
+        ``flock`` is released by the kernel the moment the holding process
+        exits or crashes, so unlike a plain lock file there's no stale-lock
+        cleanup to do here — the only thing to bound is how long this call
+        polls waiting for a *live* holder to release it before giving up and
+        proceeding unlocked.
+
+        Caveat: ``fcntl.flock`` is unreliable (sometimes a no-op) on
+        NFS-mounted directories — don't rely on this for exclusion if the
+        cache directory can be network-shared.
+        """
+        if self.cache_dir is None:
+            yield False
+            return
+
+        try:
+            fd = os.open(self._lock_path(key), os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError:
+            yield False
+            return
+
+        acquired = False
+        deadline = time.monotonic() + timeout
+        try:
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        break
+                    time.sleep(_LOCK_POLL_INTERVAL)
+
+            yield acquired
+        finally:
+            if acquired:
+                with contextlib.suppress(OSError):
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 
     def _atomic_write(self, final_path: str, writer: Callable[[str], None]) -> None:
         """Write via a same-directory temp file, then atomically replace *final_path*.

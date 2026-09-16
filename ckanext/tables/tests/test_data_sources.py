@@ -2,6 +2,8 @@ import contextlib
 import decimal
 import json
 import os
+import threading
+import time
 import uuid
 from datetime import date, datetime  # noqa: DTZ001
 from unittest import mock
@@ -990,6 +992,49 @@ class TestPandasDataSourceArrowPath:
         arrow_count = _ArrowStubDataSource(df, arrow_cache_backend, key="parity").filter(filters).count()
         pandas_count = PandasPathSource(df, pandas_backend, key="parity-pandas").filter(filters).count()
         assert arrow_count == pandas_count
+
+
+class TestCacheStampede:
+    """Concurrent cache misses for the same key must fetch only once.
+
+    Each ``_ArrowStubDataSource`` instance below simulates a separate request
+    (a fresh data source object, as ``get_cache_backend()`` builds per request),
+    all sharing one cache backend/key — mirroring several concurrent requests
+    for the same not-yet-cached resource.
+    """
+
+    def test_concurrent_misses_fetch_only_once(self, arrow_cache_backend):
+        counter = {"calls": 0, "lock": threading.Lock()}
+
+        class _SlowFetchSource(_ArrowStubDataSource):
+            def fetch_dataframe(self) -> pd.DataFrame:
+                with counter["lock"]:
+                    counter["calls"] += 1
+                time.sleep(0.2)
+                return self._source_df
+
+        df = pd.DataFrame([{"a": 1}])
+        sources = [_SlowFetchSource(df, arrow_cache_backend, key="stampede-key") for _ in range(8)]
+
+        threads = [threading.Thread(target=s._ensure_loaded) for s in sources]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert counter["calls"] == 1
+        assert all(s._arrow is not None or s._df is not None for s in sources)
+
+    def test_uncached_data_source_is_unaffected(self):
+        """A plain (non-cached) PandasDataSource never touches the lock at all."""
+
+        class _PlainPandasSource(PandasDataSource):
+            def fetch_dataframe(self) -> pd.DataFrame:
+                return pd.DataFrame([{"a": 1}])
+
+        ds = _PlainPandasSource()
+        ds._ensure_loaded()
+        assert ds._df is not None
 
 
 class TestCsvDelimiterSniffing:

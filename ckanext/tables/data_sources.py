@@ -347,19 +347,37 @@ class PandasDataSource(BaseDataSource):
 
         return False
 
-    def _ensure_loaded(self) -> None:  # noqa: C901
+    def _ensure_loaded(self) -> None:
         """Load the data, using the cache backend when available.
 
         Uses ``get_arrow()`` when the cache backend supports it — everything
         downstream then queries ``self._arrow`` via DuckDB instead of loading
         a full pandas DataFrame. Otherwise falls back to the plain-pandas
         path (``self._df``/``self._filtered_df``), same as before.
+
+        On a cache miss, the fetch-and-populate critical section is guarded by
+        a per-key lock (see ``CacheBackend.lock``) so concurrent requests for
+        the same key don't all redo the same expensive fetch (a cache
+        stampede). The cache is re-checked once the lock is held: whoever held
+        it may have already populated it while this call was waiting.
         """
         if self._arrow is not None or self._df is not None:
             if self._arrow is None:
                 self._filtered_df = self._df
             return
 
+        if self._try_load_from_cache():
+            return
+
+        if isinstance(self, CachedDataSourceMixin):
+            with self.cache_backend.lock(self.get_cache_key()):
+                if not self._try_load_from_cache():
+                    self._fetch_and_cache()
+        else:
+            self._fetch_and_cache()
+
+    def _try_load_from_cache(self) -> bool:
+        """Attempt the Arrow and/or plain-pandas cache reads; return True on either hit."""
         if isinstance(self, CachedDataSourceMixin) and hasattr(self.cache_backend, "get_arrow"):
             try:
                 arrow = _get_arrow_from_cache(self.cache_backend, self.get_cache_key())
@@ -370,12 +388,15 @@ class PandasDataSource(BaseDataSource):
 
             if arrow is not None:
                 self._set_arrow(arrow)
-                return
+                return True
 
         if self._load_from_cache():
             self._filtered_df = self._df
-            return
+            return True
 
+        return False
+
+    def _fetch_and_cache(self) -> None:  # noqa: C901
         self._df = self.fetch_dataframe()
 
         # Defensive: fetch_dataframe() is a public override point, so a misbehaving

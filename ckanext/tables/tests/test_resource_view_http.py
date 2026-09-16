@@ -117,15 +117,17 @@ class TestResourceViewHandlerHTTP:
         assert response.status_code == 502
         assert "error" in response.json
 
-    def test_post_refresh_requires_resource_update(self, app, package, create_with_upload):
+    def test_post_refresh_requires_resource_update(self, app, create_with_upload):
+        owner = factories.UserWithToken()
+        org = factories.Organization(users=[{"name": owner["name"], "capacity": "admin"}])
+        package = factories.Dataset(owner_org=org["id"])
         resource, resource_view = self._make_csv_resource_and_view(package, create_with_upload)
         url = _ajax_url(resource["id"], resource_view["id"])
 
         anon_response = app.post(url, data={"refresh": "true"})
         assert anon_response.status_code == 403
 
-        app.set_session_user(package["creator_user_id"])
-        owner_response = app.post(url, data={"refresh": "true"})
+        owner_response = app.post(url, data={"refresh": "true"}, headers={"Authorization": owner["token"]})
         assert owner_response.status_code == 200
         assert owner_response.json["success"] is True
 
@@ -207,13 +209,15 @@ class TestGenericTableViewHTTP:
     Backed by DatabaseDataSource with no row/bulk/table actions — deliberately
     avoids PeopleTable/ProductsTable, whose actions mutate a module-level list
     shared for the life of the test process. None of the demo tables override
-    ``check_access``, so every request here needs a sysadmin session — the
-    default is "sysadmins only" (see ``TableDefinition.check_access``).
+    ``check_access``, so every request here needs a sysadmin — the default is
+    "sysadmins only" (see ``TableDefinition.check_access``).
     """
 
-    def test_full_page_get_renders(self, app, sysadmin):
-        app.set_session_user(sysadmin["id"])
-        response = app.get(tk.url_for("tables_demo.packages"))
+    def test_full_page_get_renders(self, app, sysadmin_with_token):
+        response = app.get(
+            tk.url_for("tables_demo.packages"),
+            headers={"Authorization": sysadmin_with_token["token"]},
+        )
 
         assert response.status_code == 200
         assert b"tabulator-container" in response.data
@@ -223,14 +227,13 @@ class TestGenericTableViewHTTP:
 
         assert response.status_code == 403
 
-    def test_ajax_get_returns_real_package_rows(self, app, sysadmin):
+    def test_ajax_get_returns_real_package_rows(self, app, sysadmin_with_token):
         factories.Dataset(name="ds-one")
         factories.Dataset(name="ds-two")
 
-        app.set_session_user(sysadmin["id"])
         response = app.get(
             tk.url_for("tables_demo.packages"),
-            headers={"X-Requested-With": "XMLHttpRequest"},
+            headers={"X-Requested-With": "XMLHttpRequest", "Authorization": sysadmin_with_token["token"]},
         )
 
         assert response.status_code == 200
@@ -239,19 +242,24 @@ class TestGenericTableViewHTTP:
         names = {row["name"] for row in data["data"]}
         assert {"ds-one", "ds-two"} <= names
 
-    def test_export_get_returns_csv(self, app, sysadmin):
+    def test_export_get_returns_csv(self, app, sysadmin_with_token):
         factories.Dataset(name="export-me")
 
-        app.set_session_user(sysadmin["id"])
-        response = app.get(f"{tk.url_for('tables_demo.packages')}?exporter=csv")
+        response = app.get(
+            f"{tk.url_for('tables_demo.packages')}?exporter=csv",
+            headers={"Authorization": sysadmin_with_token["token"]},
+        )
 
         assert response.status_code == 200
         assert "text/csv" in response.headers["Content-Type"]
         assert b"export-me" in response.data
 
-    def test_post_with_no_action_returns_the_error_envelope(self, app, sysadmin):
-        app.set_session_user(sysadmin["id"])
-        response = app.post(tk.url_for("tables_demo.packages"), data={})
+    def test_post_with_no_action_returns_the_error_envelope(self, app, sysadmin_with_token):
+        response = app.post(
+            tk.url_for("tables_demo.packages"),
+            data={},
+            headers={"Authorization": sysadmin_with_token["token"]},
+        )
 
         assert response.status_code == 200
         data = response.json
@@ -307,7 +315,7 @@ class TestExportStatusHandlerHTTP:
     def test_in_progress_job_has_no_download_link_and_carries_its_own_poll_trigger(self, app):
         with (
             _allow_resource_view_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_export_job("started")),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=_fake_export_job("started")),
         ):
             response = app.get(_export_status_url("job-1"))
 
@@ -320,7 +328,7 @@ class TestExportStatusHandlerHTTP:
 
         with (
             _allow_resource_view_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
         ):
             response = app.get(_export_status_url("job-1"))
 
@@ -333,7 +341,7 @@ class TestExportStatusHandlerHTTP:
 
         with (
             _allow_resource_view_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=job),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=job),
         ):
             response = app.get(_export_status_url("job-1"))
 
@@ -342,7 +350,7 @@ class TestExportStatusHandlerHTTP:
         assert "Download" not in html
 
     def test_unknown_job_shows_not_found(self, app):
-        with mock.patch("ckanext.tables.views.tk.job_from_id", side_effect=KeyError("no such job")):
+        with mock.patch("ckanext.tables.views.job_from_id", side_effect=KeyError("no such job")):
             response = app.get(_export_status_url("job-1"))
 
         assert "no longer exists" in response.get_data(as_text=True)
@@ -350,7 +358,7 @@ class TestExportStatusHandlerHTTP:
     def test_plain_navigation_gets_the_full_page(self, app):
         with (
             _allow_resource_view_access(),
-            mock.patch("ckanext.tables.views.tk.job_from_id", return_value=_fake_export_job("started")),
+            mock.patch("ckanext.tables.views.job_from_id", return_value=_fake_export_job("started")),
         ):
             response = app.get(_export_status_url("job-1"))
 

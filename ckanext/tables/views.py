@@ -7,6 +7,7 @@ from flask.views import MethodView
 from werkzeug.exceptions import HTTPException
 
 import ckan.plugins.toolkit as tk
+from ckan.lib.jobs import job_from_id
 
 from ckanext.tables.config import get_export_dir
 from ckanext.tables.data_sources import DataSourceError
@@ -167,7 +168,7 @@ class ExportStatusHandler(MethodView):
 
     def get(self, job_id: str) -> str | Response:
         try:
-            job = tk.job_from_id(job_id)
+            job = job_from_id(job_id)
         except KeyError:
             status, result, download_url = "not_found", None, None
         else:
@@ -219,7 +220,7 @@ class ExportDownloadHandler(MethodView):
 
     def get(self, job_id: str) -> Response:
         try:
-            job = tk.job_from_id(job_id)
+            job = job_from_id(job_id)
         except KeyError:
             return tk.abort(404, tk._("This export no longer exists — it may have expired."))
 
