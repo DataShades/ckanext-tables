@@ -13,3 +13,29 @@
         opacity: 0.65;
     }
 }
+
+
+.tables-dialog-modal-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.tables-dialog-modal-preview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.tables-dialog-modal-trigger-btn {
+    flex: 0 0 auto;
+}
+
+.tables-dialog-modal {
+    width: min(90vw, 700px);
+    max-width: 90vw;
+}

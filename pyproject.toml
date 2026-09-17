@@ -1,6 +1,6 @@
 [project]
 name = "ckanext-tables"
-version = "2.0.0"
+version = "2.0.1"
 description = "An extension to render dynamic tables"
 readme = "README.md"
 authors = [
@@ -125,12 +125,6 @@ self = ["ckanext.tables", "ckanext.tables_demo"]
 pythonVersion = "3.10"
 include = ["ckanext"]
 exclude = ["**/test*", "**/migration", "**/ckan/tests"]
-# CKAN is installed editable (PEP 660, finder-based), which pyright's static
-# resolver can't follow — without its real source on this list, ckan.* imports
-# don't resolve and everything downstream of them collapses to Unknown. A
-# missing path here is just skipped, so both can be listed even though only
-# one exists in any given environment: "../ckan" for a local sibling checkout
-# (this workspace's layout), "/srv/app/src/ckan" for the ckan/ckan-dev CI image.
 extraPaths = ["../ckan", "/srv/app/src/ckan"]
 strict = []
 strictParameterNoneValue = true

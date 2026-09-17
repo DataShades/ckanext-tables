@@ -6,6 +6,7 @@ from __future__ import annotations
 # though this never creates a real circular import at runtime.
 import abc
 import datetime
+import json
 import uuid
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -220,6 +221,22 @@ class JsonDisplayFormatter(BaseFormatter):
 
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         return tk.literal(tk.render("tables/formatters/json.html", extra_vars={"value": value}))
+
+
+class JsonStringFormatter(BaseFormatter):
+    """Serializes a dict/list value into a pretty-printed JSON string.
+
+    Unlike `JsonDisplayFormatter`, this returns plain text rather than a
+    rendered HTML snippet, so it's meant to run earlier in a formatter chain
+    -- typically right before `DialogModalFormatter`, which truncates and
+    renders its input as text rather than JSON.
+    """
+
+    def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
+        if not value:
+            return ""
+
+        return json.dumps(value, indent=2, default=str)
 
 
 class TextBoldFormatter(BaseFormatter):
