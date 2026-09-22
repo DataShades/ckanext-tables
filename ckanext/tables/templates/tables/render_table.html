@@ -112,6 +112,43 @@
             {% endif %}
         {% endblock %}
 
+        {% block table_sheets %}
+            {% if table.sheets|length > 1 %}
+                <div class="dropdown d-inline-block">
+                    {% set sheet_label = _('Sheet: %(name)s', name=table.sheets[table.current_sheet]) %}
+                    <button
+                        class="btn btn-light dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        title="{{ sheet_label }}"
+                        aria-label="{{ sheet_label }}">
+                        <i class="fa fa-table-cells"></i>
+                        <span class="tables-sheet-name">
+                            {{ table.sheets[table.current_sheet] }}
+                        </span>
+                    </button>
+                    <ul class="dropdown-menu" id="table-sheets-menu-{{ table.id }}" hx-sync="#tables-deferred-loader:replace">
+                        {% for sheet in table.sheets %}
+                            <li>
+                                {% if loop.index0 == table.current_sheet %}
+                                    <span class="dropdown-item active" aria-current="true">{{ sheet }}</span>
+                                {% else %}
+                                    <a class="dropdown-item" data-sheet="{{ loop.index0 }}"
+                                        href="?sheet={{ loop.index0 }}"
+                                        {% if table.sheet_switch_url %}
+                                        data-deferred-url="{{ table.sheet_switch_url }}?sheet={{ loop.index0 }}"
+                                        {% endif %}>
+                                        {{ sheet }}
+                                    </a>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endblock %}
+
         {% block table_refresh %}
             <button class="btn" id="refresh-table-{{ table.id }}" title="{{ _('Refresh Table') }}" aria-label="{{ _('Refresh Table') }}">
                 <i class="fa fa-arrows-rotate"></i>

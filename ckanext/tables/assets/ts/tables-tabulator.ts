@@ -5,7 +5,10 @@
 namespace ckan {
     export var sandbox: any;
     export var pubsub: any;
-    export var module: (name: string, initializer: ($: any) => any) => any;
+    export var module: {
+        (name: string, initializer: ($: any) => any): any;
+        initializeElement: (element: HTMLElement) => void;
+    };
     export var i18n: {
         _: (msgid: string, values?: Record<string, string | number>) => string;
         ngettext: (
@@ -53,6 +56,16 @@ type TabulatorAction = {
 declare var Tabulator: any;
 declare var htmx: {
     process: (element: HTMLElement) => void;
+    ajax: (
+        verb: string,
+        path: string,
+        context: {
+            target?: string;
+            source?: Element;
+            swap?: string;
+            push?: string | boolean;
+        }
+    ) => Promise<void>;
 };
 declare var bootstrap: {
     Dropdown: { getInstance: (el: Element | null) => { hide: () => void } | null };
@@ -77,6 +90,7 @@ ckan.module("tables-tabulator", function ($) {
 
             this._initAssignVariables();
             this._initFiltersFromUrl();
+            this._initSheetLinks();
             this._initTabulatorInstance();
             this._initAddTableEvents();
             this._updateClearButtonsState();
@@ -109,6 +123,7 @@ ckan.module("tables-tabulator", function ($) {
             this.tableActionsMenu = document.getElementById(this._id("table-actions-menu"));
             this.tableExportersMenu = document.getElementById(this._id("table-exporters-menu"));
             this.tableRefreshBtn = document.getElementById(this._id("refresh-table"));
+            this.tableSheetsMenu = document.getElementById(this._id("table-sheets-menu"));
             this.totalCountEl = document.getElementById(this._id("total-count-value"));
             this.tableFilters = this._updateTableFilters();
 
@@ -140,6 +155,73 @@ ckan.module("tables-tabulator", function ($) {
                 this.filtersCounter.classList.toggle("d-none", this.tableFilters.length === 0);
                 this._updateClearButtonsState();
             }
+        },
+
+        // Re-derives each sheet link's href/data-deferred-url from the *current*
+        // URL (query params change via history.replaceState, e.g. on pagination),
+        // not the stale snapshot the server rendered them with.
+        _refreshSheetLinkAttrs: function (): void {
+            if (!this.tableSheetsMenu) {
+                return;
+            }
+
+            this.tableSheetsMenu.querySelectorAll("a[data-sheet]").forEach((link: HTMLAnchorElement) => {
+                const sheet = link.dataset.sheet || "0";
+
+                const pageUrl = new URL(window.location.href);
+                pageUrl.searchParams.set("sheet", sheet);
+                link.href = pageUrl.toString();
+
+                const deferredUrl = link.dataset.deferredUrl;
+                if (deferredUrl) {
+                    const url = new URL(deferredUrl, window.location.origin);
+                    url.search = pageUrl.search;
+                    link.dataset.deferredUrl = `${url.pathname}${url.search}`;
+                }
+            });
+        },
+
+        _initSheetLinks: function (): void {
+            if (!this.tableSheetsMenu) {
+                return;
+            }
+
+            this._refreshSheetLinkAttrs();
+            this.tableSheetsMenu.addEventListener("click", this._onSheetLinkClick);
+
+            const toggle = this.tableSheetsMenu.previousElementSibling as HTMLElement | null;
+            toggle?.addEventListener("show.bs.dropdown", this._refreshSheetLinkAttrs);
+        },
+
+        _onSheetLinkClick: function (e: MouseEvent): void {
+            const link = (e.target as HTMLElement).closest("a[data-sheet]") as HTMLAnchorElement | null;
+            const deferredUrl = link?.dataset.deferredUrl;
+            if (!link || !deferredUrl) {
+                return;
+            }
+
+            // Modified clicks (new tab, etc.) fall through to the plain href.
+            if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) {
+                return;
+            }
+
+            e.preventDefault();
+
+            const toggle = this.tableSheetsMenu.previousElementSibling as HTMLElement | null;
+            bootstrap.Dropdown.getInstance(toggle)?.hide();
+
+            htmx.ajax("GET", deferredUrl, {
+                target: "#tables-deferred-loader",
+                swap: "innerHTML",
+                source: link,
+                push: link.href,
+            });
+        },
+
+        teardown: function (): void {
+            this.sandbox.unsubscribe("tables:tabulator:refresh", this._refreshData);
+            document.removeEventListener("click", this._onDocumentRowActionsClick);
+            this.table?.destroy();
         },
 
         _initTabulatorInstance: function (): void {
@@ -310,12 +392,7 @@ ckan.module("tables-tabulator", function ($) {
                 this.tableRefreshBtn.addEventListener("click", this._onRefreshTable);
             }
 
-            document.addEventListener("click", (e: Event) => {
-                const rowActionsBtn = (e.target as HTMLElement).closest(".btn-row-actions");
-                if (rowActionsBtn && this.el[0].contains(rowActionsBtn)) {
-                    this._onRowActionsDropdownClick(e);
-                }
-            });
+            document.addEventListener("click", this._onDocumentRowActionsClick);
 
             this.table.on("tableBuilt", () => {
                 if (this.options.enableFullscreenToggle) {
@@ -338,6 +415,13 @@ ckan.module("tables-tabulator", function ($) {
                 url.searchParams.set(this._urlKey("page"), pageno.toString());
                 window.history.replaceState({}, "", url);
             });
+        },
+
+        _onDocumentRowActionsClick: function (e: Event): void {
+            const rowActionsBtn = (e.target as HTMLElement).closest(".btn-row-actions");
+            if (rowActionsBtn && this.el[0].contains(rowActionsBtn)) {
+                this._onRowActionsDropdownClick(e);
+            }
         },
 
         _onRowActionsDropdownClick: function (e: Event): void {

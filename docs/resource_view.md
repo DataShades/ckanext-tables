@@ -23,6 +23,26 @@ The view is available for resources whose **Format** field (case-insensitive) is
 
 If the resource has been pushed to the **CKAN Datastore** (i.e. its `datastore_active` flag is `True`), the `DataStoreDataSource` is used regardless of the format field, providing direct and efficient access to stored records without any caching overhead.
 
+## Multi-sheet workbooks
+
+Spreadsheet formats (`xlsx`, `xls`, `ods`) can hold more than one sheet. The view shows one at a
+time and, when a workbook has several, renders a sheet selector next to the **Export** button.
+Picking a sheet swaps the table in place  and updates the address bar to
+a `sheet=<index>` query parameter — a zero-based position in the workbook — so the chosen sheet can
+still be linked to and bookmarked:
+
+```
+/dataset/<dataset>/resource/<resource-id>?sheet=1
+```
+
+Each sheet is a table of its own: its own columns, its own row count, its own cache entry, and its
+own filters, page and hidden columns in the URL. Switching sheets therefore never carries a filter
+over to a sheet that has no such column. An index that the workbook has no sheet for (an old link
+to a sheet a re-upload has since removed, say) falls back to the first sheet.
+
+Sheet names are read from the file itself and cached alongside the data, so listing them costs one
+read per cache TTL rather than one per request.
+
 ## Caching
 
 For file-based data sources (CSV, TSV, XLSX, XLS, ODS, ORC, Parquet, Feather, JSON-LD, NDJSON), fetched data is cached to disk as Arrow IPC (Feather) files, with a default TTL of **3600 seconds** (1 hour). Both are configurable:
@@ -44,7 +64,7 @@ ckan -c /etc/ckan/default/ckan.ini tables clean-cache
 
 The row-count/generation entries in Redis already expire and remove themselves via their own TTL, so there's nothing to sweep there.
 
-The **Refresh** button in the table's UI invalidates the cached data for that table, so the next load re-fetches and re-parses the file from its source URL.
+The **Refresh** button in the table's UI invalidates the cached data for that table, so the next load re-fetches and re-parses the file from its source URL. For a multi-sheet workbook it invalidates every sheet at once, not only the one on screen — they all come from the same file.
 
 ## View Configuration
 

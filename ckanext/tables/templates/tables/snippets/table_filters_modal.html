@@ -11,7 +11,7 @@
 
             <div class="modal-body">
                 <div id="filters-container-{{ table.id }}">
-                    {% for filter in h.tables_get_filters_from_request() %}
+                    {% for filter in h.tables_get_filters_from_request(table.name) %}
                         {{ filter_item(table, filter.field, filter.operator, filter.value) }}
                     {% endfor %}
                 </div>

@@ -97,8 +97,28 @@ class TestRebuildTable:
             result = _rebuild_table({"kind": "resource_view", "resource_id": "res-1", "resource_view_id": "view-1"})
 
         mock_lookup.assert_called_once_with("res-1", "view-1")
-        mock_init.assert_called_once_with(resource, resource_view)
+        mock_init.assert_called_once_with(resource, resource_view, 0)
         assert result is sample_table
+
+    def test_resource_view_locator_passes_through_its_sheet_index(self, sample_table):
+        resource = {"id": "res-1"}
+        resource_view = {"id": "view-1", "resource_id": "res-1"}
+
+        with (
+            mock.patch(
+                "ckanext.tables.export_jobs.tables_get_resource_and_view",
+                return_value=(resource, resource_view),
+            ),
+            mock.patch(
+                "ckanext.tables.export_jobs.tables_init_temporary_preview_table",
+                return_value=sample_table,
+            ) as mock_init,
+        ):
+            _rebuild_table(
+                {"kind": "resource_view", "resource_id": "res-1", "resource_view_id": "view-1", "sheet_index": 2}
+            )
+
+        mock_init.assert_called_once_with(resource, resource_view, 2)
 
     def test_generic_locator_resolves_and_instantiates_the_table_class(self):
         result = _rebuild_table({"kind": "generic", "table_class": _dotted(_DemoGenericTable)})

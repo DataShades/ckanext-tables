@@ -13,6 +13,7 @@ from ckanext.tables.config import get_export_dir
 from ckanext.tables.data_sources import DataSourceError
 from ckanext.tables.export_jobs import check_export_locator_access
 from ckanext.tables.generics import TableDispatchMixin
+from ckanext.tables.helpers import tables_requested_sheet
 from ckanext.tables.table import TableDefinition
 from ckanext.tables.utils import tables_get_resource_and_view, tables_init_temporary_preview_table
 
@@ -29,6 +30,10 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
     def get_table_for_resource(self, resource_id: str, resource_view_id: str) -> TableDefinition:
         """Get a table definition for a given resource.
 
+        The sheet to preview comes from the request's own ``sheet`` param —
+        the table's ``ajax_url`` carries it, so every data/export request a
+        rendered table makes stays on the sheet the reader is looking at.
+
         Args:
             resource_id: The resource ID
             resource_view_id: The resource view ID
@@ -38,13 +43,14 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
         """
         resource, resource_view = tables_get_resource_and_view(resource_id, resource_view_id)
 
-        return tables_init_temporary_preview_table(resource, resource_view)
+        return tables_init_temporary_preview_table(resource, resource_view, tables_requested_sheet())
 
     def _export_locator(self, table: TableDefinition) -> dict[str, Any]:
         return {
             "kind": "resource_view",
             "resource_id": self._resource_id,
             "resource_view_id": self._resource_view_id,
+            "sheet_index": table.current_sheet,
         }
 
     def get(self, resource_id: str, resource_view_id: str) -> str | Response | tuple[Response, int]:
@@ -116,8 +122,12 @@ class ResourceViewDeferredHandler(MethodView):
     """
 
     def get(self, resource_id: str, resource_view_id: str) -> str:
+        sheet_index = tables_requested_sheet()
         reload_url = tk.url_for(
-            "tables.resource_table_deferred", resource_id=resource_id, resource_view_id=resource_view_id
+            "tables.resource_table_deferred",
+            resource_id=resource_id,
+            resource_view_id=resource_view_id,
+            sheet=sheet_index,
         )
 
         try:
@@ -126,7 +136,7 @@ class ResourceViewDeferredHandler(MethodView):
             return self._render_error(reload_url, err.description or tk._("Unable to load this table."))
 
         try:
-            table = tables_init_temporary_preview_table(resource, resource_view)
+            table = tables_init_temporary_preview_table(resource, resource_view, sheet_index)
         except Exception:
             log.exception("Failed to initialize table for resource %s", resource_id)
             return self._render_error(reload_url, _DATA_LOAD_ERROR)

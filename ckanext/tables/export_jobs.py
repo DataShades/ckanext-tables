@@ -74,7 +74,9 @@ def _rebuild_table(locator: dict[str, Any]) -> TableDefinition:
     """Reconstruct the table a job's ``locator`` points at.
 
     ``locator["kind"]`` selects how: ``"resource_view"`` (``ResourceViewHandler``'s
-    tables) rebuilds via the same resource/view lookup the request path uses;
+    tables) rebuilds via the same resource/view lookup the request path uses,
+    on the sheet the export was started from (``sheet_index``, absent on jobs
+    enqueued before sheet selection existed — hence the default);
     ``"generic"`` (``GenericTableView``'s tables) resolves the table class from
     its dotted path and instantiates it with no arguments, same as
     ``GenericTableView.get`` already does.
@@ -83,7 +85,7 @@ def _rebuild_table(locator: dict[str, Any]) -> TableDefinition:
 
     if kind == "resource_view":
         resource, resource_view = tables_get_resource_and_view(locator["resource_id"], locator["resource_view_id"])
-        return tables_init_temporary_preview_table(resource, resource_view)
+        return tables_init_temporary_preview_table(resource, resource_view, locator.get("sheet_index", 0))
 
     if kind == "generic":
         table_class = _resolve_table_class(locator["table_class"])

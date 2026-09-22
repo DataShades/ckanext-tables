@@ -52,12 +52,25 @@ class DataSourceError(Exception):
 
 
 class BaseDataSource:
+    # Whether this source reads one of several sheets, and so accepts a
+    # ``sheet_index`` — see XlsxUrlDataSource, the only family that does.
+    supports_sheets: ClassVar[bool] = False
+
     def filter(self, filters: list[FilterItem]) -> Self: ...
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self: ...
     def paginate(self, page: int, size: int) -> Self: ...
     def all(self) -> list[dict[str, Any]]: ...
     def count(self) -> int: ...
     def get_columns(self) -> list[str]: ...
+
+    def get_sheet_names(self) -> list[str]:
+        """Return the names of the sheets this source can switch between, in file order.
+
+        Empty for every format with no such concept — which is all of them
+        but the spreadsheet ones, so callers can ask any data source whether
+        a sheet selector is worth offering without type-checking it first.
+        """
+        return []
 
     def serialize_value(self, val: Any) -> Any:  # noqa: PLR0911
         """Normalise one cell value to a JSON-safe, source-independent shape.
@@ -712,8 +725,11 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         self.cache_backend = cache_backend if cache_backend is not None else get_cache_backend()
         self.cache_ttl = cache_ttl if cache_ttl is not None else get_cache_ttl()
 
-    def get_cache_key(self) -> str:
+    def get_cache_base_key(self) -> str:
         return resource_cache_key(self.resource["id"]) if self.resource else f"url-{self.url}"
+
+    def get_cache_key(self) -> str:
+        return self.get_cache_base_key()
 
     def get_columns(self) -> list[str]:
         """Return the column names, preferring a cached answer over recomputing it.
@@ -951,17 +967,70 @@ class NdjsonUrlDataSource(BaseResourceDataSource):
 
 
 class XlsxUrlDataSource(BaseResourceDataSource):
+    """Reads one sheet of an Excel workbook (``.xlsx``).
+
+    Args:
+        sheet_index: Zero-based position of the sheet to read, defaulting to
+            the first one. ``get_sheet_names()`` lists what a given workbook
+            offers; an index past the end raises ``DataSourceError`` on load,
+            like any other unreadable source.
+    """
+
     _format_name = "XLSX"
+    supports_sheets = True
+
+    def __init__(self, *args: Any, sheet_index: int = 0, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        self.sheet_index = max(0, sheet_index)
+
+    def get_cache_key(self) -> str:
+        """Give each sheet of the workbook its own cached DataFrame.
+
+        The first sheet keeps the plain resource key — the one a workbook
+        cached before sheet selection existed (and every other format) already
+        uses. Any other sheet gets its own entry, tagged with the current
+        generation: the file-based backends hash their keys, so a
+        resource-level ``invalidate()`` has no way to enumerate and delete the
+        per-sheet entries. Naming them after the generation makes them
+        unreachable instead — exactly how a stale row count is already
+        handled — and leaves the orphans to expire on their own TTL.
+        """
+        base = self.get_cache_base_key()
+
+        if not self.sheet_index:
+            return base
+
+        return f"{base}:{self._generation()}:sheet-{self.sheet_index}"
+
+    def get_sheet_names(self) -> list[str]:
+        """Return the workbook's sheet names, reading only its directory, not its rows."""
+        cached = self.get_cached_sheets()
+
+        if cached is not None:
+            return cached
+
+        try:
+            with self._open_source() as path, pd.ExcelFile(path) as workbook:
+                names = [str(name) for name in workbook.sheet_names]
+        except self._schema_read_errors:
+            log.exception("Failed to read %s sheet names", self._format_name)
+            return []
+
+        if names:
+            self.set_cached_sheets(names)
+
+        return names
 
     def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
-        return pd.read_excel(path, **kwargs)
+        return pd.read_excel(path, sheet_name=self.sheet_index, **kwargs)
 
     def _schema_reader(self, path: str) -> list[str]:
-        return list(pd.read_excel(path, nrows=0).columns)
+        return list(pd.read_excel(path, sheet_name=self.sheet_index, nrows=0).columns)
 
 
 class XlsUrlDataSource(XlsxUrlDataSource):
-    """Reads a legacy Excel 97-2003 (``.xls``) workbook.
+    """Reads one sheet of a legacy Excel 97-2003 (``.xls``) workbook.
 
     ``pd.read_excel`` picks its engine (``xlrd`` here vs. ``openpyxl`` for
     ``.xlsx``) by sniffing the file's actual bytes, not its extension — our
@@ -973,7 +1042,7 @@ class XlsUrlDataSource(XlsxUrlDataSource):
 
 
 class OdsUrlDataSource(XlsxUrlDataSource):
-    """Reads the first sheet of an OpenDocument Spreadsheet (``.ods``).
+    """Reads one sheet of an OpenDocument Spreadsheet (``.ods``).
 
     Like ``.xls``, ``pd.read_excel`` picks the right engine (``odf`` here) by
     sniffing the file's content, so this only needs to override

@@ -223,6 +223,7 @@ class TestResourceViewHandlerExportLocator:
             "kind": "resource_view",
             "resource_id": "res-1",
             "resource_view_id": "view-1",
+            "sheet_index": 0,
         }
 
     def test_status_url_uses_the_export_status_endpoint(self, app):

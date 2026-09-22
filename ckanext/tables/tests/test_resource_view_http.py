@@ -7,14 +7,19 @@ registered blueprint via ``app.get``/``app.post`` — real URL routing, a real C
 resource + resource view, and the real Flask test client.
 """
 
+import io
 import json
+import re
 from unittest import mock
 
+import pandas as pd
 import pytest
 
 import ckan.plugins.toolkit as tk
 import ckan.tests.factories as factories
 import ckan.tests.helpers as helpers
+
+from ckanext.tables.utils import tables_preview_table_name
 
 
 def _ajax_url(resource_id: str, resource_view_id: str) -> str:
@@ -200,6 +205,30 @@ class TestResourceViewDeferredHandlerHTTP:
         assert response.status_code == 200
         assert b"tabulator-container" not in response.data
 
+    def test_rendered_column_toggles_reflect_the_hidden_columns_in_the_url(self, app, package, create_with_upload):
+        """The Column visibility modal's checkboxes must match the URL on first render.
+
+        Regression test: ``tables_get_columns_visibility_from_request`` used to read a
+        bare ``hidden_column`` request arg, while the client only ever sends the
+        table-namespaced ``hidden_column-<table_name>`` — so a fresh render (a page
+        reload, or switching sheets and back) always rendered every checkbox checked,
+        self-correcting only once the modal had been closed at least once.
+        """
+        resource = create_with_upload(b"name,age\nAlice,30\n", "people.csv", package_id=package["id"])
+        resource_view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+        table_name = tables_preview_table_name(resource["id"], resource_view["id"])
+
+        response = app.get(f"{_deferred_url(resource['id'], resource_view['id'])}?hidden_column-{table_name}=age")
+        page = response.get_data(as_text=True)
+
+        age_checkbox = re.search(r'<input[^>]*data-field="age"[^>]*>', page)
+        name_checkbox = re.search(r'<input[^>]*data-field="name"[^>]*>', page)
+
+        assert age_checkbox
+        assert "checked" not in age_checkbox.group()
+        assert name_checkbox
+        assert "checked" in name_checkbox.group()
+
 
 @pytest.mark.ckan_config("ckan.plugins", "tables tables_demo")
 @pytest.mark.usefixtures("with_plugins", "clean_db")
@@ -363,6 +392,79 @@ class TestExportStatusHandlerHTTP:
             response = app.get(_export_status_url("job-1"))
 
         assert "Export status" in response.get_data(as_text=True)
+
+
+@pytest.mark.ckan_config("ckan.plugins", "tables")
+@pytest.mark.usefixtures("with_plugins", "clean_db", "clear_cache", "clean_redis")
+class TestMultiSheetWorkbookHTTP:
+    """A workbook resource, over real HTTP: one sheet at a time, chosen by ``?sheet=``."""
+
+    def _make_workbook_resource_and_view(self, package, create_with_upload):
+        buffer = io.BytesIO()
+
+        with pd.ExcelWriter(buffer) as writer:
+            pd.DataFrame([{"name": "Alice"}, {"name": "Bob"}]).to_excel(writer, sheet_name="People", index=False)
+            pd.DataFrame([{"city": "Kyiv"}]).to_excel(writer, sheet_name="Other Places", index=False)
+
+        resource = create_with_upload(
+            buffer.getvalue(),
+            "workbook.xlsx",
+            package_id=package["id"],
+            format="xlsx",
+        )
+        resource_view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+
+        return resource, resource_view
+
+    def test_ajax_get_defaults_to_the_first_sheet(self, app, package, create_with_upload):
+        resource, resource_view = self._make_workbook_resource_and_view(package, create_with_upload)
+
+        response = app.get(
+            _ajax_url(resource["id"], resource_view["id"]),
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        assert response.json["total"] == 2
+        assert response.json["data"][0]["name"] == "Alice"
+
+    def test_ajax_get_reads_the_requested_sheet(self, app, package, create_with_upload):
+        resource, resource_view = self._make_workbook_resource_and_view(package, create_with_upload)
+
+        response = app.get(
+            f"{_ajax_url(resource['id'], resource_view['id'])}?sheet=1",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        assert response.json["total"] == 1
+        assert response.json["data"] == [{"city": "Kyiv"}]
+
+    def test_both_sheets_stay_correct_once_cached(self, app, package, create_with_upload):
+        """Reading one sheet must not leave the other serving its rows from the cache."""
+        resource, resource_view = self._make_workbook_resource_and_view(package, create_with_upload)
+        url = _ajax_url(resource["id"], resource_view["id"])
+        headers = {"X-Requested-With": "XMLHttpRequest"}
+
+        assert app.get(f"{url}?sheet=1", headers=headers).json["data"] == [{"city": "Kyiv"}]
+        assert app.get(f"{url}?sheet=0", headers=headers).json["total"] == 2
+        assert app.get(f"{url}?sheet=1", headers=headers).json["data"] == [{"city": "Kyiv"}]
+
+    def test_deferred_render_offers_the_other_sheets(self, app, package, create_with_upload):
+        resource, resource_view = self._make_workbook_resource_and_view(package, create_with_upload)
+
+        response = app.get(_deferred_url(resource["id"], resource_view["id"]))
+        page = response.get_data(as_text=True)
+
+        assert 'data-sheet="1"' in page
+        assert "Other Places" in page
+
+    def test_export_of_a_selected_sheet_exports_that_sheet(self, app, package, create_with_upload):
+        resource, resource_view = self._make_workbook_resource_and_view(package, create_with_upload)
+
+        response = app.get(f"{_ajax_url(resource['id'], resource_view['id'])}?sheet=1&exporter=csv")
+
+        assert response.status_code == 200
+        assert b"Kyiv" in response.data
+        assert b"Alice" not in response.data
 
 
 @pytest.mark.ckan_config("ckan.plugins", "tables")

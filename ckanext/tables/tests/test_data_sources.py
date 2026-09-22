@@ -307,6 +307,98 @@ class TestCSVResourceDataSource:
             CsvUrlDataSource()
 
 
+@pytest.fixture
+def workbook_path(tmp_path) -> str:
+    """A real two-sheet .xlsx file on disk, each sheet with its own schema."""
+    path = tmp_path / "workbook.xlsx"
+
+    with pd.ExcelWriter(path) as writer:
+        pd.DataFrame([{"name": "Alice"}, {"name": "Bob"}]).to_excel(writer, sheet_name="People", index=False)
+        pd.DataFrame([{"city": "Kyiv"}]).to_excel(writer, sheet_name="Other Places", index=False)
+
+    return str(path)
+
+
+@pytest.fixture
+def mocked_workbook_fetch(workbook_path: str):
+    """Serve ``workbook_path`` as the fetched file, without the network."""
+    with mock.patch(
+        "ckanext.tables.data_sources.fetch_remote_file",
+        return_value=contextlib.nullcontext(workbook_path),
+    ):
+        yield workbook_path
+
+
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_workbook_fetch")
+class TestXlsxUrlDataSourceSheets:
+    """Sheet selection, against a real multi-sheet workbook rather than a mocked reader."""
+
+    def _source(self, sheet_index: int = 0) -> XlsxUrlDataSource:
+        return XlsxUrlDataSource(url="http://example.com/workbook.xlsx", sheet_index=sheet_index)
+
+    def test_first_sheet_by_default(self):
+        ds = self._source()
+
+        assert ds.get_columns() == ["name"]
+        assert ds.filter([]).all() == [{"name": "Alice"}, {"name": "Bob"}]
+
+    def test_selected_sheet_is_the_one_read(self):
+        ds = self._source(1)
+
+        assert ds.get_columns() == ["city"]
+        assert ds.filter([]).all() == [{"city": "Kyiv"}]
+        assert ds.count() == 1
+
+    def test_sheet_names_are_listed_in_file_order(self):
+        assert self._source().get_sheet_names() == ["People", "Other Places"]
+
+    def test_sheet_names_come_from_the_cache_on_a_second_call(self):
+        self._source().get_sheet_names()
+
+        with mock.patch("ckanext.tables.data_sources.pd.ExcelFile", side_effect=AssertionError("re-read")):
+            assert self._source().get_sheet_names() == ["People", "Other Places"]
+
+    def test_negative_sheet_index_falls_back_to_the_first_sheet(self):
+        assert self._source(-1).sheet_index == 0
+
+    def test_a_sheet_past_the_end_is_a_data_source_error(self):
+        with pytest.raises(DataSourceError):
+            self._source(5).filter([]).all()
+
+    def test_each_sheet_is_cached_under_its_own_key(self):
+        assert self._source().get_cache_key() != self._source(1).get_cache_key()
+
+    def test_the_first_sheet_keeps_the_plain_resource_key(self):
+        ds = XlsxUrlDataSource(resource={"id": "res-1"})
+
+        assert ds.get_cache_key() == "resource-res-1"
+        assert ds.get_cache_key() == ds.get_cache_base_key()
+
+    def test_a_cached_sheet_does_not_bleed_into_another(self):
+        """Each sheet is read and cached independently, in either order."""
+        assert self._source(1).filter([]).all() == [{"city": "Kyiv"}]
+        assert self._source().filter([]).all() == [{"name": "Alice"}, {"name": "Bob"}]
+        assert self._source(1).filter([]).all() == [{"city": "Kyiv"}]
+
+    def test_invalidate_orphans_every_sheet_of_the_workbook(self):
+        """One resource-level invalidation has to reach the per-sheet entries too."""
+        second_sheet = self._source(1)
+        key_before = second_sheet.get_cache_key()
+
+        self._source().invalidate()
+
+        assert self._source(1).get_cache_key() != key_before
+
+    def test_unreadable_source_has_no_sheets_to_offer(self):
+        ds = XlsxUrlDataSource(url="http://example.com/missing.xlsx")
+
+        with mock.patch(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            side_effect=OSError("boom"),
+        ):
+            assert ds.get_sheet_names() == []
+
+
 @pytest.mark.usefixtures("clear_cache", "clean_redis", "mocked_fetch_remote_file")
 class TestXlsUrlDataSource:
     """XlsUrlDataSource only overrides XlsxUrlDataSource's `_format_name`.

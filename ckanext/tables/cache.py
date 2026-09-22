@@ -715,13 +715,31 @@ class CachedDataSourceMixin:
     cache_backend: CacheBackend
     cache_ttl: int
 
+    # Memoised generation token — see _generation(). A class-level default so
+    # the mixin still needs no __init__ of its own.
+    _generation_memo: str | None = None
+
     def get_cache_key(self) -> str:
         """Return a unique string key for this data source instance."""
         raise NotImplementedError
 
+    def get_cache_base_key(self) -> str:
+        """Return the key every other key for this source is derived from.
+
+        Defaults to ``get_cache_key()``, which is all a source whose data is
+        one fixed thing needs. A source whose ``get_cache_key()`` varies
+        *within* a single resource — one entry per selected sheet of a
+        workbook, say — overrides this with the invariant part, so the
+        generation token, the row counts and ``invalidate()`` all stay
+        anchored to the resource as a whole. That's what lets ``plugin.py``'s
+        resource hooks keep invalidating exactly one key per resource.
+        """
+        return self.get_cache_key()
+
     def invalidate(self) -> None:
-        """Remove this data source's cached DataFrame and orphan every count derived from it."""
-        invalidate_cache_entry(self.cache_backend, self.get_cache_key(), self.cache_ttl)
+        """Remove this data source's cached DataFrame and orphan every entry derived from it."""
+        invalidate_cache_entry(self.cache_backend, self.get_cache_base_key(), self.cache_ttl)
+        self._generation_memo = None
 
     def get_cached_count(self, filters: list[FilterItem]) -> int | None:
         """Return the cached row count for *filters*, or ``None`` on a cache miss."""
@@ -750,10 +768,38 @@ class CachedDataSourceMixin:
         """
         return f"{self.get_cache_key()}:columns:{self._generation()}"
 
+    def get_cached_sheets(self) -> list[str] | None:
+        """Return the cached sheet names, or ``None`` on a cache miss."""
+        result = _metadata_get(self._sheets_cache_key())
+        return list(result) if isinstance(result, list) else None
+
+    def set_cached_sheets(self, sheets: list[str]) -> None:
+        """Cache *sheets* under the current generation."""
+        _metadata_set(self._sheets_cache_key(), sheets, self.cache_ttl)
+
+    def _sheets_cache_key(self) -> str:
+        """Return the cache key for this source's sheet names.
+
+        Anchored on the base key rather than ``get_cache_key()``: the list of
+        sheets is a property of the whole workbook, identical no matter which
+        one of them is currently selected.
+        """
+        return f"{self.get_cache_base_key()}:sheets:{self._generation()}"
+
     def _generation(self) -> str:
-        """Return the current cache generation, bumped by ``invalidate()`` to orphan old counts."""
-        generation = _metadata_get(f"{self.get_cache_key()}:gen")
-        return generation if isinstance(generation, str) else "0"
+        """Return the current cache generation, bumped by ``invalidate()`` to orphan old entries.
+
+        Memoised per instance: every other key here is scoped by it, and
+        ``get_cache_key()`` itself may be too, so an un-memoised read would
+        mean a handful of Redis round trips per request for a value that
+        cannot meaningfully change mid-request — the one thing that does
+        change it, ``invalidate()``, clears the memo itself.
+        """
+        if self._generation_memo is None:
+            generation = _metadata_get(f"{self.get_cache_base_key()}:gen")
+            self._generation_memo = generation if isinstance(generation, str) else "0"
+
+        return self._generation_memo
 
     def _count_cache_key(self, filters: list[FilterItem]) -> str:
         """Return the cache sub-key for a given set of filters (count ignores page/size/sort)."""

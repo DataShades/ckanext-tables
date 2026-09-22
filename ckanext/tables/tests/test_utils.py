@@ -28,6 +28,7 @@ from ckanext.tables.utils import (
     tables_build_params,
     tables_guess_data_source,
     tables_init_temporary_preview_table,
+    tables_preview_table_name,
 )
 
 
@@ -342,3 +343,85 @@ class TestTablesInitTemporaryPreviewTable:
             tbl = tables_init_temporary_preview_table(resource, resource_view)
 
         assert isinstance(tbl.data_source, XlsxUrlDataSource)
+
+
+class TestTablesPreviewTableName:
+    """The name namespaces the state the frontend persists per table, so it is per sheet."""
+
+    def test_first_sheet_keeps_the_sheetless_name(self):
+        assert tables_preview_table_name("res-1", "view-1") == "preview_resource_res-1_view-1"
+        assert tables_preview_table_name("res-1", "view-1", 0) == "preview_resource_res-1_view-1"
+
+    def test_other_sheets_get_their_own_name(self):
+        assert tables_preview_table_name("res-1", "view-1", 2) == "preview_resource_res-1_view-1_sheet_2"
+
+
+@pytest.mark.ckan_config("ckan.plugins", "tables")
+@pytest.mark.usefixtures("clear_cache", "clean_redis", "with_plugins", "with_request_context")
+class TestTablesInitTemporaryPreviewTableSheets:
+    """A workbook resource previews one sheet at a time, chosen by index."""
+
+    @pytest.fixture
+    def workbook_view(self, tmp_path):
+        """A view pointing at a real two-sheet workbook, fetched without the network."""
+        path = tmp_path / "workbook.xlsx"
+
+        with pd.ExcelWriter(path) as writer:
+            pd.DataFrame([{"name": "Alice"}]).to_excel(writer, sheet_name="People", index=False)
+            pd.DataFrame([{"city": "Kyiv"}]).to_excel(writer, sheet_name="Other Places", index=False)
+
+        with mock.patch(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            return_value=contextlib.nullcontext(str(path)),
+        ):
+            yield {"id": "view-1", "file_url": "http://example.com/workbook.xlsx"}
+
+    def _resource(self):
+        return {"id": "res-1", "format": "XLSX", "url": "http://example.com/workbook.xlsx"}
+
+    def test_sheets_are_offered_to_the_template(self, workbook_view):
+        tbl = tables_init_temporary_preview_table(self._resource(), workbook_view)
+
+        assert tbl.sheets == ["People", "Other Places"]
+        assert tbl.current_sheet == 0
+        assert [col.field for col in tbl.columns] == ["name"]
+
+    def test_a_multi_sheet_workbook_gets_a_sheet_switch_url(self, workbook_view):
+        """The client fetches this (appending its own ?sheet=) to switch sheets without a page reload."""
+        tbl = tables_init_temporary_preview_table(self._resource(), workbook_view)
+
+        assert tbl.sheet_switch_url is not None
+        assert "res-1" in tbl.sheet_switch_url
+        assert "view-1" in tbl.sheet_switch_url
+        assert "sheet" not in tbl.sheet_switch_url
+
+    def test_the_selected_sheet_drives_name_columns_and_ajax_url(self, workbook_view):
+        tbl = tables_init_temporary_preview_table(self._resource(), workbook_view, 1)
+
+        assert tbl.current_sheet == 1
+        assert tbl.name.endswith("_sheet_1")
+        assert [col.field for col in tbl.columns] == ["city"]
+        assert "sheet=1" in tbl.ajax_url
+
+    def test_a_sheet_that_is_no_longer_there_falls_back_to_the_first(self, workbook_view):
+        """A bookmarked link to a since-removed sheet shows the workbook, not an error."""
+        tbl = tables_init_temporary_preview_table(self._resource(), workbook_view, 9)
+
+        assert tbl.current_sheet == 0
+        assert [col.field for col in tbl.columns] == ["name"]
+
+    def test_a_format_without_sheets_offers_none(self):
+        resource = {"id": "res-2", "format": "CSV", "url": "http://example.com/data.csv"}
+
+        with (
+            mock.patch(
+                "ckanext.tables.data_sources.fetch_remote_file",
+                return_value=contextlib.nullcontext("/tmp/mocked-source"),
+            ),
+            mock.patch("ckanext.tables.data_sources.pd.read_csv", return_value=pd.DataFrame({"a": [1]})),
+        ):
+            tbl = tables_init_temporary_preview_table(resource, {"id": "view-2"})
+
+        assert tbl.sheets == []
+        assert tbl.name == "preview_resource_res-2_view-2"
+        assert tbl.sheet_switch_url is None

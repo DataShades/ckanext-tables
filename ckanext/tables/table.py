@@ -52,6 +52,15 @@ class TableDefinition:
         page_size: (Optional) Number of rows per page. Defaults to 10.
         table_template: (Optional) Template to render the table. Defaults to `tables/base.html`.
         table_layout: (Optional) Layout for the table. Defaults to `fitColumns`.
+        sheets: (Optional) Names of the sheets the underlying data source can switch
+            between, in file order — see ``BaseDataSource.get_sheet_names()``. The
+            table renders a sheet selector when there is more than one; a data source
+            with no concept of sheets leaves this empty and gets no selector.
+        current_sheet: (Optional) Index into ``sheets`` of the one being shown.
+        sheet_switch_url: (Optional) The deferred-render URL the sheet selector's
+            htmx-driven links (see ``render_table.html``'s ``table_sheets`` block)
+            fetch from to switch sheets in place, instead of navigating the page.
+            Left unset (the default) for anything with no sheets to switch between.
     """
 
     name: str
@@ -66,6 +75,9 @@ class TableDefinition:
     page_size: int = 10
     table_template: str = "tables/base.html"
     table_layout: str = "fitColumns"
+    sheets: list[str] = dataclass_field(default_factory=list)
+    current_sheet: int = 0
+    sheet_switch_url: str | None = None
 
     def __post_init__(self):
         if not _SAFE_NAME_RE.match(self.name):

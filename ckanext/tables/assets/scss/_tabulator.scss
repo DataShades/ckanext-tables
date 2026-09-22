@@ -47,6 +47,18 @@ body.tables-fullscreen {
             color: #596A73;
         }
     }
+
+    // A sheet name is the author's own text, up to 31 characters of it — keep
+    // the selector from growing wide enough to push the rest of the controls
+    // onto a second row.
+    .tables-sheet-name {
+        display: inline-block;
+        max-width: 12rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: bottom;
+        white-space: nowrap;
+    }
 }
 
 .tabulator-wrapper .tabulator {

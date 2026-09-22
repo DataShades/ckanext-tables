@@ -65,13 +65,25 @@ source = NdjsonUrlDataSource(url="https://example.com/data.ndjson")
 
 ### XlsxUrlDataSource
 
-Reads the first sheet of an Excel workbook (`.xlsx`).
+Reads one sheet of an Excel workbook (`.xlsx`) — the first one unless `sheet_index` says otherwise.
 
 ```python
 from ckanext.tables.shared import XlsxUrlDataSource
 
 source = XlsxUrlDataSource(url="https://example.com/report.xlsx")
+
+# A different sheet, by its zero-based position in the workbook
+source = XlsxUrlDataSource(url="https://example.com/report.xlsx", sheet_index=1)
+
+# What the workbook actually offers, in file order
+source.get_sheet_names()  # ["Summary", "Raw data"]
 ```
+
+Every sheet is cached under its own key, since each has its own columns and row count. Invalidating
+the resource (a re-upload, or the table's **Refresh** button) invalidates all of them together.
+
+`get_sheet_names()` is defined on every data source — it returns an empty list for the formats that
+have no sheets — so a caller can offer a sheet selector without checking the source's type first.
 
 ::: tables.data_sources.XlsxUrlDataSource
     options:
@@ -82,7 +94,7 @@ source = XlsxUrlDataSource(url="https://example.com/report.xlsx")
 
 ### XlsUrlDataSource
 
-Reads the first sheet of a legacy Excel 97-2003 workbook (`.xls`).
+Reads one sheet of a legacy Excel 97-2003 workbook (`.xls`), with the same `sheet_index`/`get_sheet_names()` support as `XlsxUrlDataSource`.
 
 ```python
 from ckanext.tables.shared import XlsUrlDataSource
@@ -99,7 +111,7 @@ source = XlsUrlDataSource(url="https://example.com/legacy-report.xls")
 
 ### OdsUrlDataSource
 
-Reads the first sheet of an OpenDocument Spreadsheet (`.ods`).
+Reads one sheet of an OpenDocument Spreadsheet (`.ods`), with the same `sheet_index`/`get_sheet_names()` support as `XlsxUrlDataSource`.
 
 ```python
 from ckanext.tables.shared import OdsUrlDataSource

@@ -1,4 +1,4 @@
-{% set columns_visibility = h.tables_get_columns_visibility_from_request() %}
+{% set columns_visibility = h.tables_get_columns_visibility_from_request(table.name) %}
 
 <div class="modal fade columns-modal" id="columns-modal-{{ table.id }}" tabindex="-1" role="dialog"
     aria-labelledby="columns-modal-label-{{ table.id }}" data-bs-backdrop="false">

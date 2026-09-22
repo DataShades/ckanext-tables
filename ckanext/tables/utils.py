@@ -149,6 +149,7 @@ def tables_get_resource_and_view(resource_id: str, resource_view_id: str) -> tup
 def tables_init_temporary_preview_table(
     resource: dict[str, Any],
     resource_view: dict[str, Any],
+    sheet_index: int = 0,
 ) -> TableDefinition:
     """Initialize a temporary preview table for a given resource.
 
@@ -157,29 +158,67 @@ def tables_init_temporary_preview_table(
         resource_view: The resource view dictionary. When it contains a
             ``file_url`` key that URL is used instead of the resource URL and
             the format is inferred from its file extension.
+        sheet_index: Which sheet of a multi-sheet workbook to preview. Ignored
+            by every format that has no sheets, and falls back to the first
+            sheet when the workbook has no sheet at that position — a
+            bookmarked link to a sheet that a re-upload has since removed
+            shows the workbook's first sheet rather than an error.
 
     Returns:
         A TableDefinition object representing the initialized temporary preview table.
     """
-    data_source = tables_guess_data_source(resource, resource_view)
+    data_source = tables_guess_data_source(resource, resource_view, sheet_index)
+    sheets = data_source.get_sheet_names()
+
+    if sheet_index and sheet_index >= len(sheets):
+        sheet_index = 0
+        data_source = tables_guess_data_source(resource, resource_view)
 
     return TableDefinition(
-        name=f"preview_resource_{resource['id']}_{resource_view['id']}",
+        name=tables_preview_table_name(resource["id"], resource_view["id"], sheet_index),
         data_source=data_source,
         exporters=ALL_EXPORTERS,
         ajax_url=tk.url_for(
             "tables.resource_table_ajax",
             resource_id=resource["id"],
             resource_view_id=resource_view["id"],
+            sheet=sheet_index,
         ),
         columns=[ColumnDefinition(field=col, title=col) for col in data_source.get_columns()],
         table_layout="fitDataStretch",
+        sheets=sheets,
+        current_sheet=sheet_index,
+        sheet_switch_url=(
+            tk.url_for(
+                "tables.resource_table_deferred",
+                resource_id=resource["id"],
+                resource_view_id=resource_view["id"],
+            )
+            if len(sheets) > 1
+            else None
+        ),
     )
+
+
+def tables_preview_table_name(resource_id: str, resource_view_id: str, sheet_index: int = 0) -> str:
+    """Return the ``TableDefinition.name`` of a resource preview table.
+
+    A table's name namespaces the state the frontend persists in the address
+    bar (page, filters, hidden columns), so each sheet gets its own — a
+    filter on a column only the first sheet has must not follow the reader
+    into a second sheet that has no such column. The first sheet keeps the
+    bare, sheet-less name it had before sheet selection existed, so links
+    already out there keep resolving to the state they were saved with.
+    """
+    name = f"preview_resource_{resource_id}_{resource_view_id}"
+
+    return f"{name}_sheet_{sheet_index}" if sheet_index else name
 
 
 def tables_guess_data_source(
     resource: dict[str, Any],
     resource_view: dict[str, Any] | None = None,
+    sheet_index: int = 0,
 ) -> BaseDataSource:
     """Guess the appropriate data source for a resource.
 
@@ -189,6 +228,9 @@ def tables_guess_data_source(
             ``file_url`` key that URL is used as the data source URL and its
             file extension is used to determine the format (overriding the
             resource format).
+        sheet_index: Which sheet to read, for the formats that have sheets.
+            Passed only to those — every other data source takes no such
+            argument.
 
     Returns:
         An instantiated data source ready to use.
@@ -211,7 +253,12 @@ def tables_guess_data_source(
     if not data_source_class:
         raise DataSourceError(f"Unsupported format: {fmt}")
 
-    if file_url:
-        return data_source_class(url=url, cache_backend=cache_backend)
+    kwargs: dict[str, Any] = {"cache_backend": cache_backend}
 
-    return data_source_class(url=url, resource=resource, cache_backend=cache_backend)
+    if data_source_class.supports_sheets:
+        kwargs["sheet_index"] = sheet_index
+
+    if file_url:
+        return data_source_class(url=url, **kwargs)
+
+    return data_source_class(url=url, resource=resource, **kwargs)
