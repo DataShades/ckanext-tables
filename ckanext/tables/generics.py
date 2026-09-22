@@ -6,6 +6,7 @@ from datetime import datetime as dt
 from datetime import timezone as tz
 from typing import Any
 
+import markupsafe
 from flask import Response, jsonify, request, stream_with_context
 from flask.views import MethodView
 
@@ -106,7 +107,7 @@ class ExportTableMixin:
         exporter = table.get_exporter(exporter_name)
 
         if not exporter:
-            message = tk._("Exporter %(name)s not found") % {"name": exporter_name}
+            message = tk._("Exporter %(name)s not found") % {"name": markupsafe.escape(exporter_name)}
             return jsonify({"success": False, "error": message}), 404
 
         if not exporter.is_available():

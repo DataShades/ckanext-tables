@@ -8,6 +8,16 @@ Actions are operations that can be performed on table data. There are 3 types of
 
 Each action callback returns an `ActionHandlerResult` object, below you can see its definition. The action endpoint always responds `200` and wraps this in a fixed JSON envelope, whether the action succeeded, doesn't exist, or raised — see [Generic Views' HTTP Response Contract](../generics.md#http-response-contract) for the full status-code table.
 
+!!! warning "`message`/`error` render as HTML — escape untrusted input"
+    Toasts render `message`/`error` as HTML, not escaped text. If you build
+    either from `row`/`rows` (client-supplied, see below), escape it first
+    (e.g. `markupsafe.escape`) or it can inject markup/script.
+
+!!! warning "`row`/`rows` are client-supplied, not re-verified"
+    These come from the browser's request, not a fresh server-side fetch.
+    Don't treat them as proof of authorization — re-check ownership/access
+    for the actual record before acting on it.
+
 ::: tables.types.ActionHandlerResult
     options:
       show_root_heading: true

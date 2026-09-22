@@ -58,8 +58,6 @@
     toastEl.classList.add("toast", "align-items-center");
     style.border && toastEl.classList.add(style.border);
 
-    // title/subtitle/message can carry server or user-controlled content, so they're
-    // set via textContent below, not interpolated here like the trusted opts.icon.
     toastEl.innerHTML = `
             <div class="toast-header ${style.main}">
                 <span class="toast-icon">${opts.icon}</span>
@@ -67,11 +65,10 @@
                 <small></small>
                 <button type="button" class="btn-close ${style.btnClose}" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
-            <div class="toast-body position-relative"></div>
+            <div class="toast-body position-relative">${opts.message}</div>
         `;
     toastEl.querySelector(".toast-header strong").textContent = opts.title;
     toastEl.querySelector(".toast-header small").textContent = opts.subtitle;
-    toastEl.querySelector(".toast-body").textContent = opts.message;
 
     if (!opts.stacking) {
       containerEl.querySelectorAll(".toast").forEach(el => el.remove());

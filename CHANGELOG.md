@@ -2,7 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [2.1.0] - 2026-09-22
+
+### 🚀 Features
+
+- Implement multi sheet xls, xlsx, ods support
+
+## [2.0.1] - 2026-09-17
+
+### 🐛 Bug Fixes
+
+- Fix DialogModalFormatter styles, add JsonStringFormatter
+
+## [2.0.0] - 2026-09-16
+
+### 🚀 Features
+
+- Allow multiple talbe instances on the same page
+- Update demo tables
+- Add front-end ts tests
+- Add packages demo table
+- Implement xls support
+- Implement tsv and ods support
+- Implement jsonld and jsonl support
+- Improve exporting ux
+- Background export for sync formats
 
 ### 🐛 Bug Fixes
 
@@ -26,10 +50,31 @@ All notable changes to this project will be documented in this file.
 - Fix ckan 2.12 file upload compatibility
 - Return 501 for an exporter with a missing optional dependency
 - Pyright fixes, setup pyright for ci and pre-commit
+- Stop mutating shared columns list and action attrs on table render
+- Move guess_data_source/init_preview_table out of template helpers into utils
+- Add demo dependencies
+- Format guess ignores
+- G.plugins usage switch to plugin_loaded
+- Use server Content-Disposition filename for table exports instead of a hardcoded client-side name
+- Cast filter values by column python_type and support LIKE on non-string columns
+- Fix table action error responses to use a single error string field instead of mismatched errors shapes
+- Fix toast aria-label, fix toast/confirm fallback to og versions
+- Document intended GET/POST status codes, normalize DatabaseDataSource value serialization to match PandasDataSource
+- Fix pyright issues for 2.11
+- Restore backdrop for modals
+- Accessibility, bulk-action, label, and pagination fixes
+- Guard cache-miss fetch with a per-key lock to prevent stampedes
 
 ### 🚜 Refactor
 
 - Remove dead code
+- [**breaking**] Drop the pickle cache backend
+- [**breaking**] Drop the parquet cache backend
+- Dedupe URL data sources, add DataSourceError, self-heal corrupted cache entries
+
+### 📚 Documentation
+
+- Update documentation
 
 ### ⚡ Performance
 
@@ -40,10 +85,13 @@ All notable changes to this project will be documented in this file.
 - Fix bundle size, multiple asset optimization
 - Memoise RedisCacheBackend reads via a version-key check to skip payload re-fetch/decode
 - Stream CSV/TSV/NDJSON exports instead of double-buffering the full output
+- Push filter/sort/paginate/count down to DuckDB for feather/parquet-cached tables
+- Cache the column list across resource-preview requests
 
 ### 🧪 Testing
 
 - Increase test coverage
+- HTTP-level test coverage, stronger assertions, CI build/frontend checks
 
 ### ⚙️ Miscellaneous Tasks
 
