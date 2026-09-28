@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import uuid
 from unittest import mock
 
 import pandas as pd
@@ -65,9 +66,9 @@ class TestCleanExportsCommand:
             return runner.invoke(tables, ["clean-exports"])
 
     def test_removes_only_files_older_than_the_ttl(self, tmp_path):
-        stale = tmp_path / "stale-job.csv"
+        stale = tmp_path / f"{uuid.uuid4()}.csv"
         stale.write_text("a,b\n1,2\n")
-        fresh = tmp_path / "fresh-job.csv"
+        fresh = tmp_path / f"{uuid.uuid4()}.csv"
         fresh.write_text("a,b\n1,2\n")
 
         old_time = time.time() - 7200
@@ -79,6 +80,18 @@ class TestCleanExportsCommand:
         assert "Removed 1 expired export file" in result.output
         assert not stale.exists()
         assert fresh.exists()
+
+    def test_leaves_files_not_named_like_exports(self, tmp_path):
+        foreign = tmp_path / "notes.txt"
+        foreign.write_text("keep me")
+        old_time = time.time() - 7200
+        os.utime(foreign, (old_time, old_time))
+
+        result = self._invoke(str(tmp_path), ttl=3600)
+
+        assert result.exit_code == 0
+        assert "No expired export files found." in result.output
+        assert foreign.exists()
 
     def test_reports_nothing_to_clean(self, tmp_path):
         result = self._invoke(str(tmp_path))

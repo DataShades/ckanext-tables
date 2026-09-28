@@ -58,6 +58,11 @@ class TestColumnDefinition:
         d = col.to_dict()
         assert d["minWidth"] == 50
 
+    def test_to_dict_keeps_zero_width(self):
+        col = ColumnDefinition(field="id", width=0)
+        d = col.to_dict()
+        assert d["width"] == 0
+
 
 @pytest.mark.usefixtures("with_request_context")
 class TestTableDefinitionName:
@@ -110,6 +115,11 @@ class TestTableDefinitionBasic:
 
     def test_get_tabulator_config_without_ajax_url(self, simple_table):
         assert "ajaxURL" not in simple_table.get_tabulator_config()
+
+    def test_get_tabulator_config_selector_includes_page_size(self, simple_table):
+        simple_table.page_size = 20
+        cfg = simple_table.get_tabulator_config()
+        assert cfg["paginationSizeSelector"] == [5, 10, 20, 25, 50, 100]
 
     def test_unique_id_generated(self, simple_data):
         t1 = TableDefinition(name="t", data_source=ListDataSource(simple_data))

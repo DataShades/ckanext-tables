@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import uuid
 
 import click
 
@@ -54,7 +55,7 @@ def clean_exports():
     removed = 0
 
     for entry in os.scandir(export_dir):
-        if not entry.is_file():
+        if not entry.is_file() or not _is_export_filename(entry.name):
             continue
 
         try:
@@ -68,3 +69,18 @@ def clean_exports():
         click.secho(f"Removed {removed} expired export file(s).", fg="green")
     else:
         click.echo("No expired export files found.")
+
+
+def _is_export_filename(name: str) -> bool:
+    """Match the ``<job_id>.<exporter>`` names background exports are written under."""
+    job_id, _, extension = name.partition(".")
+
+    if not extension:
+        return False
+
+    try:
+        uuid.UUID(job_id)
+    except ValueError:
+        return False
+
+    return True

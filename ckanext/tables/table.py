@@ -127,7 +127,7 @@ class TableDefinition:
             "pagination": True,
             "paginationMode": "remote",
             "paginationSize": self.page_size,
-            "paginationSizeSelector": [5, 10, 25, 50, 100],
+            "paginationSizeSelector": sorted({5, 10, 25, 50, 100, self.page_size}),
             "minHeight": 300,
             "filterMode": "remote",
         }
@@ -325,7 +325,9 @@ class ColumnDefinition:
         }
 
         for name, tabulator_name in mappings.items():
-            if value := getattr(self, name):
+            value = getattr(self, name)
+
+            if value is not None:
                 result[tabulator_name] = value
 
         if self.sortable:
