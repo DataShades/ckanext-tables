@@ -742,9 +742,9 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         cached = self.get_cached_columns()
 
         if cached is not None:
-            return cached
+            return [str(column) for column in cached]
 
-        columns = self._fetch_columns()
+        columns = [str(column) for column in self._fetch_columns()]
 
         if columns:
             self.set_cached_columns(columns)
@@ -797,10 +797,18 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         """
         try:
             with self._open_source() as path:
-                return self._reader(path)
+                df = self._reader(path)
         except Exception as exc:
             log.exception("Error fetching %s from %s", self._format_name, self.get_source_path())
             raise DataSourceError(f"Could not read {self._format_name} data: {exc}") from exc
+
+        # A header cell isn't always text — a spreadsheet's ``2020`` or date
+        # header comes back as an int/Timestamp label. Everything downstream
+        # (column definitions, filter/sort params, the JSON rows, Tabulator's
+        # ``field``) addresses columns by string, so settle on that here.
+        df.columns = df.columns.map(str)
+
+        return df
 
     def get_source_path(self) -> str:
         if self._source_path:

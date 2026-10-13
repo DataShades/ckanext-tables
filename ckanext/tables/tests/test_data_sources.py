@@ -361,6 +361,20 @@ class TestXlsxUrlDataSourceSheets:
     def test_negative_sheet_index_falls_back_to_the_first_sheet(self):
         assert self._source(-1).sheet_index == 0
 
+    def test_non_string_headers_become_string_columns(self, tmp_path):
+        """A numeric header (a year, say) must not reach the frontend as an int ``field``."""
+        path = tmp_path / "years.xlsx"
+        pd.DataFrame([{"Month": 1, 2020: 2, 2021: 7}]).to_excel(path, index=False)
+
+        with mock.patch(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            return_value=contextlib.nullcontext(str(path)),
+        ):
+            ds = XlsxUrlDataSource(url="http://example.com/years.xlsx")
+
+            assert ds.get_columns() == ["Month", "2020", "2021"]
+            assert ds.filter([]).all() == [{"Month": 1, "2020": 2, "2021": 7}]
+
     def test_a_sheet_past_the_end_is_a_data_source_error(self):
         with pytest.raises(DataSourceError):
             self._source(5).filter([]).all()
