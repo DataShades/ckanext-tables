@@ -15,7 +15,11 @@ from ckanext.tables.export_jobs import check_export_locator_access
 from ckanext.tables.generics import TableDispatchMixin
 from ckanext.tables.helpers import tables_requested_sheet
 from ckanext.tables.table import TableDefinition
-from ckanext.tables.utils import tables_get_resource_and_view, tables_init_temporary_preview_table
+from ckanext.tables.utils import (
+    tables_get_resource_and_view,
+    tables_get_resource_and_view_light,
+    tables_init_temporary_preview_table,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +45,7 @@ class ResourceViewHandler(TableDispatchMixin, MethodView):
         Returns:
             A TableDefinition object
         """
-        resource, resource_view = tables_get_resource_and_view(resource_id, resource_view_id)
+        resource, resource_view = tables_get_resource_and_view_light(resource_id, resource_view_id)
 
         return tables_init_temporary_preview_table(resource, resource_view, tables_requested_sheet())
 

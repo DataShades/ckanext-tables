@@ -451,3 +451,88 @@ class TestTablesInitTemporaryPreviewTableSheets:
         assert tbl.sheets == []
         assert tbl.name == "preview_resource_res-2_view-2"
         assert tbl.sheet_switch_url is None
+
+
+@pytest.mark.ckan_config("ckan.plugins", "tables")
+@pytest.mark.usefixtures("clean_db", "with_plugins", "with_request_context")
+class TestLightResourceLookupParity:
+    """tables_get_resource_and_view_light must allow and refuse exactly what the full lookup does."""
+
+    @staticmethod
+    def _outcome(lookup, resource_id, view_id, user):
+        from werkzeug.exceptions import HTTPException
+
+        from ckan import model
+        from ckan.common import g
+
+        # What CKAN's identify_user() sets per request; actions read the user from it.
+        g.user = user["name"] if user else ""
+        g.userobj = model.User.get(user["name"]) if user else None
+
+        try:
+            resource, _view = lookup(resource_id, view_id)
+        except HTTPException as err:
+            return err.code
+        return resource["id"]
+
+    @pytest.mark.parametrize("private", [False, True])
+    @pytest.mark.parametrize("who", ["anonymous", "outsider", "member", "sysadmin"])
+    def test_same_access_as_the_full_lookup(self, private, who):
+        import ckan.tests.factories as factories
+
+        from ckanext.tables.utils import tables_get_resource_and_view, tables_get_resource_and_view_light
+
+        member = factories.User()
+        org = factories.Organization(users=[{"name": member["name"], "capacity": "member"}])
+        users = {
+            "anonymous": None,
+            "outsider": factories.User(),
+            "member": member,
+            "sysadmin": factories.Sysadmin(),
+        }
+        dataset = factories.Dataset(owner_org=org["id"], private=private)
+        resource = factories.Resource(package_id=dataset["id"], url="http://example.com/data.csv")
+        other = factories.Resource(package_id=dataset["id"], url="http://example.com/other.csv")
+        view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+        user = users[who]
+
+        cases = [
+            (resource["id"], view["id"]),
+            (other["id"], view["id"]),
+            ("missing", view["id"]),
+            (resource["id"], "missing"),
+        ]
+
+        for resource_id, view_id in cases:
+            full = self._outcome(tables_get_resource_and_view, resource_id, view_id, user)
+            light = self._outcome(tables_get_resource_and_view_light, resource_id, view_id, user)
+            assert light == full, (who, private, resource_id, view_id)
+
+    def test_deleted_resource_is_not_found_by_either(self):
+        import ckan.tests.factories as factories
+        import ckan.tests.helpers as helpers
+
+        from ckanext.tables.utils import tables_get_resource_and_view, tables_get_resource_and_view_light
+
+        sysadmin = factories.Sysadmin()
+        resource = factories.Resource(url="http://example.com/data.csv")
+        view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+        helpers.call_action("resource_delete", {"user": sysadmin["name"]}, id=resource["id"])
+
+        for lookup in (tables_get_resource_and_view, tables_get_resource_and_view_light):
+            assert self._outcome(lookup, resource["id"], view["id"], sysadmin) == 404
+
+    def test_returns_the_fields_the_data_source_needs(self):
+        import ckan.tests.factories as factories
+
+        from ckanext.tables.utils import tables_get_resource_and_view, tables_get_resource_and_view_light
+
+        resource = factories.Resource(url="http://example.com/data.csv", format="CSV")
+        view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+
+        full, full_view = tables_get_resource_and_view(resource["id"], view["id"])
+        light, light_view = tables_get_resource_and_view_light(resource["id"], view["id"])
+
+        for key in ("id", "url", "url_type", "format", "package_id"):
+            assert light.get(key) == full.get(key), key
+        assert light_view == full_view

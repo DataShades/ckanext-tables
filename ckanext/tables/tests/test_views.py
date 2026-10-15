@@ -214,7 +214,9 @@ class TestResourceViewHandlerExportLocator:
 
         with (
             app.flask_app.test_request_context("/"),
-            mock.patch("ckanext.tables.utils.tk.get_action", side_effect=_fake_get_action(resource, resource_view)),
+            mock.patch(
+                "ckanext.tables.views.tables_get_resource_and_view_light", return_value=(resource, resource_view)
+            ),
             mock.patch("ckanext.tables.utils.tables_guess_data_source", return_value=ListDataSource([{"a": 1}])),
         ):
             table = handler.get_table_for_resource("res-1", "view-1")

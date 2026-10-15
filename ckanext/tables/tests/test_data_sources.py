@@ -1741,6 +1741,7 @@ class TestDuckDBConnectionLimits:
 
         assert self._setting(_connect_duckdb(), "memory_limit") == expected
 
+    @pytest.mark.ckan_config("ckanext.tables.duckdb.memory_limit", "")
     def test_memory_limit_is_duckdbs_own_by_default(self):
         expected = self._setting(duckdb.connect(), "memory_limit")
 
