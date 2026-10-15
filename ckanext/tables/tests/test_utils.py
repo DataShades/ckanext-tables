@@ -241,6 +241,32 @@ class TestTablesGuessDataSource:
         ds = tables_guess_data_source(resource)
         assert isinstance(ds, DataStoreDataSource)
 
+    @pytest.mark.ckan_config("ckan.plugins", "datastore")
+    @pytest.mark.usefixtures("clean_datastore", "with_request_context", "with_plugins")
+    @pytest.mark.parametrize(
+        ("fmt", "data_source_class"),
+        [("XLSX", XlsxUrlDataSource), ("XLS", XlsUrlDataSource), ("ODS", OdsUrlDataSource)],
+    )
+    def test_datastore_active_workbook_reads_the_file(self, fmt, data_source_class):
+        """The DataStore holds only a workbook's first sheet, so the file is read to keep every sheet."""
+        resource = {
+            "format": fmt,
+            "url": f"http://example.com/data.{fmt.lower()}",
+            "id": "res-6b",
+            "datastore_active": True,
+        }
+        ds = tables_guess_data_source(resource, sheet_index=1)
+        assert isinstance(ds, data_source_class)
+        assert ds.sheet_index == 1
+
+    @pytest.mark.ckan_config("ckan.plugins", "datastore")
+    @pytest.mark.usefixtures("clean_datastore", "with_request_context", "with_plugins")
+    def test_datastore_active_unknown_format_uses_datastore(self):
+        """A DataStore-only resource with no recognisable file still previews from the DataStore."""
+        resource = {"format": "", "url": "", "id": "res-6c", "datastore_active": True}
+        ds = tables_guess_data_source(resource)
+        assert isinstance(ds, DataStoreDataSource)
+
     def test_unsupported_format_raises(self):
         resource = {"format": "XML", "url": "http://example.com/data.xml", "id": "res-7"}
 

@@ -13,7 +13,8 @@ function buildSheetsControl(sheets: { name: string; active?: boolean }[]) {
     wrapperEl.className = "table-wrapper";
 
     const toggle = document.createElement("button");
-    toggle.innerHTML = '<i class="fa fa-table-cells"></i>';
+    const current = sheets.find((sheet) => sheet.active)?.name ?? "";
+    toggle.innerHTML = `<i class="fa fa-table-cells"></i><span class="tables-sheet-name">${current}</span>`;
 
     const tableSheetsMenu = document.createElement("ul");
     tableSheetsMenu.innerHTML = sheets
@@ -204,6 +205,43 @@ describe("_onSheetLinkClick", () => {
             source: link,
             push: link.href,
         });
+    });
+
+    it("shows the sheet being loaded and blocks the table until the switch lands", () => {
+        const { wrapperEl, tableSheetsMenu, toggle } = buildSheetsControl([
+            { name: "Sheet1", active: true },
+            { name: "Sheet2" },
+        ]);
+        const [link] = links(tableSheetsMenu);
+        (globalThis as any).htmx.ajax = vi.fn(() => new Promise(() => {}));
+        const instance = makeInstance({ tableSheetsMenu, wrapperEl });
+
+        instance._onSheetLinkClick(clickEvent(link));
+
+        expect(wrapperEl.classList.contains("table-loading")).toBe(true);
+        expect(wrapperEl.getAttribute("aria-busy")).toBe("true");
+        expect((toggle as HTMLButtonElement).disabled).toBe(true);
+        expect(toggle.querySelector("i")!.classList.contains("fa-spinner")).toBe(true);
+        expect(toggle.querySelector(".tables-sheet-name")!.textContent).toBe("Sheet2");
+    });
+
+    it("gives the old table back when the switch fails and leaves it in place", async () => {
+        const { wrapperEl, tableSheetsMenu, toggle } = buildSheetsControl([
+            { name: "Sheet1", active: true },
+            { name: "Sheet2" },
+        ]);
+        const [link] = links(tableSheetsMenu);
+        (globalThis as any).htmx.ajax = vi.fn(() => Promise.reject(new Error("network")));
+        const instance = makeInstance({ tableSheetsMenu, wrapperEl });
+
+        instance._onSheetLinkClick(clickEvent(link));
+        await vi.waitFor(() => expect(wrapperEl.classList.contains("table-loading")).toBe(false));
+
+        expect(wrapperEl.getAttribute("aria-busy")).toBe("false");
+        expect((toggle as HTMLButtonElement).disabled).toBe(false);
+        expect(toggle.querySelector("i")!.classList.contains("fa-table-cells")).toBe(true);
+        expect(toggle.querySelector("i")!.classList.contains("fa-spinner")).toBe(false);
+        expect(toggle.querySelector(".tables-sheet-name")!.textContent).toBe("Sheet1");
     });
 });
 

@@ -207,15 +207,53 @@ ckan.module("tables-tabulator", function ($) {
 
             e.preventDefault();
 
-            const toggle = this.tableSheetsMenu.previousElementSibling as HTMLElement | null;
+            const toggle = this.tableSheetsMenu.previousElementSibling as HTMLButtonElement | null;
             bootstrap.Dropdown.getInstance(toggle)?.hide();
 
-            htmx.ajax("GET", deferredUrl, {
-                target: "#tables-deferred-loader",
-                swap: "innerHTML",
-                source: link,
-                push: link.href,
-            });
+            this._setSheetLoading(true, link.textContent?.trim());
+
+            const restore = () => {
+                if (this.wrapperEl?.isConnected) {
+                    this._setSheetLoading(false);
+                }
+            };
+
+            Promise.resolve(
+                htmx.ajax("GET", deferredUrl, {
+                    target: "#tables-deferred-loader",
+                    swap: "innerHTML",
+                    source: link,
+                    push: link.href,
+                }),
+            ).then(restore, restore);
+        },
+
+        // Shows the sheet being loaded on the toggle and blocks the table until it arrives.
+        _setSheetLoading: function (loading: boolean, sheetName?: string): void {
+            const toggle = this.tableSheetsMenu?.previousElementSibling as HTMLButtonElement | null;
+            const icon = toggle?.querySelector("i");
+            const label = toggle?.querySelector<HTMLElement>(".tables-sheet-name");
+
+            this.wrapperEl?.classList.toggle("table-loading", loading);
+            this.wrapperEl?.setAttribute("aria-busy", String(loading));
+
+            if (toggle) {
+                toggle.disabled = loading;
+            }
+
+            icon?.classList.toggle("fa-table-cells", !loading);
+            icon?.classList.toggle("fa-spinner", loading);
+            icon?.classList.toggle("fa-spin", loading);
+
+            if (label) {
+                if (loading) {
+                    label.dataset.currentSheet = label.textContent || "";
+                    label.textContent = sheetName || label.textContent;
+                } else if (label.dataset.currentSheet !== undefined) {
+                    label.textContent = label.dataset.currentSheet;
+                    delete label.dataset.currentSheet;
+                }
+            }
         },
 
         teardown: function (): void {

@@ -10,6 +10,7 @@ from unittest import mock
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 from sqlalchemy import Date, Float, Numeric, Uuid, column, select
 
@@ -374,6 +375,23 @@ class TestXlsxUrlDataSourceSheets:
 
             assert ds.get_columns() == ["Month", "2020", "2021"]
             assert ds.filter([]).all() == [{"Month": 1, "2020": 2, "2021": 7}]
+
+    def test_mixed_text_and_number_columns_become_text(self, tmp_path):
+        """A column mixing text and numbers can't be stored in Arrow, so it is read as text."""
+        path = tmp_path / "phones.xlsx"
+        pd.DataFrame(
+            {"Name": ["Alice", "Bob", "Carol"], "Phone": ["+61 2 9999 0000", 412345678, None]},
+        ).to_excel(path, index=False)
+
+        with mock.patch(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            return_value=contextlib.nullcontext(str(path)),
+        ):
+            df = XlsxUrlDataSource(url="http://example.com/phones.xlsx").fetch_dataframe()
+
+        assert df["Phone"].tolist()[:2] == ["+61 2 9999 0000", "412345678"]
+        assert pd.isna(df["Phone"].iloc[2])
+        pa.Table.from_pandas(df, preserve_index=False)
 
     def test_a_sheet_past_the_end_is_a_data_source_error(self):
         with pytest.raises(DataSourceError):

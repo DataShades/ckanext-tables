@@ -690,6 +690,23 @@ class PandasDataSource(BaseDataSource):
         return list(self._df.columns) if self._df is not None else []
 
 
+def _stringify_mixed_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Turn every column holding both text and numbers into text.
+
+    Spreadsheets often mix the two in one column (a phone number typed as a
+    number in one row and as text in the next). Arrow can't store such a
+    column, so the DataFrame could neither be cached nor queried through
+    DuckDB, and every request re-read the whole file.
+    """
+    for col in df.select_dtypes(include="object").columns:
+        series = df[col]
+
+        if pd.api.types.infer_dtype(series, skipna=True) in ("mixed", "mixed-integer"):
+            df[col] = series.where(series.isna(), series.astype(str))
+
+    return df
+
+
 class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     """A data source that loads resource data from a file or URL.
 
@@ -808,7 +825,7 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
         # ``field``) addresses columns by string, so settle on that here.
         df.columns = df.columns.map(str)
 
-        return df
+        return _stringify_mixed_columns(df)
 
     def get_source_path(self) -> str:
         if self._source_path:

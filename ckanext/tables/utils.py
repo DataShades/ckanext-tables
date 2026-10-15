@@ -237,9 +237,6 @@ def tables_guess_data_source(
     """
     file_url = (resource_view or {}).get("file_url", "")
 
-    if not file_url and resource.get("datastore_active") and p.plugin_loaded("datastore"):
-        return DataStoreDataSource(resource_id=resource["id"])
-
     if file_url:
         url = file_url
         fmt = guess_format(file_url)
@@ -247,13 +244,19 @@ def tables_guess_data_source(
         url = resource.get("url", "")
         fmt = guess_format(url, resource.get("format", ""))
 
-    cache_backend = get_cache_backend()
     data_source_class = DATA_SOURCE_BY_FORMAT.get(fmt)
+
+    # xloader puts only the first sheet of a workbook into the DataStore,
+    # so read workbooks from the file to get all of their sheets.
+    reads_sheets = data_source_class is not None and data_source_class.supports_sheets
+
+    if not file_url and not reads_sheets and resource.get("datastore_active") and p.plugin_loaded("datastore"):
+        return DataStoreDataSource(resource_id=resource["id"])
 
     if not data_source_class:
         raise DataSourceError(f"Unsupported format: {fmt}")
 
-    kwargs: dict[str, Any] = {"cache_backend": cache_backend}
+    kwargs: dict[str, Any] = {"cache_backend": get_cache_backend()}
 
     if data_source_class.supports_sheets:
         kwargs["sheet_index"] = sheet_index
