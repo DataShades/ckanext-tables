@@ -172,6 +172,7 @@
             data-module="tables-tabulator"
             data-module-config="{{ h.tables_json_dumps(table.get_tabulator_config()) }}"
             data-module-row-actions="{{ h.tables_json_dumps(table.get_row_actions()) }}"
+            {% if initial_page %}data-module-initial-page="{{ initial_page }}"{% endif %}
         >
             {% snippet "tables/snippets/table_skeleton.html" %}
         </div>

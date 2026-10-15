@@ -7,6 +7,7 @@ registered blueprint via ``app.get``/``app.post`` — real URL routing, a real C
 resource + resource view, and the real Flask test client.
 """
 
+import html
 import io
 import json
 import re
@@ -189,6 +190,33 @@ class TestResourceViewDeferredHandlerHTTP:
 
         assert response.status_code == 200
         assert b"tabulator-container" in response.data
+
+    def test_first_page_is_embedded_as_the_ajax_endpoint_would_return_it(self, app, package, create_with_upload):
+        """The client answers its first page-1 request from this instead of a round trip."""
+        resource = create_with_upload(b"name,age\nAlice,30\nBob,25\n", "people.csv", package_id=package["id"])
+        resource_view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+
+        page = app.get(_deferred_url(resource["id"], resource_view["id"])).get_data(as_text=True)
+        embedded = re.search(r'data-module-initial-page="([^"]*)"', page)
+        ajax = app.get(
+            f"{_ajax_url(resource['id'], resource_view['id'])}?page=1&size=10",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        assert embedded
+        assert json.loads(html.unescape(embedded.group(1))) == ajax.json
+        assert ajax.json["total"] == 2
+
+    def test_a_failed_first_page_leaves_it_to_the_ajax_request(self, app, package, create_with_upload):
+        resource = create_with_upload(b"name\nAlice\n", "people.csv", package_id=package["id"])
+        resource_view = factories.ResourceView(resource_id=resource["id"], view_type="tables_view")
+
+        with mock.patch("ckanext.tables.table.TableDefinition.get_initial_page", side_effect=RuntimeError("boom")):
+            response = app.get(_deferred_url(resource["id"], resource_view["id"]))
+
+        assert response.status_code == 200
+        assert b"tabulator-container" in response.data
+        assert b"data-module-initial-page" not in response.data
 
     def test_broken_resource_still_returns_200_with_an_error_snippet(self, app, package, create_with_upload):
         resource = create_with_upload(b"name\nAlice\n", "people.csv", package_id=package["id"])

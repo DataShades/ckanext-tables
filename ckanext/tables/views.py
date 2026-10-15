@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Any
 
-from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 from flask.views import MethodView
 from werkzeug.exceptions import HTTPException
 
@@ -143,8 +143,17 @@ class ResourceViewDeferredHandler(MethodView):
 
         return tk.render(
             "tables/render_table.html",
-            extra_vars={"table": table},
+            extra_vars={"table": table, "initial_page": self._initial_page_json(table)},
         )
+
+    @staticmethod
+    def _initial_page_json(table: TableDefinition) -> str | None:
+        """Return page 1 as the JSON the AJAX endpoint would send, or ``None`` to leave it to that request."""
+        try:
+            return current_app.json.dumps(table.get_initial_page())
+        except Exception:
+            log.exception("Failed to embed the first page of table %s", table.name)
+            return None
 
     @staticmethod
     def _render_error(reload_url: str, message: str) -> str:

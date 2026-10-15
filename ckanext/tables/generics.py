@@ -33,13 +33,12 @@ class AjaxTableMixin:
         params = tables_build_params()
 
         try:
-            data = table.get_data(params)
-            total = table.get_total_count(params)
+            page = table.get_page(params)
         except DataSourceError:
             log.exception("Failed to load data for table %s", table.name)
             return jsonify({"error": _DATA_LOAD_ERROR}), 502
 
-        return jsonify({"data": data, "last_page": (total + params.size - 1) // params.size, "total": total})
+        return jsonify(page)
 
     def _action_result(self, result: ActionHandlerResult) -> Response:
         return jsonify(

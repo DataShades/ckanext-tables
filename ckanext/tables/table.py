@@ -12,6 +12,7 @@ from ckan.types import Context
 
 from ckanext.tables import formatters, types
 from ckanext.tables.cache import CachedDataSourceMixin
+from ckanext.tables.config import get_max_page_size
 from ckanext.tables.data_sources import BaseDataSource
 
 if TYPE_CHECKING:
@@ -174,6 +175,24 @@ class TableDefinition:
         formatted_columns = [column for column in self.columns if column.formatters]
 
         return [self._apply_formatters(row, formatted_columns) for row in self.get_raw_data(params)]
+
+    def get_page(self, params: types.QueryParams) -> dict[str, Any]:
+        """Return one page as the AJAX endpoint sends it: its rows, ``last_page`` and ``total``."""
+        data = self.get_data(params)
+        total = self.get_total_count(params)
+
+        return {"data": data, "last_page": (total + params.size - 1) // params.size, "total": total}
+
+    def get_initial_page(self) -> dict[str, Any]:
+        """Return the page the table's first AJAX request asks for: page 1, unfiltered, unsorted.
+
+        Embedded in the first render (see ``ResourceViewDeferredHandler``) so
+        the client can skip that request. The size is clamped the same way
+        ``tables_build_params`` clamps the request's.
+        """
+        size = min(max(1, self.page_size), get_max_page_size())
+
+        return self.get_page(types.QueryParams(page=1, size=size))
 
     def get_raw_data(self, params: types.QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
         if not paginate:

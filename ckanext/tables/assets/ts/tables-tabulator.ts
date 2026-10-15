@@ -290,9 +290,11 @@ ckan.module("tables-tabulator", function ($) {
             }
 
             const initialPage = new URLSearchParams(window.location.search).get(this._urlKey("page"));
+            const embeddedPage = this._takeEmbeddedPage();
 
             this.table = new Tabulator(this.el[0], {
                 ...this.options.config,
+                ...(embeddedPage ? { ajaxRequestFunc: embeddedPage } : {}),
                 langs: {
                     "default": {
                         pagination: {
@@ -319,6 +321,44 @@ ckan.module("tables-tabulator", function ($) {
                     return response;
                 },
             });
+        },
+
+        // The deferred render embeds page 1 (unfiltered, unsorted, default size)
+        // as `initialPage`, so the first paint needs no AJAX round trip. Returns
+        // an `ajaxRequestFunc` that answers Tabulator's first request from it,
+        // but only when that request asks for exactly that page — URL filters,
+        // a bookmarked page or a sort make it a different page — and hands
+        // every request after it to Tabulator's own loader. Returns null when
+        // nothing was embedded, so Tabulator keeps its default loader.
+        _takeEmbeddedPage: function (): ((url: string, config: any, params: any) => Promise<any>) | null {
+            const page = this.options.initialPage;
+
+            if (!page || typeof page !== "object") {
+                return null;
+            }
+
+            let pending = true;
+            const pageSize = this.options.config.paginationSize;
+            const hasTableFilters = () => this.tableFilters.length > 0;
+
+            return function (this: any, url: string, config: any, params: any): Promise<any> {
+                const isEmbeddedPage =
+                    pending &&
+                    params.page === 1 &&
+                    params.size === pageSize &&
+                    !params.sort?.length &&
+                    !params.filter?.length &&
+                    !hasTableFilters();
+
+                pending = false;
+
+                if (isEmbeddedPage) {
+                    return Promise.resolve(page);
+                }
+
+                // `this` is Tabulator's Ajax module, which calls its loader as a method.
+                return this.constructor.defaultLoaderPromise.call(this, url, config, params);
+            };
         },
 
         _showToast: function (

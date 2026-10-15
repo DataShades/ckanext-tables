@@ -477,3 +477,26 @@ class TestRenderTableActionDropdowns:
 
         assert 'class="dropdown-item"' in html
         assert "dropdown-item dropdown-item" not in html
+
+
+class TestTableDefinitionPages:
+    """get_page() is the AJAX response body; get_initial_page() is the first one the client asks for."""
+
+    def test_get_page_returns_rows_last_page_and_total(self, simple_table):
+        page = simple_table.get_page(QueryParams(page=1, size=2))
+
+        assert [row["name"] for row in page["data"]] == ["Alice", "Bob"]
+        assert page["last_page"] == 2
+        assert page["total"] == 3
+
+    def test_initial_page_is_page_one_at_the_table_page_size(self, simple_table):
+        assert simple_table.get_initial_page() == simple_table.get_page(QueryParams(page=1, size=simple_table.page_size))
+
+    @pytest.mark.ckan_config("ckanext.tables.pagination.max_page_size", 2)
+    def test_initial_page_size_is_clamped_like_a_request(self, simple_data):
+        table = TableDefinition(name="big_pages", data_source=ListDataSource(simple_data), page_size=50)
+
+        page = table.get_initial_page()
+
+        assert len(page["data"]) == 2
+        assert page["last_page"] == 2
