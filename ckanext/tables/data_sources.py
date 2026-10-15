@@ -36,7 +36,12 @@ from ckan import model
 from ckan.lib import uploader
 
 from ckanext.tables.cache import CacheBackend, CachedDataSourceMixin, get_cache_backend
-from ckanext.tables.config import get_cache_ttl
+from ckanext.tables.config import (
+    CONF_DUCKDB_MEMORY_LIMIT,
+    get_cache_ttl,
+    get_duckdb_memory_limit,
+    get_duckdb_threads,
+)
 from ckanext.tables.net import fetch_remote_file
 from ckanext.tables.types import FilterItem
 
@@ -1471,6 +1476,25 @@ def _get_duckdb_connection() -> duckdb.DuckDBPyConnection:
     """
     con = getattr(_thread_local, "con", None)
     if con is None:
-        con = duckdb.connect()
+        con = _connect_duckdb()
         _thread_local.con = con
     return con
+
+
+def _connect_duckdb() -> duckdb.DuckDBPyConnection:
+    """Open a DuckDB connection limited by ``ckanext.tables.duckdb.*``.
+
+    DuckDB's defaults (every core, 80% of RAM) apply per connection, and
+    there is one per worker thread, so unlimited connections compete with
+    each other and with CKAN itself.
+    """
+    config: dict[str, Any] = {"threads": get_duckdb_threads()}
+    memory_limit = get_duckdb_memory_limit()
+
+    if memory_limit:
+        try:
+            return duckdb.connect(config={**config, "memory_limit": memory_limit})
+        except duckdb.Error:
+            log.warning("Invalid %s %r, using DuckDB's default", CONF_DUCKDB_MEMORY_LIMIT, memory_limit, exc_info=True)
+
+    return duckdb.connect(config=config)

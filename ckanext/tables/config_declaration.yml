@@ -145,3 +145,25 @@ groups:
           deletes a finished export just because this TTL has passed until that command runs;
           schedule it from cron the same way as `ckan tables clean-cache`.
         example: 3600
+
+  - annotation: DuckDB query settings
+    description: >
+      Filtering, sorting, pagination and counting on cached file-based Resource Data Sources run
+      in DuckDB, on one connection per worker thread. By default DuckDB uses every CPU core and
+      most of the machine's memory for each connection, so several CKAN workers would compete
+      with each other and with CKAN itself.
+    options:
+      - key: ckanext.tables.duckdb.threads
+        type: int
+        default: 2
+        description: |
+          Number of threads each DuckDB connection may use. Keep the total across workers
+          (workers x threads per worker x this value) close to the number of CPU cores.
+        example: 4
+
+      - key: ckanext.tables.duckdb.memory_limit
+        description: |
+          Maximum memory each DuckDB connection may use, e.g. `512MB` or `2GB`. Not set by
+          default, which leaves DuckDB's own default (80% of the machine's memory per connection).
+          An invalid value is logged and ignored.
+        example: 1GB

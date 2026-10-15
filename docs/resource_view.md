@@ -57,6 +57,15 @@ Cache files are written uncompressed by default and read memory-mapped, so a cac
 OS page cache, shared by every worker, rather than being copied into each worker's memory. That takes
 roughly 2-3 times more disk space; set `compression` to `lz4` or `zstd` if disk is tighter than memory.
 
+Filtering, sorting and counting on cached data run in DuckDB, on one connection per worker thread.
+Each connection is limited to 2 threads by default, rather than DuckDB's every core, so several CKAN
+workers don't compete for the CPU. Both limits are configurable:
+
+```ini
+ckanext.tables.duckdb.threads = 2
+ckanext.tables.duckdb.memory_limit = 1GB
+```
+
 Row counts and cache invalidation are handled separately and always go through CKAN's Redis connection — a file cache is local to one worker/machine and can't otherwise make an invalidation visible everywhere.
 
 The Datastore-backed view does **not** use caching — it queries the Datastore API directly on every request.

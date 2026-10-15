@@ -19,6 +19,8 @@ CONF_MAX_PAGE_SIZE = "ckanext.tables.pagination.max_page_size"
 CONF_EXPORT_MAX_ROWS = "ckanext.tables.export.max_rows"
 CONF_EXPORT_DIR = "ckanext.tables.export.export_dir"
 CONF_EXPORT_JOB_TTL = "ckanext.tables.export.job_ttl"
+CONF_DUCKDB_THREADS = "ckanext.tables.duckdb.threads"
+CONF_DUCKDB_MEMORY_LIMIT = "ckanext.tables.duckdb.memory_limit"
 
 DEFAULT_CACHE_TTL = 3600
 DEFAULT_CACHE_COMPRESSION = "uncompressed"
@@ -29,6 +31,7 @@ DEFAULT_FETCH_MAX_BYTES = 200 * 1024 * 1024  # 200 MB
 DEFAULT_MAX_PAGE_SIZE = 100
 DEFAULT_EXPORT_MAX_ROWS = 50_000
 DEFAULT_EXPORT_JOB_TTL = 3600
+DEFAULT_DUCKDB_THREADS = 2
 
 # Directory permission bits that must *not* be set for a cache directory to
 # be considered private: group- or other-writable.
@@ -195,3 +198,26 @@ def get_export_job_ttl() -> int:
     command runs.
     """
     return tk.config.get(CONF_EXPORT_JOB_TTL, DEFAULT_EXPORT_JOB_TTL)
+
+
+def get_duckdb_threads() -> int:
+    """Return how many threads each DuckDB query connection may use.
+
+    Reads ``ckanext.tables.duckdb.threads``. Defaults to 2; a value below 1 is
+    logged and treated as the default.
+    """
+    threads = tk.asint(tk.config.get(CONF_DUCKDB_THREADS, DEFAULT_DUCKDB_THREADS))
+
+    if threads < 1:
+        log.warning("%s must be at least 1, using %d", CONF_DUCKDB_THREADS, DEFAULT_DUCKDB_THREADS)
+        return DEFAULT_DUCKDB_THREADS
+
+    return threads
+
+
+def get_duckdb_memory_limit() -> str | None:
+    """Return the memory limit for each DuckDB query connection, or ``None`` for DuckDB's default.
+
+    Reads ``ckanext.tables.duckdb.memory_limit``, e.g. ``512MB`` or ``2GB``.
+    """
+    return tk.config.get(CONF_DUCKDB_MEMORY_LIMIT) or None

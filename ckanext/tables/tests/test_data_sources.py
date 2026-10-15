@@ -8,6 +8,7 @@ import uuid
 from datetime import date, datetime  # noqa: DTZ001
 from unittest import mock
 
+import duckdb
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -42,6 +43,8 @@ from ckanext.tables.data_sources import (
     XlsUrlDataSource,
     XlsxUrlDataSource,
     _calamine_available,
+    _connect_duckdb,
+    _get_duckdb_connection,
     _open_excel_file,
     _read_csv_arrow,
     _read_excel,
@@ -1691,3 +1694,52 @@ class TestFilterOperatorsMatchCanonicalList:
 
         for value, _label in FILTER_OPERATORS:
             assert ds.build_filter("field", value, "test") is not None, value
+
+
+class TestDuckDBConnectionLimits:
+    """Each worker thread's DuckDB connection is capped by ckanext.tables.duckdb.*, not DuckDB's defaults."""
+
+    @staticmethod
+    def _setting(con, name):
+        return con.execute(f"SELECT current_setting('{name}')").fetchone()[0]
+
+    def test_threads_default_to_two(self):
+        assert self._setting(_connect_duckdb(), "threads") == 2
+
+    @pytest.mark.ckan_config("ckanext.tables.duckdb.threads", 3)
+    def test_threads_are_configurable(self):
+        assert self._setting(_connect_duckdb(), "threads") == 3
+
+    @pytest.mark.ckan_config("ckanext.tables.duckdb.threads", 0)
+    def test_threads_below_one_fall_back_to_the_default(self):
+        assert self._setting(_connect_duckdb(), "threads") == 2
+
+    @pytest.mark.ckan_config("ckanext.tables.duckdb.memory_limit", "512MB")
+    def test_memory_limit_is_configurable(self):
+        expected = self._setting(duckdb.connect(config={"memory_limit": "512MB"}), "memory_limit")
+
+        assert self._setting(_connect_duckdb(), "memory_limit") == expected
+
+    def test_memory_limit_is_duckdbs_own_by_default(self):
+        expected = self._setting(duckdb.connect(), "memory_limit")
+
+        assert self._setting(_connect_duckdb(), "memory_limit") == expected
+
+    @pytest.mark.ckan_config("ckanext.tables.duckdb.threads", 3)
+    @pytest.mark.ckan_config("ckanext.tables.duckdb.memory_limit", "lots")
+    def test_an_invalid_memory_limit_is_ignored_but_threads_still_apply(self):
+        con = _connect_duckdb()
+
+        assert self._setting(con, "threads") == 3
+        assert self._setting(con, "memory_limit") == self._setting(duckdb.connect(), "memory_limit")
+
+    def test_the_connection_is_reused_within_a_thread_only(self):
+        here = _get_duckdb_connection()
+        elsewhere = []
+
+        thread = threading.Thread(target=lambda: elsewhere.append(_get_duckdb_connection()))
+        thread.start()
+        thread.join()
+
+        assert _get_duckdb_connection() is here
+        assert elsewhere[0] is not here
