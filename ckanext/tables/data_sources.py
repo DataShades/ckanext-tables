@@ -22,6 +22,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from pyarrow import csv as pa_csv
 from pyarrow import feather, orc
@@ -48,7 +49,7 @@ from ckanext.tables.types import FilterItem
 log = logging.getLogger(__name__)
 
 _ALLOWED_URL_SCHEMES = ("http", "https")
-
+_ROW_BATCH_SIZE = 10_000
 _CSV_SNIFF_LINES = 10
 
 _thread_local = threading.local()
@@ -69,6 +70,14 @@ class BaseDataSource:
     def all(self) -> list[dict[str, Any]]: ...
     def count(self) -> int: ...
     def get_columns(self) -> list[str]: ...
+
+    def iter_rows(self, batch_size: int = _ROW_BATCH_SIZE) -> Iterator[dict[str, Any]]:
+        """Yield the same rows as ``all()``, converting *batch_size* at a time where the source can.
+
+        The default just iterates ``all()``; ``PandasDataSource`` overrides it
+        so a large export streams with flat memory.
+        """
+        yield from self.all()
 
     def get_sheet_names(self) -> list[str]:
         """Return the names of the sheets this source can switch between, in file order.
@@ -661,8 +670,33 @@ class PandasDataSource(BaseDataSource):
         return self._dataframe_to_records(self._filtered_df)
 
     def _all_arrow(self) -> list[dict[str, Any]]:
+        return [row for batch in self._arrow_record_batches(None) for row in batch]
+
+    def iter_rows(self, batch_size: int = _ROW_BATCH_SIZE) -> Iterator[dict[str, Any]]:
+        if self._arrow is not None:
+            for batch in self._arrow_record_batches(batch_size):
+                yield from batch
+            return
+
+        df = self._filtered_df
+
+        if df is None:
+            return
+
+        for start in range(0, len(df), batch_size):
+            yield from self._dataframe_to_records(df.iloc[start : start + batch_size])
+
+    def _arrow_record_batches(self, batch_size: int | None) -> Iterator[list[dict[str, Any]]]:
+        """Run the current query and yield its rows as lists of dicts, *batch_size* at a time.
+
+        Converts through Arrow's ``to_pylist()``, serialising only the columns
+        that need it, which is several times faster than going through a
+        pandas DataFrame. A result with a column type that conversion doesn't
+        cover (see ``_arrow_type_converts``) is re-run through
+        ``_dataframe_to_records`` instead, so every type renders as before.
+        """
         if self._arrow is None or self._arrow.num_rows == 0:
-            return []
+            return
 
         # _where_sql/_order_sql/_limit_sql only ever contain quoted identifiers
         # already validated against self._arrow.schema.names (see
@@ -670,9 +704,51 @@ class PandasDataSource(BaseDataSource):
         # every value is bound via `?`, never interpolated.
         sql = f"SELECT * FROM t {self._where_sql} {self._order_sql} {self._limit_sql}"  # noqa: S608
         params = [*self._where_params, *self._limit_params]
-        df = self._require_con().execute(sql, params).fetch_df()
+        con = self._require_con()
+        reader = con.execute(sql, params).to_arrow_reader(batch_size or self._arrow.num_rows)
 
-        return self._dataframe_to_records(df)
+        if all(_arrow_type_converts(field.type) for field in reader.schema):
+            for batch in reader:
+                yield self._arrow_to_records(batch)
+            return
+
+        df = con.execute(sql, params).fetch_df()
+        step = batch_size or max(len(df), 1)
+
+        for start in range(0, len(df), step):
+            yield self._dataframe_to_records(df.iloc[start : start + step])
+
+    def _arrow_to_records(self, batch: pa.RecordBatch) -> list[dict[str, Any]]:  # pyright: ignore[reportUnknownParameterType]
+        """Convert *batch* to row dicts matching ``_dataframe_to_records``' output.
+
+        NaN becomes ``None`` and a date becomes a midnight timestamp, as they
+        do through pandas; only timestamp, decimal, binary and nested columns
+        go through ``serialize_value``, picked once from the schema.
+        """
+        table = pa.Table.from_batches([batch])
+        to_serialize: list[str] = []
+
+        for index, field in enumerate(table.schema):
+            column = table.column(index)
+
+            if pa.types.is_floating(field.type):
+                column = pc.if_else(pc.is_nan(column), pa.scalar(None, field.type), column)
+            elif pa.types.is_date(field.type):
+                column = column.cast(pa.timestamp("s"))
+                to_serialize.append(field.name)
+            elif not _arrow_type_is_plain(field.type):
+                to_serialize.append(field.name)
+
+            table = table.set_column(index, field.name, column)
+
+        rows = table.to_pylist()
+
+        for row in rows if to_serialize else ():
+            for name in to_serialize:
+                if row[name] is not None:
+                    row[name] = self.serialize_value(row[name])
+
+        return rows
 
     def count(self) -> int:
         if self._arrow is not None:
@@ -695,6 +771,43 @@ class PandasDataSource(BaseDataSource):
             return list(self._arrow.schema.names)
 
         return list(self._df.columns) if self._df is not None else []
+
+
+def _arrow_type_is_plain(arrow_type: pa.DataType) -> bool:  # pyright: ignore[reportUnknownParameterType]
+    """Whether ``to_pylist()`` already gives a JSON-safe value for this type (or ``None``)."""
+    return (
+        pa.types.is_integer(arrow_type)
+        or pa.types.is_floating(arrow_type)
+        or pa.types.is_boolean(arrow_type)
+        or pa.types.is_string(arrow_type)
+        or pa.types.is_large_string(arrow_type)
+        or pa.types.is_null(arrow_type)
+    )
+
+
+def _arrow_type_converts(arrow_type: pa.DataType, nested: bool = False) -> bool:  # pyright: ignore[reportUnknownParameterType]
+    """Whether ``PandasDataSource._arrow_to_records`` renders this type the same as the pandas path.
+
+    Durations, intervals, times and anything else not listed here take the
+    pandas path. A date is only rewritten at the top level, so a nested one
+    takes it too.
+    """
+    if _arrow_type_is_plain(arrow_type) or pa.types.is_timestamp(arrow_type) or pa.types.is_decimal(arrow_type):
+        return True
+
+    if pa.types.is_binary(arrow_type) or pa.types.is_large_binary(arrow_type):
+        return True
+
+    if pa.types.is_date(arrow_type):
+        return not nested
+
+    if pa.types.is_list(arrow_type) or pa.types.is_large_list(arrow_type):
+        return _arrow_type_converts(arrow_type.value_type, nested=True)
+
+    if pa.types.is_struct(arrow_type):
+        return all(_arrow_type_converts(field.type, nested=True) for field in arrow_type)
+
+    return False
 
 
 def _stringify_mixed_columns(df: pd.DataFrame) -> pd.DataFrame:

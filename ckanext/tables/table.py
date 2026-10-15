@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING, Any
@@ -182,6 +183,10 @@ class TableDefinition:
             .paginate(params.page, params.size)
             .all()
         )
+
+    def iter_raw_data(self, params: types.QueryParams) -> Iterator[dict[str, Any]]:
+        """Yield the same rows as ``get_raw_data(params, paginate=False)``, without building the full list first."""
+        return self.data_source.filter(params.filters).sort(params.sort_by, params.sort_order).iter_rows()
 
     def get_total_count(self, params: types.QueryParams) -> int:
         cached_source = self.data_source if isinstance(self.data_source, CachedDataSourceMixin) else None

@@ -104,7 +104,7 @@ class CSVExporter(ExporterBase):
 
         yield writer.writerow([col.title for col in columns]).encode("utf-8")
 
-        for row in table.get_raw_data(params, paginate=False):
+        for row in table.iter_raw_data(params):
             yield writer.writerow([row.get(col.field, "") for col in columns]).encode("utf-8")
 
 
@@ -177,7 +177,7 @@ class TSVExporter(ExporterBase):
 
         yield writer.writerow([col.title for col in columns]).encode("utf-8")
 
-        for row in table.get_raw_data(params, paginate=False):
+        for row in table.iter_raw_data(params):
             yield writer.writerow([row.get(col.field, "") for col in columns]).encode("utf-8")
 
 
@@ -207,7 +207,7 @@ class NDJSONExporter(ExporterBase):
 
     @classmethod
     def export_stream(cls, table: "TableDefinition", params: "QueryParams") -> Iterator[bytes]:
-        for row in table.get_raw_data(params, paginate=False):
+        for row in table.iter_raw_data(params):
             yield (json.dumps(row, default=str) + "\n").encode("utf-8")
 
 

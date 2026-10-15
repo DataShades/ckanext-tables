@@ -1743,3 +1743,80 @@ class TestDuckDBConnectionLimits:
 
         assert _get_duckdb_connection() is here
         assert elsewhere[0] is not here
+
+
+class TestArrowRowConversion:
+    @staticmethod
+    def _via_pandas(ds):
+        """The pre-Arrow conversion: DuckDB result -> fetch_df -> _dataframe_to_records."""
+        return ds._dataframe_to_records(ds._require_con().execute("SELECT * FROM t").fetch_df())
+
+    @pytest.fixture
+    def typed_ds(self, arrow_cache_backend):
+        df = pd.DataFrame(
+            {
+                "i": [1, 2, 3],
+                "i_null": [1, None, 3],
+                "f": [1.5, np.nan, 2.0],
+                "s": ["a", None, "c"],
+                "b": [True, False, None],
+                "ts": pd.to_datetime(["2020-01-01 10:00:00.123456", None, "2021-01-01 00:00:00.000000"]),
+                "tz": pd.to_datetime(["2020-01-01 10:00", None, "2021-01-01 00:00"]).tz_localize("UTC"),
+                "d": pd.Series([date(2020, 1, 1), None, date(2021, 2, 3)], dtype=object),
+                "dec": pd.Series([decimal.Decimal("1.10"), None, decimal.Decimal("3")], dtype=object),
+                "lst": pd.Series([[1, 2], None, []], dtype=object),
+            }
+        )
+        return _ArrowStubDataSource(df, arrow_cache_backend, key="typed")
+
+    def test_every_covered_type_matches_the_pandas_conversion(self, typed_ds):
+        rows = typed_ds.filter([]).all()
+
+        assert rows == self._via_pandas(typed_ds)
+        assert rows[0]["d"] == "2020-01-01T00:00:00"
+        assert rows[1]["f"] is None
+
+    def test_an_uncovered_type_falls_back_to_the_pandas_conversion(self, arrow_cache_backend):
+        df = pd.DataFrame({"name": ["a", "b"], "took": pd.to_timedelta(["1h", "2D"])})
+        ds = _ArrowStubDataSource(df, arrow_cache_backend, key="durations")
+
+        rows = ds.filter([]).all()
+
+        assert rows == self._via_pandas(ds)
+        assert rows[0]["took"] == "0 days 01:00:00"
+
+    def test_binary_is_decoded_as_text(self, arrow_cache_backend):
+        """The pandas conversion rendered these as "bytearray(b'...')"; decoding them is a fix."""
+        df = pd.DataFrame({"raw": pd.Series([b"abc", None], dtype=object)})
+        ds = _ArrowStubDataSource(df, arrow_cache_backend, key="binary")
+
+        assert ds.filter([]).all() == [{"raw": "abc"}, {"raw": None}]
+
+    def test_nan_becomes_none(self, arrow_ds):
+        batch = pa.record_batch({"f": pa.array([1.0, float("nan"), None])})
+
+        assert arrow_ds._arrow_to_records(batch) == [{"f": 1.0}, {"f": None}, {"f": None}]
+
+    def test_pagination_still_applies(self, typed_ds):
+        assert [row["i"] for row in typed_ds.filter([]).sort("i", "desc").paginate(1, 2).all()] == [3, 2]
+
+    def test_iter_rows_yields_all_rows_in_order_across_batches(self, typed_ds):
+        typed_ds.filter([]).sort("i", "desc")
+
+        assert list(typed_ds.iter_rows(batch_size=2)) == typed_ds.all()
+
+    def test_iter_rows_applies_filters(self, arrow_ds):
+        rows = list(arrow_ds.filter([FilterItem("count", ">=", "10")]).sort("count", "asc").iter_rows(batch_size=1))
+
+        assert rows == [{"fruit": "apple", "count": 10}, {"fruit": "cherry", "count": 20}]
+
+    def test_iter_rows_on_the_pandas_path(self):
+        df = pd.DataFrame({"n": range(5)})
+        ds = StubPandasDataSource(df)
+
+        assert list(ds.filter([]).iter_rows(batch_size=2)) == ds.all()
+
+    def test_iter_rows_defaults_to_all(self):
+        ds = ListDataSource([{"a": 1}, {"a": 2}])
+
+        assert list(ds.filter([]).iter_rows()) == ds.all()

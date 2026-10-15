@@ -132,6 +132,15 @@ class TestNDJSONExporter:
         assert all(json.loads(c) for c in chunks)
 
 
+@pytest.mark.parametrize("exporter", [CSVExporter, TSVExporter, NDJSONExporter])
+def test_streaming_exporters_never_build_the_full_row_list(exporter, simple_table, params):
+    """Iterate rows as they go (iter_raw_data), not via get_raw_data's full list."""
+    expected = exporter.export(simple_table, params)
+
+    with mock.patch.object(simple_table, "get_raw_data", side_effect=AssertionError("full list built")):
+        assert b"".join(exporter.export_stream(simple_table, params)) == expected
+
+
 class TestXLSXExporter:
     def test_export_returns_bytes(self, simple_table, params):
         pytest.importorskip("openpyxl")
