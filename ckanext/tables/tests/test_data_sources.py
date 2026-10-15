@@ -366,6 +366,29 @@ class TestXlsxUrlDataSourceSheets:
         with mock.patch("ckanext.tables.data_sources.pd.ExcelFile", side_effect=AssertionError("re-read")):
             assert self._source().get_sheet_names() == ["People", "Other Places"]
 
+    def test_a_cold_first_view_downloads_the_workbook_once(self, workbook_path):
+        """Sheet names, columns and the following data request all share one download."""
+        with mock.patch(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            return_value=contextlib.nullcontext(workbook_path),
+        ) as fetch:
+            ds = self._source()
+
+            assert ds.get_sheet_names() == ["People", "Other Places"]
+            assert ds.get_columns() == ["name"]
+            assert self._source().filter([]).all() == [{"name": "Alice"}, {"name": "Bob"}]
+
+        fetch.assert_called_once()
+
+    def test_a_sheet_past_the_end_still_lists_the_sheets_from_one_download(self, workbook_path):
+        with mock.patch(
+            "ckanext.tables.data_sources.fetch_remote_file",
+            return_value=contextlib.nullcontext(workbook_path),
+        ) as fetch:
+            assert self._source(5).get_sheet_names() == ["People", "Other Places"]
+
+        fetch.assert_called_once()
+
     def test_negative_sheet_index_falls_back_to_the_first_sheet(self):
         assert self._source(-1).sheet_index == 0
 
@@ -1380,6 +1403,44 @@ class TestUrlDataSourceColumnCaching:
 
         assert columns == ["a", "b"]
         mock_read_csv.assert_not_called()
+
+    @mock.patch("ckanext.tables.data_sources.pd.read_csv")
+    def test_columns_cache_the_data_for_the_next_request(self, mock_read_csv, tmp_path):
+        """The first render's column lookup loads the data, so the AJAX request doesn't re-read it."""
+        mock_read_csv.return_value = pd.DataFrame({"a": [1], "b": [2]})
+        backend = FeatherCacheBackend(cache_dir=str(tmp_path))
+        url = "http://example.com/col-cache-4.csv"
+
+        CsvUrlDataSource(url, cache_backend=backend).get_columns()
+        mock_read_csv.reset_mock()
+
+        assert CsvUrlDataSource(url, cache_backend=backend).filter([]).all() == [{"a": 1, "b": 2}]
+        mock_read_csv.assert_not_called()
+
+    def test_columns_fall_back_to_a_schema_read_when_the_full_load_fails(self, tmp_path):
+        ds = CsvUrlDataSource(
+            "http://example.com/col-cache-5.csv",
+            cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path)),
+        )
+
+        with (
+            mock.patch.object(CsvUrlDataSource, "_reader", side_effect=ValueError("boom")),
+            mock.patch.object(CsvUrlDataSource, "_schema_reader", return_value=["a", "b"]),
+        ):
+            assert ds.get_columns() == ["a", "b"]
+
+    def test_columns_raise_the_load_error_when_the_schema_read_fails_too(self, tmp_path):
+        ds = CsvUrlDataSource(
+            "http://example.com/col-cache-6.csv",
+            cache_backend=FeatherCacheBackend(cache_dir=str(tmp_path)),
+        )
+
+        with (
+            mock.patch.object(CsvUrlDataSource, "_reader", side_effect=ValueError("boom")),
+            mock.patch.object(CsvUrlDataSource, "_schema_reader", side_effect=ValueError("boom")),
+            pytest.raises(DataSourceError),
+        ):
+            ds.get_columns()
 
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
     def test_invalidate_orphans_the_cached_columns(self, mock_read_csv, tmp_path):

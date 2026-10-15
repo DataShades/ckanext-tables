@@ -773,22 +773,30 @@ class BaseResourceDataSource(CachedDataSourceMixin, PandasDataSource):
     def _fetch_columns(self) -> list[str]:
         """Compute the column names, without consulting the cache above.
 
-        Shared by every format: try a schema-only read first (via
-        ``_schema_reader``, cheap — nothing is fully loaded), and only fall
-        back to a full ``_ensure_loaded()`` if that fails or the DataFrame is
-        already cached in this process (in which case reading it back out is
-        cheaper than a second, redundant schema read).
+        Loads the full data through ``_ensure_loaded()``: the AJAX request
+        that follows the first render needs it anyway, and the load is
+        locked and cached, so concurrent first views share one download.
+        A schema-only read is the fallback when the full load fails.
         """
-        if self._load_from_cache():
-            return list(self._df.columns) if self._df is not None else []
-
         try:
-            with self._open_source() as path:
-                return self._schema_reader(path)
-        except self._schema_read_errors:
-            log.exception("Failed fast %s schema read, falling back to full load", self._format_name)
             self._ensure_loaded()
-            return list(self._df.columns) if self._df is not None else []
+        except DataSourceError as load_error:
+            try:
+                with self._open_source() as path:
+                    return self._schema_reader(path)
+            except self._schema_read_errors:
+                log.exception("Fallback %s schema read failed", self._format_name)
+                raise load_error from None
+
+        return PandasDataSource.get_columns(self)
+
+    def invalidate(self) -> None:
+        """Invalidate the cache and drop the data this instance already loaded."""
+        super().invalidate()
+
+        self._df = None
+        self._filtered_df = None
+        self._arrow = None
 
     # Every format below only needs to fill these four in, instead of
     # repeating fetch_dataframe/_fetch_columns's shared try/except/fallback
@@ -1031,6 +1039,7 @@ class XlsxUrlDataSource(BaseResourceDataSource):
         super().__init__(*args, **kwargs)
 
         self.sheet_index = max(0, sheet_index)
+        self._sheet_names: list[str] | None = None
 
     def get_cache_key(self) -> str:
         """Give each sheet of the workbook its own cached DataFrame.
@@ -1052,11 +1061,22 @@ class XlsxUrlDataSource(BaseResourceDataSource):
         return f"{base}:{self._generation()}:sheet-{self.sheet_index}"
 
     def get_sheet_names(self) -> list[str]:
-        """Return the workbook's sheet names, reading only its directory, not its rows."""
+        """Return the workbook's sheet names.
+
+        On a cache miss, loads the selected sheet: ``_reader`` records the
+        names from the same download. Reads only the workbook's directory
+        when that isn't possible (the sheet is already cached, or fails to load).
+        """
         cached = self.get_cached_sheets()
 
         if cached is not None:
             return cached
+
+        with contextlib.suppress(DataSourceError):
+            self._ensure_loaded()
+
+        if self._sheet_names is not None:
+            return self._sheet_names
 
         try:
             with self._open_source() as path, _open_excel_file(path) as workbook:
@@ -1071,6 +1091,15 @@ class XlsxUrlDataSource(BaseResourceDataSource):
         return names
 
     def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
+        try:
+            with _open_excel_file(path) as workbook:
+                self._sheet_names = [str(name) for name in workbook.sheet_names]
+        except Exception:  # noqa: BLE001 - the names are a by-product; never fail the read over them
+            log.debug("Failed to read %s sheet names from %s", self._format_name, path, exc_info=True)
+        else:
+            if self._sheet_names:
+                self.set_cached_sheets(self._sheet_names)
+
         return _read_excel(path, sheet_name=self.sheet_index, **kwargs)
 
     def _schema_reader(self, path: str) -> list[str]:
