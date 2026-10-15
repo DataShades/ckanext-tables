@@ -39,6 +39,17 @@ groups:
           Individual data source instances can still override the TTL programmatically.
         example: 86400
 
+      - key: ckanext.tables.cache.compression
+        default: uncompressed
+        description: |
+          Compression for the cached Feather files: `uncompressed`, `lz4` or `zstd`.
+
+          Uncompressed files are read memory-mapped, so a cached table costs almost
+          no process memory and every worker shares the same pages through the OS
+          page cache. They take roughly 2-3 times more disk space. A compressed file
+          has to be decompressed into memory on every read.
+        example: lz4
+
   - annotation: Remote fetch settings
     description: >
       These options control how the file-based Resource Data Sources (CSV, XLSX, ORC, Parquet,

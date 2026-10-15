@@ -700,7 +700,10 @@ def _stringify_mixed_columns(df: pd.DataFrame) -> pd.DataFrame:
     column, so the DataFrame could neither be cached nor queried through
     DuckDB, and every request re-read the whole file.
     """
-    for col in df.select_dtypes(include="object").columns:
+    for col, dtype in df.dtypes.items():
+        if not pd.api.types.is_object_dtype(dtype):
+            continue
+
         series = df[col]
 
         if pd.api.types.infer_dtype(series, skipna=True) in ("mixed", "mixed-integer"):

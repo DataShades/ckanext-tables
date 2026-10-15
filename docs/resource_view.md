@@ -50,7 +50,12 @@ For file-based data sources (CSV, TSV, XLSX, XLS, ODS, ORC, Parquet, Feather, JS
 ```ini
 ckanext.tables.cache.ttl = 3600
 ckanext.tables.cache.cache_dir = /var/cache/ckanext-tables
+ckanext.tables.cache.compression = uncompressed
 ```
+
+Cache files are written uncompressed by default and read memory-mapped, so a cached table sits in the
+OS page cache, shared by every worker, rather than being copied into each worker's memory. That takes
+roughly 2-3 times more disk space; set `compression` to `lz4` or `zstd` if disk is tighter than memory.
 
 Row counts and cache invalidation are handled separately and always go through CKAN's Redis connection — a file cache is local to one worker/machine and can't otherwise make an invalidation visible everywhere.
 

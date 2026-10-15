@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 
 CONF_CACHE_DIR = "ckanext.tables.cache.cache_dir"
 CONF_CACHE_TTL = "ckanext.tables.cache.ttl"
+CONF_CACHE_COMPRESSION = "ckanext.tables.cache.compression"
 CONF_FETCH_CONNECT_TIMEOUT = "ckanext.tables.fetch.connect_timeout"
 CONF_FETCH_READ_TIMEOUT = "ckanext.tables.fetch.read_timeout"
 CONF_FETCH_MAX_BYTES = "ckanext.tables.fetch.max_bytes"
@@ -20,6 +21,8 @@ CONF_EXPORT_DIR = "ckanext.tables.export.export_dir"
 CONF_EXPORT_JOB_TTL = "ckanext.tables.export.job_ttl"
 
 DEFAULT_CACHE_TTL = 3600
+DEFAULT_CACHE_COMPRESSION = "uncompressed"
+CACHE_COMPRESSIONS = ("uncompressed", "lz4", "zstd")
 DEFAULT_FETCH_CONNECT_TIMEOUT = 5
 DEFAULT_FETCH_READ_TIMEOUT = 30
 DEFAULT_FETCH_MAX_BYTES = 200 * 1024 * 1024  # 200 MB
@@ -132,6 +135,21 @@ def get_cache_ttl() -> int:
     Reads ``ckanext.tables.cache.ttl``. Defaults to 3600 (1 hour).
     """
     return tk.config.get(CONF_CACHE_TTL, DEFAULT_CACHE_TTL)
+
+
+def get_cache_compression() -> str:
+    """Return the compression for cached Feather files.
+
+    Reads ``ckanext.tables.cache.compression``. Defaults to ``uncompressed``;
+    an unknown value is logged and treated as the default.
+    """
+    compression = tk.config.get(CONF_CACHE_COMPRESSION, DEFAULT_CACHE_COMPRESSION)
+
+    if compression not in CACHE_COMPRESSIONS:
+        log.warning("Unknown %s %r, using %r", CONF_CACHE_COMPRESSION, compression, DEFAULT_CACHE_COMPRESSION)
+        return DEFAULT_CACHE_COMPRESSION
+
+    return compression
 
 
 def get_fetch_connect_timeout() -> float:
