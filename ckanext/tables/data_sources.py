@@ -51,6 +51,7 @@ log = logging.getLogger(__name__)
 _ALLOWED_URL_SCHEMES = ("http", "https")
 _ROW_BATCH_SIZE = 10_000
 _CSV_SNIFF_LINES = 10
+_CSV_FALLBACK_DELIMITERS = ",;\t|"
 
 _thread_local = threading.local()
 
@@ -760,6 +761,9 @@ class PandasDataSource(BaseDataSource):
         if self._arrow is None or self._arrow.num_rows == 0:
             return 0
 
+        if not self._where_sql:
+            return self._arrow.num_rows
+
         sql = f"SELECT COUNT(*) FROM t {self._where_sql}"  # noqa: S608 — see _all_arrow
         result = self._require_con().execute(sql, self._where_params).fetchone()
         return result[0] if result else 0
@@ -1080,17 +1084,12 @@ class CsvUrlDataSource(BaseResourceDataSource):
 
     @staticmethod
     def _read_csv(path: str, **kwargs: Any) -> pd.DataFrame:
-        """Read a local CSV file, using the fast C engine when possible.
-
-        Sniffs the delimiter from the first few lines so the C engine can be
-        used for the actual read; only falls back to pandas' own slower
-        ``engine="python"`` auto-detection when sniffing fails.
-        """
+        """Read a local CSV file with pandas' C engine, using the sniffed delimiter."""
         delimiter = _sniff_csv_delimiter(path)
         if delimiter is not None:
             return pd.read_csv(path, sep=delimiter, **kwargs)
 
-        return pd.read_csv(path, sep=None, engine="python", **kwargs)
+        return pd.read_csv(path, **kwargs)
 
     def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
         """Read the whole file, through pyarrow's multithreaded CSV reader when it can.
@@ -1513,9 +1512,12 @@ def _open_excel_file(path: str) -> Iterator[pd.ExcelFile]:
 def _sniff_csv_delimiter(path: str) -> str | None:
     """Detect a local CSV file's delimiter from its first few lines.
 
-    Returns ``None`` if sniffing fails (e.g. a single-column file, or too few
-    rows to compare), so the caller can fall back to pandas' own slower but
-    more thorough auto-detection instead of guessing wrong.
+    When those lines don't agree (a single-column file, ragged rows), the
+    header line alone decides among ``_CSV_FALLBACK_DELIMITERS``, else it's a
+    comma. Pandas' own ``sep=None`` guess from that line is slower and can pick
+    a letter: a single-column file headed ``name`` split on ``n``.
+
+    Returns ``None`` only for a file that can't be read or is empty.
     """
     try:
         with open(path, encoding="utf-8", errors="replace", newline="") as f:
@@ -1526,10 +1528,17 @@ def _sniff_csv_delimiter(path: str) -> str | None:
     if not sample:
         return None
 
+    sniffer = csv.Sniffer()
+
     try:
-        return csv.Sniffer().sniff(sample).delimiter
+        return sniffer.sniff(sample).delimiter
     except csv.Error:
-        return None
+        pass
+
+    try:
+        return sniffer.sniff(sample.splitlines()[0], delimiters=_CSV_FALLBACK_DELIMITERS).delimiter
+    except csv.Error:
+        return ","
 
 
 def _numeric_or_string_pair(row_value: Any, filter_value: Any) -> tuple[Any, Any]:

@@ -1237,7 +1237,21 @@ class TestCsvDelimiterSniffing:
         assert mock_read_csv.call_args.kwargs["sep"] == ";"
         assert "engine" not in mock_read_csv.call_args.kwargs
 
-    def test_read_csv_falls_back_to_python_engine_when_sniffing_fails(self, tmp_path):
+    @pytest.mark.parametrize(
+        ("content", "expected_delimiter"),
+        [
+            ("name\nAlice\nBob\n", ","),
+            ('name\n"Smith, John"\nBob\n', ","),
+            ("a;b;c\n1;2\n3;4;5\n6\n", ";"),
+        ],
+    )
+    def test_unsniffable_lines_fall_back_to_the_header_then_a_comma(self, tmp_path, content, expected_delimiter):
+        path = tmp_path / "data.csv"
+        path.write_text(content)
+
+        assert _sniff_csv_delimiter(str(path)) == expected_delimiter
+
+    def test_read_csv_never_uses_the_python_engine(self, tmp_path):
         path = tmp_path / "single_column.csv"
         path.write_text("a\n1\n2\n")
 
@@ -1245,8 +1259,15 @@ class TestCsvDelimiterSniffing:
             mock_read_csv.return_value = pd.DataFrame([{"a": 1}, {"a": 2}])
             CsvUrlDataSource._read_csv(str(path))
 
-        assert mock_read_csv.call_args.kwargs["sep"] is None
-        assert mock_read_csv.call_args.kwargs["engine"] == "python"
+        assert mock_read_csv.call_args.kwargs["sep"] == ","
+        assert "engine" not in mock_read_csv.call_args.kwargs
+
+    def test_a_single_column_file_is_one_column(self, tmp_path):
+        """Pandas' sep=None guess split a header like ``name`` on the letter ``n``."""
+        path = tmp_path / "single_column.csv"
+        path.write_text("name\nAlice\nBob\n")
+
+        assert CsvUrlDataSource._read_csv(str(path)).to_dict("records") == [{"name": "Alice"}, {"name": "Bob"}]
 
     def test_real_parse_matches_the_original_slow_path(self, tmp_path):
         """The actual parsed data must be identical to the pre-optimisation approach."""
@@ -1820,3 +1841,16 @@ class TestArrowRowConversion:
         ds = ListDataSource([{"a": 1}, {"a": 2}])
 
         assert list(ds.filter([]).iter_rows()) == ds.all()
+
+
+class TestArrowCountShortcut:
+    """An unfiltered count is the table's row count; only a filtered one runs a query."""
+
+    def test_unfiltered_count_does_not_query(self, arrow_ds):
+        arrow_ds.filter([])
+
+        with mock.patch.object(arrow_ds, "_require_con", side_effect=AssertionError("queried")):
+            assert arrow_ds.count() == 3
+
+    def test_filtered_count_still_queries(self, arrow_ds):
+        assert arrow_ds.filter([FilterItem("count", ">=", "10")]).count() == 2

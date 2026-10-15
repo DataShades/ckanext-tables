@@ -607,11 +607,11 @@ class TestInvalidateCacheEntry:
         from ckanext.tables.cache import invalidate_cache_entry
 
         invalidate_cache_entry(feather_backend, "key1", ttl=60)
-        first_gen = RedisCacheBackend().get("key1:gen")
+        first_gen = RedisCacheBackend().get_plain("key1:gen")
         assert first_gen is not None
 
         invalidate_cache_entry(feather_backend, "key1", ttl=60)
-        second_gen = RedisCacheBackend().get("key1:gen")
+        second_gen = RedisCacheBackend().get_plain("key1:gen")
 
         assert second_gen is not None
         assert second_gen != first_gen
@@ -624,7 +624,7 @@ class TestInvalidateCacheEntry:
         invalidate_cache_entry(feather_backend, "key1", ttl=60)
 
         assert feather_backend.get("key1:gen") is None
-        assert RedisCacheBackend().get("key1:gen") is not None
+        assert RedisCacheBackend().get_plain("key1:gen") is not None
 
 
 class _FakeCachedDataSource(cache.CachedDataSourceMixin):
@@ -687,7 +687,7 @@ class TestCachedDataSourceMixinCounts:
         ds = _FakeCachedDataSource(feather_backend, key="cross-worker-key")
         ds.set_cached_count([], 7)
 
-        assert RedisCacheBackend().get(ds._count_cache_key([])) == 7
+        assert RedisCacheBackend().get_plain(ds._count_cache_key([])) == 7
 
 
 @pytest.mark.usefixtures("clean_redis")
@@ -714,7 +714,7 @@ class TestCachedDataSourceMixinColumns:
         ds = _FakeCachedDataSource(feather_backend, key="cross-worker-columns-key")
         ds.set_cached_columns(["x", "y"])
 
-        assert RedisCacheBackend().get(ds._columns_cache_key()) == ["x", "y"]
+        assert RedisCacheBackend().get_plain(ds._columns_cache_key()) == ["x", "y"]
 
 
 class TestCacheMetadataResilience:
@@ -755,3 +755,90 @@ class TestCacheMetadataResilience:
 
         with mock.patch.object(cache.RedisCacheBackend, "set", side_effect=cache.RedisError("down")):
             ds.set_cached_columns(["a"])  # must not raise
+
+
+class TestCacheLockTimeout:
+    """How long a cache-miss load waits for another worker's comes from ckanext.tables.cache.lock_timeout."""
+
+    @pytest.mark.ckan_config("ckanext.tables.cache.lock_timeout", 1)
+    def test_file_lock_waits_for_the_configured_timeout(self, feather_backend):
+        with feather_backend.lock("busy-key") as held:
+            assert held
+
+            started = time.monotonic()
+            other = FeatherCacheBackend(cache_dir=feather_backend.cache_dir)
+            result = []
+
+            def waiter():
+                with other.lock("busy-key") as acquired:
+                    result.append(acquired)
+
+            # flock is per open file description, so the wait has to come from another thread's own fd.
+            thread = threading.Thread(target=waiter)
+            thread.start()
+            thread.join()
+
+        assert result == [False]
+        assert 0.9 <= time.monotonic() - started < 5
+
+    @pytest.mark.usefixtures("clean_redis")
+    @pytest.mark.ckan_config("ckanext.tables.cache.lock_timeout", 30)
+    def test_redis_lock_lives_for_the_configured_timeout(self):
+        backend = RedisCacheBackend()
+
+        with backend.lock("key1") as acquired:
+            assert acquired
+            with connect_to_redis() as conn:
+                ttl_ms = conn.pttl(backend._full_key("lock:key1"))
+
+        assert 25_000 < ttl_ms <= 30_000
+
+    @pytest.mark.ckan_config("ckanext.tables.cache.lock_timeout", 0)
+    def test_a_timeout_below_one_falls_back_to_the_default(self):
+        from ckanext.tables.config import DEFAULT_CACHE_LOCK_TIMEOUT, get_cache_lock_timeout
+
+        assert get_cache_lock_timeout() == DEFAULT_CACHE_LOCK_TIMEOUT
+
+
+@pytest.mark.usefixtures("clean_redis")
+class TestRedisPlainValues:
+    """Small metadata values are stored and read with one key and one GET."""
+
+    def test_round_trip(self):
+        backend = RedisCacheBackend()
+        backend.set_plain("meta", ["a", "b"], ttl=60)
+
+        assert backend.get_plain("meta") == ["a", "b"]
+
+    def test_no_version_key_is_written(self):
+        backend = RedisCacheBackend()
+        backend.set_plain("meta", 1, ttl=60)
+
+        with connect_to_redis() as conn:
+            assert conn.get(backend._version_key("meta")) is None
+
+    def test_reads_a_value_written_by_set(self):
+        """Entries written before this change (by set()) stay readable."""
+        backend = RedisCacheBackend()
+        backend.set("meta", {"x": 1}, ttl=60)
+
+        assert backend.get_plain("meta") == {"x": 1}
+
+    def test_miss_returns_none(self):
+        assert RedisCacheBackend().get_plain("missing") is None
+
+    def test_corrupted_value_is_deleted(self):
+        backend = RedisCacheBackend()
+
+        with connect_to_redis() as conn:
+            conn.setex(backend._full_key("bad"), 60, b"not json!!!")
+
+        assert backend.get_plain("bad") is None
+        with connect_to_redis() as conn:
+            assert conn.get(backend._full_key("bad")) is None
+
+    def test_metadata_goes_through_a_single_get(self):
+        cache._metadata_set("key1:gen", "abc", 60)
+
+        with mock.patch.object(RedisCacheBackend, "get", side_effect=AssertionError("versioned get used")):
+            assert cache._metadata_get("key1:gen") == "abc"

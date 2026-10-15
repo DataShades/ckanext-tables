@@ -171,7 +171,9 @@ class TableDefinition:
         return tk.render(self.table_template, extra_vars={"table": self, **kwargs})
 
     def get_data(self, params: types.QueryParams) -> list[Any]:
-        return [self._apply_formatters(row) for row in self.get_raw_data(params)]
+        formatted_columns = [column for column in self.columns if column.formatters]
+
+        return [self._apply_formatters(row, formatted_columns) for row in self.get_raw_data(params)]
 
     def get_raw_data(self, params: types.QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
         if not paginate:
@@ -204,7 +206,9 @@ class TableDefinition:
 
         return count
 
-    def _apply_formatters(self, row: dict[str, Any]) -> dict[str, Any]:
+    def _apply_formatters(
+        self, row: dict[str, Any], formatted_columns: list[ColumnDefinition] | None = None
+    ) -> dict[str, Any]:
         """Apply formatters to each cell in a row.
 
         Always returns a fresh top-level dict, independent of *row* —
@@ -215,16 +219,16 @@ class TableDefinition:
         ...``, so a single shallow copy is enough — no need for the deep
         copy this used to make on every single row, including rows in
         tables with no formatters at all.
+
+        *formatted_columns* is the columns that have formatters; ``get_data``
+        works it out once per page rather than once per row.
         """
         formatted_row = dict(row)
 
-        if not any(column.formatters for column in self.columns):
-            return formatted_row
+        if formatted_columns is None:
+            formatted_columns = [column for column in self.columns if column.formatters]
 
-        for column in self.columns:
-            if not column.formatters:
-                continue
-
+        for column in formatted_columns:
             cell_value = row.get(column.field)
 
             for formatter_class, formatter_options in column.formatters:

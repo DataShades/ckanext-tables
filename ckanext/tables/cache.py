@@ -25,7 +25,7 @@ from redis.exceptions import RedisError
 
 from ckan.lib.redis import connect_to_redis
 
-from ckanext.tables.config import get_cache_compression, get_cache_dir
+from ckanext.tables.config import get_cache_compression, get_cache_dir, get_cache_lock_timeout
 from ckanext.tables.types import FilterItem
 
 log = logging.getLogger(__name__)
@@ -39,15 +39,9 @@ _MEMO_MAX_ENTRIES = 32
 # treats it as abandoned (from a crashed write) rather than one still in progress.
 _STALE_TMP_FILE_AGE = 3600
 
-# How long a cache-miss lock (see CacheBackend.lock) is waited for before the
-# caller gives up and proceeds unlocked — a bounded worst case rather than
-# risking a pile-up if the lock holder never releases it.
-_LOCK_WAIT_TIMEOUT = 10.0
+# How often a waiter re-checks a held file lock. How long it waits, and how long
+# a Redis lock lives, is ckanext.tables.cache.lock_timeout (see CacheBackend.lock).
 _LOCK_POLL_INTERVAL = 0.1
-
-# Redis locks auto-expire after this many seconds so a worker that crashes
-# while holding one doesn't wedge every other worker forever.
-_REDIS_LOCK_TTL = 60
 
 
 class CacheBackend(ABC):
@@ -85,8 +79,11 @@ class CacheBackend(ABC):
         return 0
 
     @contextlib.contextmanager
-    def lock(self, key: str, timeout: float = _LOCK_WAIT_TIMEOUT) -> Iterator[bool]:
+    def lock(self, key: str, timeout: float | None = None) -> Iterator[bool]:
         """Best-effort per-key lock guarding a cache-miss fetch-and-populate.
+
+        *timeout* bounds how long to wait for the lock before proceeding
+        unlocked; ``None`` means ``ckanext.tables.cache.lock_timeout``.
 
         The default implementation is a no-op that always yields ``False``
         immediately: it cannot coordinate anything on its own. Backends that
@@ -191,17 +188,48 @@ class RedisCacheBackend(CacheBackend):
 
         self._memo_delete(self._full_key(key))
 
+    def get_plain(self, key: str) -> Any:
+        """Read a small value with a single ``GET``, written by ``set_plain()`` (or ``set()``).
+
+        Skips the version-key round trip and memo ``get()`` uses, which only
+        pay off for large payloads — see ``_metadata_get``.
+        """
+        full_key = self._full_key(key)
+
+        with connect_to_redis() as conn:
+            data: bytes | None = conn.get(full_key)  # type: ignore
+
+        if not data:
+            return None
+
+        try:
+            return json.loads(data)
+        except json.JSONDecodeError:
+            log.warning("Corrupted Redis cache entry, deleting: %s", full_key, exc_info=True)
+            self.delete(key)
+            return None
+
+    def set_plain(self, key: str, value: Any, ttl: int) -> None:
+        """Store a small value under *key* alone, for ``get_plain()``."""
+        with connect_to_redis() as conn:
+            conn.setex(self._full_key(key), ttl, json.dumps(value, cls=_TablesJSONEncoder, allow_nan=False))
+
     @contextlib.contextmanager
-    def lock(self, key: str, timeout: float = _LOCK_WAIT_TIMEOUT) -> Iterator[bool]:
+    def lock(self, key: str, timeout: float | None = None) -> Iterator[bool]:
         """Distributed lock via Redis ``SET NX PX`` (``redis-py``'s ``Lock`` helper).
 
-        The lock itself expires after ``_REDIS_LOCK_TTL`` seconds so a worker
-        that crashes while holding it doesn't wedge every other worker; *timeout*
-        only bounds how long this call waits to acquire it before giving up and
-        proceeding unlocked.
+        The lock itself expires after ``ckanext.tables.cache.lock_timeout``
+        seconds so a worker that crashes while holding it doesn't wedge every
+        other worker; *timeout* only bounds how long this call waits to
+        acquire it before giving up and proceeding unlocked.
         """
+        lock_ttl = get_cache_lock_timeout()
         conn = connect_to_redis()
-        redis_lock = conn.lock(self._full_key(f"lock:{key}"), timeout=_REDIS_LOCK_TTL, blocking_timeout=timeout)
+        redis_lock = conn.lock(
+            self._full_key(f"lock:{key}"),
+            timeout=lock_ttl,
+            blocking_timeout=lock_ttl if timeout is None else timeout,
+        )
 
         acquired = False
         try:
@@ -286,7 +314,7 @@ class _FileCacheBackend(CacheBackend, ABC):
         return os.path.join(self._require_cache_dir(), f"{key_hash}.lock")
 
     @contextlib.contextmanager
-    def lock(self, key: str, timeout: float = _LOCK_WAIT_TIMEOUT) -> Iterator[bool]:
+    def lock(self, key: str, timeout: float | None = None) -> Iterator[bool]:
         """Cross-process lock via ``fcntl.flock`` on a per-key lock file.
 
         ``flock`` is released by the kernel the moment the holding process
@@ -310,7 +338,7 @@ class _FileCacheBackend(CacheBackend, ABC):
             return
 
         acquired = False
-        deadline = time.monotonic() + timeout
+        deadline = time.monotonic() + (get_cache_lock_timeout() if timeout is None else timeout)
         try:
             while True:
                 try:
@@ -605,9 +633,12 @@ def _metadata_get(key: str) -> Any:
     outage must degrade to "nothing was cached" rather than 500 every table
     request — matching how every other cache read in this module already
     tolerates its own failure modes.
+
+    These values are small, so they're read with a single ``GET``
+    (``get_plain``) rather than ``get()``'s version check plus value fetch.
     """
     try:
-        return _metadata_backend().get(key)
+        return _metadata_backend().get_plain(key)
     except RedisError:
         log.debug("Redis unavailable for cache metadata read %r", key, exc_info=True)
         return None
@@ -616,7 +647,7 @@ def _metadata_get(key: str) -> Any:
 def _metadata_set(key: str, value: Any, ttl: int) -> None:
     """Write a generation/count value, tolerating an unreachable Redis."""
     try:
-        _metadata_backend().set(key, value, ttl)
+        _metadata_backend().set_plain(key, value, ttl)
     except RedisError:
         log.warning("Redis unavailable for cache metadata write %r", key, exc_info=True)
 

@@ -150,7 +150,7 @@ class TestResourceControllerHooks:
             )
 
         assert backend.get(key) is None
-        assert RedisCacheBackend().get(f"{key}:gen") is not None
+        assert RedisCacheBackend().get_plain(f"{key}:gen") is not None
 
     def test_before_resource_update_skips_upload_without_a_new_file(self, tmp_path):
         backend = FeatherCacheBackend(cache_dir=str(tmp_path))
@@ -176,4 +176,4 @@ class TestResourceControllerHooks:
             TablesPlugin().before_resource_delete({}, resource={"id": "res-1"}, resources=[])
 
         assert backend.get(key) is None
-        assert RedisCacheBackend().get(f"{key}:gen") is not None
+        assert RedisCacheBackend().get_plain(f"{key}:gen") is not None

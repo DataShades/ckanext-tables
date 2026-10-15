@@ -50,6 +50,18 @@ groups:
           has to be decompressed into memory on every read.
         example: lz4
 
+      - key: ckanext.tables.cache.lock_timeout
+        type: int
+        default: 60
+        description: |
+          How long (in seconds) a request that finds nothing cached waits for another worker
+          already loading the same resource, instead of downloading and parsing it again
+          itself. Also how long that load may hold the lock before it is considered abandoned.
+
+          Set it to roughly the longest download plus parse time you expect. It can't usefully
+          exceed your web server's request timeout (e.g. gunicorn's `--timeout`).
+        example: 120
+
   - annotation: Remote fetch settings
     description: >
       These options control how the file-based Resource Data Sources (CSV, XLSX, ORC, Parquet,

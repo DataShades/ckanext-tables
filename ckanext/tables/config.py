@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 CONF_CACHE_DIR = "ckanext.tables.cache.cache_dir"
 CONF_CACHE_TTL = "ckanext.tables.cache.ttl"
 CONF_CACHE_COMPRESSION = "ckanext.tables.cache.compression"
+CONF_CACHE_LOCK_TIMEOUT = "ckanext.tables.cache.lock_timeout"
 CONF_FETCH_CONNECT_TIMEOUT = "ckanext.tables.fetch.connect_timeout"
 CONF_FETCH_READ_TIMEOUT = "ckanext.tables.fetch.read_timeout"
 CONF_FETCH_MAX_BYTES = "ckanext.tables.fetch.max_bytes"
@@ -25,6 +26,7 @@ CONF_DUCKDB_MEMORY_LIMIT = "ckanext.tables.duckdb.memory_limit"
 DEFAULT_CACHE_TTL = 3600
 DEFAULT_CACHE_COMPRESSION = "uncompressed"
 CACHE_COMPRESSIONS = ("uncompressed", "lz4", "zstd")
+DEFAULT_CACHE_LOCK_TIMEOUT = 60
 DEFAULT_FETCH_CONNECT_TIMEOUT = 5
 DEFAULT_FETCH_READ_TIMEOUT = 30
 DEFAULT_FETCH_MAX_BYTES = 200 * 1024 * 1024  # 200 MB
@@ -153,6 +155,21 @@ def get_cache_compression() -> str:
         return DEFAULT_CACHE_COMPRESSION
 
     return compression
+
+
+def get_cache_lock_timeout() -> int:
+    """Return how long (seconds) a cache-miss load may hold its lock, and others wait for it.
+
+    Reads ``ckanext.tables.cache.lock_timeout``. Defaults to 60; a value below
+    1 is logged and treated as the default.
+    """
+    timeout = tk.asint(tk.config.get(CONF_CACHE_LOCK_TIMEOUT, DEFAULT_CACHE_LOCK_TIMEOUT))
+
+    if timeout < 1:
+        log.warning("%s must be at least 1, using %d", CONF_CACHE_LOCK_TIMEOUT, DEFAULT_CACHE_LOCK_TIMEOUT)
+        return DEFAULT_CACHE_LOCK_TIMEOUT
+
+    return timeout
 
 
 def get_fetch_connect_timeout() -> float:
