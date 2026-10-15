@@ -41,6 +41,10 @@ from ckanext.tables.data_sources import (
     TsvUrlDataSource,
     XlsUrlDataSource,
     XlsxUrlDataSource,
+    _calamine_available,
+    _open_excel_file,
+    _read_csv_arrow,
+    _read_excel,
     _sniff_csv_delimiter,
 )
 from ckanext.tables.types import FILTER_OPERATORS, FilterItem
@@ -138,10 +142,10 @@ class TestCSVResourceDataSource:
         assert data[0]["name"] == "Hacker"
 
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
-    def test_caching_feather_mixed_type_column_does_not_500(self, mock_read_csv, tmp_path):
-        # A CSV column pandas leaves as `object` with mixed Python types (numbers
-        # and text) makes pyarrow raise ArrowTypeError on the Feather write. The
-        # request must still succeed, just without caching.
+    def test_caching_feather_mixed_type_column_is_cached_as_text(self, mock_read_csv, tmp_path):
+        # A column pandas leaves as `object` with mixed Python types (numbers and
+        # text) can't be written to Feather as-is — fetch_dataframe() turns it
+        # into text first (see _stringify_mixed_columns), so it is still cached.
         mock_read_csv.return_value = pd.DataFrame({"mixed": [1, "two", 3.0]})
 
         ds = CsvUrlDataSource(
@@ -151,8 +155,11 @@ class TestCSVResourceDataSource:
 
         data = ds.filter([]).all()
 
-        assert len(data) == 3
-        assert ds.cache_backend.get(ds.get_cache_key()) is None
+        assert data == [{"mixed": "1"}, {"mixed": "two"}, {"mixed": "3.0"}]
+
+        cached = ds.cache_backend.get(ds.get_cache_key())
+        assert cached is not None
+        assert cached["mixed"].tolist() == ["1", "two", "3.0"]
 
     @mock.patch("ckanext.tables.data_sources.pd.read_csv")
     def test_invalidate_removes_the_cached_dataframe(self, mock_read_csv, tmp_path):
@@ -1224,6 +1231,112 @@ class TestCsvDelimiterSniffing:
         slow = pd.read_csv(str(path), sep=None, engine="python")
 
         assert fast.equals(slow)
+
+
+class TestCsvArrowReader:
+    """A full CSV read goes through pyarrow, but must parse exactly like pandas' C engine."""
+
+    def _write(self, tmp_path, content: str | bytes) -> str:
+        path = tmp_path / "data.csv"
+
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+
+        return str(path)
+
+    def test_full_read_does_not_touch_pandas_read_csv(self, tmp_path):
+        path = self._write(tmp_path, "id,name\n1,Alice\n2,Bob\n")
+
+        with mock.patch("ckanext.tables.data_sources.pd.read_csv", side_effect=AssertionError("C engine used")):
+            df = CsvUrlDataSource(url="http://example.com/data.csv")._reader(path)
+
+        assert df.to_dict(orient="records") == [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+
+    def test_matches_the_c_engine(self, tmp_path):
+        """Dates/times stay text, NA markers and empty cells are nulls, an empty column is float NaN."""
+        path = self._write(
+            tmp_path,
+            "id;when;day;at;name;score;flag;empty;note\n"
+            '1;2020-01-01 10:00;2020-01-01;10:00:00;Alice;1.5;True;;"multi\nline"\n'
+            "2;2021-05-06 11:30;2021-05-06;11:15:00;;;False;;plain\n"
+            "3;2022-07-08 12:00;2022-07-08;12:30:00;NA;7;True;;n/a\n",
+        )
+
+        fast = _read_csv_arrow(path, ";")
+
+        assert fast is not None
+        pd.testing.assert_frame_equal(fast, pd.read_csv(path, sep=";"))
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param("a,a,b\n1,2,3\n", id="duplicate-headers"),
+            pytest.param(",b\n1,2\n", id="empty-header"),
+            pytest.param("a,b,c\n1,2\n3,4,5\n", id="ragged-rows"),
+        ],
+    )
+    def test_falls_back_to_the_c_engine(self, tmp_path, content):
+        path = self._write(tmp_path, content)
+
+        df = CsvUrlDataSource(url="http://example.com/data.csv")._reader(path)
+
+        pd.testing.assert_frame_equal(df, pd.read_csv(path, sep=","))
+
+    def test_non_utf8_text_still_fails_like_the_c_engine(self, tmp_path):
+        path = self._write(tmp_path, "a,b\ncaf\xe9,1\nx,2\n".encode("latin-1"))
+
+        with pytest.raises(UnicodeDecodeError):
+            CsvUrlDataSource(url="http://example.com/data.csv")._reader(path)
+
+
+class TestExcelEngine:
+    """Spreadsheets are read with calamine when it's installed, else pandas' default engine."""
+
+    @pytest.mark.skipif(not _calamine_available(), reason="python-calamine is not installed")
+    def test_reads_with_calamine_when_installed(self, workbook_path):
+        with mock.patch("ckanext.tables.data_sources.pd.read_excel", wraps=pd.read_excel) as read_excel:
+            df = _read_excel(workbook_path, sheet_name=1)
+
+        assert df.to_dict(orient="records") == [{"city": "Kyiv"}]
+        assert read_excel.call_count == 1
+        assert read_excel.call_args.kwargs["engine"] == "calamine"
+
+    def test_falls_back_to_the_default_engine_when_calamine_fails(self):
+        expected = pd.DataFrame({"a": [1]})
+
+        with (
+            mock.patch("ckanext.tables.data_sources._calamine_available", return_value=True),
+            mock.patch(
+                "ckanext.tables.data_sources.pd.read_excel", side_effect=[ValueError("boom"), expected]
+            ) as read_excel,
+        ):
+            df = _read_excel("/tmp/book.xlsx", sheet_name=0)
+
+        assert df is expected
+        assert read_excel.call_args_list[0].kwargs["engine"] == "calamine"
+        assert "engine" not in read_excel.call_args_list[1].kwargs
+
+    def test_uses_the_default_engine_without_calamine(self):
+        with (
+            mock.patch("ckanext.tables.data_sources._calamine_available", return_value=False),
+            mock.patch("ckanext.tables.data_sources.pd.read_excel", return_value=pd.DataFrame()) as read_excel,
+        ):
+            _read_excel("/tmp/book.xlsx", sheet_name=0)
+
+        assert "engine" not in read_excel.call_args.kwargs
+
+    def test_sheet_names_fall_back_to_the_default_engine(self, workbook_path):
+        with (
+            mock.patch("ckanext.tables.data_sources._calamine_available", return_value=True),
+            mock.patch(
+                "ckanext.tables.data_sources.pd.ExcelFile",
+                side_effect=[ValueError("boom"), pd.ExcelFile(workbook_path)],
+            ),
+            _open_excel_file(workbook_path) as workbook,
+        ):
+            assert workbook.sheet_names == ["People", "Other Places"]
 
 
 @pytest.mark.usefixtures("clean_redis", "mocked_fetch_remote_file")

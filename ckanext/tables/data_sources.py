@@ -3,7 +3,8 @@ from __future__ import annotations
 import contextlib
 import csv
 import decimal
-import importlib
+import functools
+import importlib.util
 import json
 import logging
 import os
@@ -22,6 +23,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from pyarrow import csv as pa_csv
 from pyarrow import feather, orc
 from sqlalchemy import String, cast
 from sqlalchemy.sql import func, select
@@ -962,7 +964,28 @@ class CsvUrlDataSource(BaseResourceDataSource):
         return pd.read_csv(path, sep=None, engine="python", **kwargs)
 
     def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
-        return self._read_csv(path, **kwargs)
+        """Read the whole file, through pyarrow's multithreaded CSV reader when it can.
+
+        That reader is an order of magnitude faster than pandas' C engine on a
+        large file, but only used when its result matches what ``_read_csv``
+        would have produced — anything it can't parse the same way falls back
+        to ``_read_csv`` (see ``_read_csv_arrow``).
+        """
+        if kwargs:
+            return self._read_csv(path, **kwargs)
+
+        delimiter = _sniff_csv_delimiter(path)
+
+        if delimiter is None:
+            return self._read_csv(path)
+
+        try:
+            df = _read_csv_arrow(path, delimiter)
+        except (pa.ArrowException, OSError, ValueError):
+            log.debug("pyarrow CSV read failed for %s, falling back to pandas", path, exc_info=True)
+            return self._read_csv(path)
+
+        return df if df is not None else self._read_csv(path)
 
     def _schema_reader(self, path: str) -> list[str]:
         return list(self._read_csv(path, nrows=0).columns)
@@ -1036,7 +1059,7 @@ class XlsxUrlDataSource(BaseResourceDataSource):
             return cached
 
         try:
-            with self._open_source() as path, pd.ExcelFile(path) as workbook:
+            with self._open_source() as path, _open_excel_file(path) as workbook:
                 names = [str(name) for name in workbook.sheet_names]
         except self._schema_read_errors:
             log.exception("Failed to read %s sheet names", self._format_name)
@@ -1048,10 +1071,10 @@ class XlsxUrlDataSource(BaseResourceDataSource):
         return names
 
     def _reader(self, path: str, **kwargs: Any) -> pd.DataFrame:
-        return pd.read_excel(path, sheet_name=self.sheet_index, **kwargs)
+        return _read_excel(path, sheet_name=self.sheet_index, **kwargs)
 
     def _schema_reader(self, path: str) -> list[str]:
-        return list(pd.read_excel(path, sheet_name=self.sheet_index, nrows=0).columns)
+        return list(_read_excel(path, sheet_name=self.sheet_index, nrows=0).columns)
 
 
 class XlsUrlDataSource(XlsxUrlDataSource):
@@ -1258,6 +1281,83 @@ class DataStoreDataSource(BaseDataSource):
             return [f["id"] for f in result.get("fields", []) if f["id"] != "_id"]
         except (tk.ObjectNotFound, tk.NotAuthorized):
             return []
+
+
+def _read_csv_arrow(path: str, delimiter: str) -> pd.DataFrame | None:
+    """Read a CSV with pyarrow, matching ``pd.read_csv`` output.
+
+    Returns ``None`` (caller falls back to pandas) on duplicate/empty
+    headers or non-UTF-8 text. Date/time columns are kept as text and
+    all-empty columns become float NaN, as in pandas. Known gap: integers
+    beyond int64 come back as float.
+    """
+    parse_options = pa_csv.ParseOptions(delimiter=delimiter, newlines_in_values=True)
+
+    def read(column_types: dict[str, pa.DataType] | None = None) -> pa.Table:  # pyright: ignore[reportUnknownParameterType]
+        convert_options = pa_csv.ConvertOptions(strings_can_be_null=True, column_types=column_types)
+        return pa_csv.read_csv(path, parse_options=parse_options, convert_options=convert_options)
+
+    table = read()
+    names = table.column_names
+
+    if len(set(names)) != len(names) or not all(names):
+        return None
+
+    as_text = {
+        field.name: pa.string()
+        for field in table.schema
+        if pa.types.is_timestamp(field.type) or pa.types.is_date(field.type) or pa.types.is_time(field.type)
+    }
+
+    if as_text:
+        table = read(as_text)
+
+    for index, field in enumerate(table.schema):
+        if pa.types.is_binary(field.type) or pa.types.is_large_binary(field.type):
+            return None
+
+        if pa.types.is_null(field.type):
+            table = table.set_column(index, field.name, pa.nulls(table.num_rows, pa.float64()))
+
+    return table.to_pandas()
+
+
+@functools.cache
+def _calamine_available() -> bool:
+    """Whether the Rust-based ``python-calamine`` Excel reader is installed (the ``xlsx`` extra)."""
+    return importlib.util.find_spec("python_calamine") is not None
+
+
+def _read_excel(path: str, **kwargs: Any) -> pd.DataFrame:
+    """Read a spreadsheet with calamine if installed, else pandas' default engine.
+
+    If calamine fails, the read is retried with the default engine.
+    """
+    if _calamine_available():
+        try:
+            return pd.read_excel(path, engine="calamine", **kwargs)
+        except Exception:  # noqa: BLE001 - any calamine failure gets a second chance below
+            log.debug("calamine failed to read %s, retrying with the default engine", path, exc_info=True)
+
+    return pd.read_excel(path, **kwargs)
+
+
+@contextlib.contextmanager
+def _open_excel_file(path: str) -> Iterator[pd.ExcelFile]:
+    """Open a workbook with calamine when available — see ``_read_excel``."""
+    workbook = None
+
+    if _calamine_available():
+        try:
+            workbook = pd.ExcelFile(path, engine="calamine")
+        except Exception:  # noqa: BLE001 - see _read_excel
+            log.debug("calamine failed to open %s, retrying with the default engine", path, exc_info=True)
+
+    if workbook is None:
+        workbook = pd.ExcelFile(path)
+
+    with workbook:
+        yield workbook
 
 
 def _sniff_csv_delimiter(path: str) -> str | None:
