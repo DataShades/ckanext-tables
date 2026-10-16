@@ -149,7 +149,6 @@ class TableDefinition:
                         "formatter": "rowSelection",
                         "titleFormatter": "rowSelection",
                         "width": 48,
-                        "height": 48,
                     }
                 }
             )
