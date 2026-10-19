@@ -1,0 +1,84 @@
+// ==========================================================
+//  Colour tokens for tables, in a light and a dark set.
+//
+//  The dark set follows CKAN's dark theme: CKAN core sets
+//  html[data-theme="dark"] and defines its palette as --dm-*
+//  variables (ckan/public/base/scss/_dark-mode.scss); we map
+//  onto those, with fallbacks for themes that don't define
+//  them. The light set keeps the original tables look.
+//
+//  Every colour in the tables styles, and every override of
+//  the vendored Tabulator theme, reads one of these.
+// ==========================================================
+
+:root {
+    --tables-bg: #fff;
+    --tables-page-bg: var(--bs-body-bg, #fff); // behind a fullscreen table
+    --tables-header-bg: #f8f9fa;
+    --tables-header-hover-bg: #dae1e7;
+    --tables-sort-arrow: #bbb; // unsorted column
+    --tables-sort-arrow-active: #666; // sorted column
+    --tables-row-hover-bg: #f9fafb;
+    --tables-row-selected-bg: rgba(3, 92, 122, 0.1);
+    --tables-border: #dadee2;
+    --tables-divider: rgba(34, 36, 38, 0.1); // between rows
+    --tables-input-border: #ced4da;
+
+    --tables-text: #212529;
+    --tables-text-muted: #596a73;
+    --tables-icon-muted: #b3b3b3; // idle header-filter toggles
+    --tables-disabled-text: #dee2e6;
+
+    --tables-active: #035c7a; // current page, active toggles, checkboxes
+    --tables-link: rgb(var(--bs-primary-rgb, 13, 110, 253)); // link-style buttons
+    --tables-active-text: #fff;
+
+    --tables-menu-bg: #fff;
+    --tables-menu-text: #333;
+    --tables-menu-hover-bg: #e9ecef;
+    --tables-menu-hover-text: #2e2e2e;
+    --tables-menu-border: rgba(0, 0, 0, 0.15);
+    --tables-shadow: rgba(0, 0, 0, 0.15);
+
+    --tables-skeleton-bg: #fff;
+    --tables-skeleton-header-bg: #f9fafb;
+    --tables-skeleton-block: #ededed;
+    --tables-skeleton-shine: #d7d6d6;
+    --tables-skeleton-control-bg: #f8f9fa;
+}
+
+html[data-theme="dark"] {
+    --tables-bg: var(--dm-surface, #141b2d);
+    --tables-page-bg: var(--dm-bg, #0b1220);
+    --tables-header-bg: var(--dm-surface-alt, #1c2540);
+    --tables-header-hover-bg: var(--dm-border, #2a3555);
+    --tables-sort-arrow: var(--dm-text-muted, #97a0b8);
+    --tables-sort-arrow-active: var(--dm-text, #e6e9f0);
+    --tables-row-hover-bg: var(--dm-surface-alt, #1c2540);
+    --tables-row-selected-bg: rgba(142, 169, 232, 0.16);
+    --tables-border: var(--dm-border, #2a3555);
+    --tables-divider: var(--dm-border, #2a3555);
+    --tables-input-border: var(--dm-border, #2a3555);
+
+    --tables-text: var(--dm-text, #e6e9f0);
+    --tables-text-muted: var(--dm-text-muted, #97a0b8);
+    --tables-icon-muted: var(--dm-text-muted, #97a0b8);
+    --tables-disabled-text: #4b5675;
+
+    --tables-active: var(--dm-link, #8ea9e8);
+    --tables-link: var(--dm-link, #8ea9e8);
+    --tables-active-text: var(--dm-bg, #0b1220);
+
+    --tables-menu-bg: var(--dm-surface, #141b2d);
+    --tables-menu-text: var(--dm-text, #e6e9f0);
+    --tables-menu-hover-bg: var(--dm-surface-alt, #1c2540);
+    --tables-menu-hover-text: var(--dm-text, #e6e9f0);
+    --tables-menu-border: var(--dm-border, #2a3555);
+    --tables-shadow: rgba(0, 0, 0, 0.5);
+
+    --tables-skeleton-bg: var(--dm-surface, #141b2d);
+    --tables-skeleton-header-bg: var(--dm-surface-alt, #1c2540);
+    --tables-skeleton-block: var(--dm-surface-alt, #1c2540);
+    --tables-skeleton-shine: var(--dm-border, #2a3555);
+    --tables-skeleton-control-bg: var(--dm-surface, #141b2d);
+}

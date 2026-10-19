@@ -3,7 +3,7 @@
     pointer-events: none;
 
     &.btn-light {
-        color: #dee2e6;
+        color: var(--tables-disabled-text);
     }
 
     &.btn-danger {
@@ -38,4 +38,18 @@
 .tables-dialog-modal {
     width: min(90vw, 700px);
     max-width: 90vw;
+}
+
+// "Add filter" in the filters modal: a link-style button. !important to win
+// over CKAN's dark theme, which restyles every plain .btn as a boxed button
+// with body text colour.
+.btn.tables-add-filter {
+    color: var(--tables-link) !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
+
+    &:hover,
+    &:focus-visible {
+        text-decoration: underline;
+    }
 }
