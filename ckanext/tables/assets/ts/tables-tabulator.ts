@@ -25,8 +25,20 @@ namespace ckan {
         stacking?: boolean;
         delay?: number;
     }) => void;
-    export var tablesConfirm: (options: { message: string; onConfirm: () => void; keyboard?: boolean }) => void;
+    export var tablesConfirm: (options: ConfirmOptions) => void;
+    /** CKAN 2.12+ core dialog; ``tablesConfirm`` is this when present. */
+    export var confirm: ((options: ConfirmOptions) => void) | undefined;
 }
+
+type ConfirmOptions = {
+    message: string;
+    onConfirm: () => void;
+    keyboard?: boolean;
+    title?: string;
+    confirmText?: string;
+    cancelText?: string;
+    type?: string;
+};
 
 type TableFilter = {
     field: string;
@@ -73,6 +85,12 @@ declare var bootstrap: {
 
 ckan.module("tables-tabulator", function ($) {
     "use strict";
+
+    function escapeHtml(value: string): string {
+        const div = document.createElement("div");
+        div.textContent = value;
+        return div.innerHTML.replace(/"/g, "&quot;");
+    }
     return {
         options: {
             config: null as any,
@@ -272,7 +290,7 @@ ckan.module("tables-tabulator", function ($) {
                 const rowActions = this.options.rowActions as Record<string, TabulatorAction>;
                 this.options.config.rowContextMenu = Object.values(rowActions).map((action: TabulatorAction) => {
                     const attrs = Object.entries(action.attrs || {})
-                        .map(([k, v]) => `${k}="${v}"`)
+                        .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
                         .join(" ");
                     const icon = action.icon ? `<i class='${action.icon} me-1'></i> ` : "";
 
@@ -376,17 +394,74 @@ ckan.module("tables-tabulator", function ($) {
             });
         },
 
-        _confirmAction: function (label: string, callback: () => void): void {
-            ckan.tablesConfirm({
-                message: ckan.i18n._("Are you sure you want to perform this action: %(label)s?", { label }),
+        /**
+         * Ask for confirmation before running an action.
+         *
+         * The dialog can be customised per action through ``data-confirm-*``
+         * attributes (the action's ``attrs``): ``title``, ``message``,
+         * ``text`` (confirm button), ``cancel-text``, ``type`` (a confirm
+         * style preset name) and ``focus`` (``"cancel"`` to start on the
+         * Cancel button). ``%(name)s`` / ``%(name)d`` in the message are
+         * filled from ``vars``.
+         */
+        _confirmAction: function (
+            label: string,
+            callback: () => void,
+            attrs: Record<string, string> = {},
+            vars: Record<string, string | number> = {}
+        ): void {
+            // ckan.confirm (CKAN 2.12+) inserts these as HTML; the local
+            // fallback sets them as text.
+            const usesCoreConfirm = ckan.confirm !== undefined && ckan.tablesConfirm === ckan.confirm;
+            const text = (value: string): string => (usesCoreConfirm ? escapeHtml(value) : value);
+            const fill = (value: string): string =>
+                value.replace(/%\((\w+)\)[sd]/g, (match, name) => (name in vars ? String(vars[name]) : match));
+
+            const message =
+                attrs["data-confirm-message"] !== undefined
+                    ? fill(attrs["data-confirm-message"])
+                    : ckan.i18n._("Are you sure you want to perform this action: %(label)s?", { label });
+
+            const options: ConfirmOptions = {
+                message: text(message),
                 onConfirm: callback,
                 keyboard: true,
+            };
+
+            const optional: [string, string][] = [
+                ["data-confirm-title", "title"],
+                ["data-confirm-text", "confirmText"],
+                ["data-confirm-cancel-text", "cancelText"],
+            ];
+            optional.forEach(([attr, option]) => {
+                if (attrs[attr]) (options as Record<string, unknown>)[option] = text(attrs[attr]);
             });
+            if (attrs["data-confirm-type"]) options.type = attrs["data-confirm-type"];
+
+            ckan.tablesConfirm(options);
+
+            if (attrs["data-confirm-focus"] === "cancel") {
+                // After Bootstrap's own focus handling, which runs before "shown".
+                document.getElementById("ckan-confirm-modal")?.addEventListener(
+                    "shown.bs.modal",
+                    () => document.getElementById("ckan-confirm-cancel")?.focus(),
+                    { once: true }
+                );
+            }
+        },
+
+        /** The ``data-confirm-*`` attributes of a menu button. */
+        _confirmAttrs: function (el: HTMLElement): Record<string, string> {
+            const attrs: Record<string, string> = {};
+            Array.from(el.attributes).forEach((attr) => {
+                if (attr.name.startsWith("data-confirm-")) attrs[attr.name] = attr.value;
+            });
+            return attrs;
         },
 
         _rowActionCallback: function (action: TabulatorAction, e: Event, row: TabulatorRow): void {
             if (action.with_confirmation) {
-                this._confirmAction(action.label, () => this._onRowActionConfirm(action, row));
+                this._confirmAction(action.label, () => this._onRowActionConfirm(action, row), action.attrs || {});
             } else {
                 this._onRowActionConfirm(action, row);
             }
@@ -629,7 +704,9 @@ ckan.module("tables-tabulator", function ($) {
 
             const withConfirmation = target.dataset.withConfirmation !== "false";
             if (withConfirmation) {
-                this._confirmAction(label, () => this._onBulkActionConfirm(action, label));
+                this._confirmAction(label, () => this._onBulkActionConfirm(action, label), this._confirmAttrs(target), {
+                    count: this.table.getSelectedData().length,
+                });
             } else {
                 this._onBulkActionConfirm(action, label);
             }
@@ -652,7 +729,7 @@ ckan.module("tables-tabulator", function ($) {
             if (!action) return;
             const withConfirmation = target.dataset.withConfirmation !== "false";
             if (withConfirmation) {
-                this._confirmAction(label, () => this._onTableActionConfirm(action, label));
+                this._confirmAction(label, () => this._onTableActionConfirm(action, label), this._confirmAttrs(target));
             } else {
                 this._onTableActionConfirm(action, label);
             }
@@ -970,11 +1047,18 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _onResetColumns: function (): void {
+            // Back to the table's defaults, which may keep some columns hidden
+            // (ColumnDefinition(visible=False)), rather than showing everything.
             this.columnToggles.forEach((toggle: HTMLInputElement) => {
-                toggle.checked = true;
                 const field = toggle.dataset.field;
-                if (field) {
+                if (!field) return;
+
+                const visible = this._isVisibleByDefault(field);
+                toggle.checked = visible;
+                if (visible) {
                     this.table.showColumn(field);
+                } else {
+                    this.table.hideColumn(field);
                 }
             });
 
@@ -1027,9 +1111,26 @@ ckan.module("tables-tabulator", function ($) {
             this._updateHiddenColumnsCounter();
         },
 
+        /**
+         * Whether a column is visible before the user changes anything, as
+         * declared in the table config.
+         */
+        _isVisibleByDefault: function (field: string): boolean {
+            const columns: { field?: string; visible?: boolean }[] = this.options?.config?.columns || [];
+            const column = columns.find((col) => col.field === field);
+            return column?.visible !== false;
+        },
+
+        /**
+         * Count the columns the table actually has hidden, so columns hidden by
+         * default count too, not just the ones hidden through the URL.
+         */
         _updateHiddenColumnsCounter: function (): void {
-            const urlParams = new URLSearchParams(window.location.search);
-            const hiddenCount = urlParams.getAll(this._urlKey("hidden_column")).length;
+            const hiddenCount = Array.from(this.columnToggles as Iterable<HTMLInputElement>).filter((toggle) => {
+                const field = toggle.dataset.field;
+                const column = field ? this.table.getColumn(field) : null;
+                return column ? !column.isVisible() : false;
+            }).length;
 
             this.hiddenColumnsCounter.textContent = hiddenCount.toString();
             this.hiddenColumnsBadge.classList.toggle("d-none", hiddenCount === 0);

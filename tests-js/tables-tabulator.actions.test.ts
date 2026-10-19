@@ -66,6 +66,104 @@ describe("_confirmAction", () => {
     });
 });
 
+describe("_confirmAction with data-confirm-* attributes", () => {
+    afterEach(() => {
+        document.body.innerHTML = "";
+    });
+
+    it("maps the attributes onto the dialog options", () => {
+        const tablesConfirm = vi.fn();
+        const instance = makeInstance({}, undefined, { tablesConfirm });
+
+        instance._confirmAction("Delete selected", vi.fn(), {
+            "data-confirm-title": "Delete tickets?",
+            "data-confirm-message": "%(count)d tickets will be deleted.",
+            "data-confirm-text": "Delete tickets",
+            "data-confirm-cancel-text": "Keep them",
+            "data-confirm-type": "danger",
+            class: "ignored",
+        }, { count: 3 });
+
+        expect(tablesConfirm.mock.calls[0][0]).toMatchObject({
+            title: "Delete tickets?",
+            message: "3 tickets will be deleted.",
+            confirmText: "Delete tickets",
+            cancelText: "Keep them",
+            type: "danger",
+            keyboard: true,
+        });
+    });
+
+    it("leaves unknown placeholders in the message as they are", () => {
+        const tablesConfirm = vi.fn();
+        const instance = makeInstance({}, undefined, { tablesConfirm });
+
+        instance._confirmAction("X", vi.fn(), { "data-confirm-message": "%(count)d of %(total)d" }, { count: 2 });
+
+        expect(tablesConfirm.mock.calls[0][0].message).toBe("2 of %(total)d");
+    });
+
+    it("keeps the defaults when no attributes are given", () => {
+        const tablesConfirm = vi.fn();
+        const instance = makeInstance({}, undefined, { tablesConfirm });
+
+        instance._confirmAction("Delete row", vi.fn());
+
+        const options = tablesConfirm.mock.calls[0][0];
+        expect(options.message).toContain("Delete row");
+        expect(options).not.toHaveProperty("title");
+        expect(options).not.toHaveProperty("type");
+    });
+
+    it("escapes text for CKAN core's dialog, which renders it as HTML", () => {
+        const confirm = vi.fn();
+        const instance = makeInstance({}, undefined, { confirm, tablesConfirm: confirm });
+
+        instance._confirmAction("X", vi.fn(), {
+            "data-confirm-title": "<b>Delete</b>?",
+            "data-confirm-message": "Tom & Jerry",
+        });
+
+        expect(confirm.mock.calls[0][0]).toMatchObject({
+            title: "&lt;b&gt;Delete&lt;/b&gt;?",
+            message: "Tom &amp; Jerry",
+        });
+    });
+
+    it("passes text unescaped to the local fallback, which sets it as text", () => {
+        const tablesConfirm = vi.fn();
+        const instance = makeInstance({}, undefined, { tablesConfirm });
+
+        instance._confirmAction("X", vi.fn(), { "data-confirm-message": "Tom & Jerry" });
+
+        expect(tablesConfirm.mock.calls[0][0].message).toBe("Tom & Jerry");
+    });
+
+    it("moves focus to Cancel once the dialog is shown, with data-confirm-focus=cancel", () => {
+        const tablesConfirm = vi.fn(() => {
+            document.body.innerHTML =
+                '<div id="ckan-confirm-modal"><button id="ckan-confirm-cancel"></button></div>';
+        });
+        const instance = makeInstance({}, undefined, { tablesConfirm });
+
+        instance._confirmAction("X", vi.fn(), { "data-confirm-focus": "cancel" });
+        document.getElementById("ckan-confirm-modal")!.dispatchEvent(new Event("shown.bs.modal"));
+
+        expect(document.activeElement?.id).toBe("ckan-confirm-cancel");
+    });
+});
+
+describe("_confirmAttrs", () => {
+    it("collects only data-confirm-* attributes", () => {
+        const button = document.createElement("button");
+        button.setAttribute("data-confirm-title", "Sure?");
+        button.setAttribute("data-action", "delete");
+        button.setAttribute("class", "dropdown-item");
+
+        expect(makeInstance()._confirmAttrs(button)).toEqual({ "data-confirm-title": "Sure?" });
+    });
+});
+
 describe("_rowActionCallback", () => {
     it("confirms first when the action requires confirmation", () => {
         const instance = makeInstance();
@@ -76,7 +174,7 @@ describe("_rowActionCallback", () => {
         const row = { getData: () => ({ id: 1 }) };
         instance._rowActionCallback(action, new Event("click"), row);
 
-        expect(confirmAction).toHaveBeenCalledWith("Delete", expect.any(Function));
+        expect(confirmAction).toHaveBeenCalledWith("Delete", expect.any(Function), {});
         expect(onRowActionConfirm).not.toHaveBeenCalled();
 
         // Simulate the user accepting the confirmation dialog.
@@ -217,7 +315,7 @@ describe("_onApplyBulkAction / _onApplyTableAction", () => {
 
         instance._onApplyBulkAction({ currentTarget: target } as unknown as Event);
 
-        expect(confirmAction).toHaveBeenCalledWith("Delete selected", expect.any(Function));
+        expect(confirmAction).toHaveBeenCalledWith("Delete selected", expect.any(Function), {}, { count: 1 });
     });
 
     it("bulk action skips confirmation when data-with-confirmation is 'false'", () => {
@@ -271,7 +369,7 @@ describe("_onApplyBulkAction / _onApplyTableAction", () => {
 
         instance._onApplyTableAction({ currentTarget: target } as unknown as Event);
 
-        expect(confirmAction).toHaveBeenCalledWith("Recalculate", expect.any(Function));
+        expect(confirmAction).toHaveBeenCalledWith("Recalculate", expect.any(Function), {});
     });
 
     it("table action skips confirmation when data-with-confirmation is 'false'", () => {

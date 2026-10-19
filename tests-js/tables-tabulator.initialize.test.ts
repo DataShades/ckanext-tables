@@ -79,6 +79,33 @@ describe("initialize", () => {
         );
     });
 
+    it("escapes row action attribute values in the menu label", () => {
+        const dom = buildTableDom("res-esc");
+        const { FakeTabulator, instances } = makeFakeTabulatorClass();
+        (globalThis as any).Tabulator = FakeTabulator;
+
+        const instance = makeInstance({
+            el: makeFakeEl(dom.tableEl),
+            sandbox: { subscribe: vi.fn() },
+            options: {
+                config: { tableName: "res-esc" },
+                rowActions: {
+                    delete: {
+                        name: "delete",
+                        label: "Delete",
+                        attrs: { "data-confirm-message": 'Delete "this" <row>?' },
+                    },
+                },
+                enableFullscreenToggle: true,
+            },
+        });
+        instance.initialize();
+
+        const holder = document.createElement("div");
+        holder.innerHTML = instances[0].config.rowContextMenu[0].label;
+        expect(holder.querySelector("span")?.getAttribute("data-confirm-message")).toBe('Delete "this" <row>?');
+    });
+
     it("wires rowHeader.cellClick to toggle the row's selection", () => {
         const dom = buildTableDom("res-3");
         const { FakeTabulator, instances } = makeFakeTabulatorClass();

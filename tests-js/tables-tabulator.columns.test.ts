@@ -9,6 +9,17 @@ function columnToggle(field: string, checked: boolean): HTMLInputElement {
     return toggle;
 }
 
+/** A table stub that tracks which columns are hidden, like Tabulator does. */
+function fakeTable(hidden: string[] = []) {
+    const hiddenFields = new Set(hidden);
+    return {
+        showColumn: vi.fn((field: string) => hiddenFields.delete(field)),
+        hideColumn: vi.fn((field: string) => hiddenFields.add(field)),
+        redraw: vi.fn(),
+        getColumn: (field: string) => ({ isVisible: () => !hiddenFields.has(field) }),
+    };
+}
+
 beforeEach(() => {
     document.body.innerHTML = "";
     window.history.replaceState({}, "", "/dataset/resource/view");
@@ -17,7 +28,7 @@ beforeEach(() => {
 describe("_onApplyColumns", () => {
     it("shows checked columns, hides unchecked ones, and persists hidden fields to the URL", () => {
         const columnToggles = [columnToggle("age", true), columnToggle("name", false)];
-        const table = { showColumn: vi.fn(), hideColumn: vi.fn(), redraw: vi.fn() };
+        const table = fakeTable();
         const hiddenColumnsCounter = document.createElement("span");
         const hiddenColumnsBadge = document.createElement("span");
 
@@ -60,7 +71,7 @@ describe("_onApplyColumns", () => {
 describe("_onResetColumns", () => {
     it("re-checks and shows every column, clearing hidden state", () => {
         const columnToggles = [columnToggle("age", false), columnToggle("name", false)];
-        const table = { showColumn: vi.fn(), redraw: vi.fn() };
+        const table = fakeTable(["age", "name"]);
         const hiddenColumnsCounter = document.createElement("span");
         const hiddenColumnsBadge = document.createElement("span");
 
@@ -82,6 +93,33 @@ describe("_onResetColumns", () => {
         expect(new URL(window.location.href).searchParams.has("hidden_column-r")).toBe(false);
         expect(hiddenColumnsCounter.textContent).toBe("0");
         expect(hiddenColumnsBadge.classList.contains("d-none")).toBe(true);
+    });
+
+    it("restores columns that are hidden by default instead of showing them", () => {
+        const columnToggles = [columnToggle("age", false), columnToggle("created", true)];
+        const table = fakeTable(["age"]);
+        const hiddenColumnsCounter = document.createElement("span");
+        const hiddenColumnsBadge = document.createElement("span");
+
+        window.history.replaceState({}, "", "/x?hidden_column-r=age");
+
+        const instance = makeInstance({
+            columnToggles,
+            table,
+            tableName: "r",
+            hiddenColumnsCounter,
+            hiddenColumnsBadge,
+            options: { config: { columns: [{ field: "age" }, { field: "created", visible: false }] } },
+        });
+
+        instance._onResetColumns();
+
+        expect(columnToggles.map((t) => t.checked)).toEqual([true, false]);
+        expect(table.showColumn).toHaveBeenCalledWith("age");
+        expect(table.hideColumn).toHaveBeenCalledWith("created");
+        expect(new URL(window.location.href).searchParams.has("hidden_column-r")).toBe(false);
+        expect(hiddenColumnsCounter.textContent).toBe("1");
+        expect(hiddenColumnsBadge.classList.contains("d-none")).toBe(false);
     });
 });
 
@@ -129,11 +167,17 @@ describe("_onSelectAllColumns / _onDeselectAllColumns", () => {
 describe("_applyColumnVisibilityFromUrl", () => {
     it("hides every column named in hidden_column URL params", () => {
         window.history.replaceState({}, "", "/x?hidden_column-r=age&hidden_column-r=name");
-        const table = { hideColumn: vi.fn() };
+        const table = fakeTable();
         const hiddenColumnsCounter = document.createElement("span");
         const hiddenColumnsBadge = document.createElement("span");
 
-        const instance = makeInstance({ table, tableName: "r", hiddenColumnsCounter, hiddenColumnsBadge });
+        const instance = makeInstance({
+            columnToggles: [columnToggle("age", true), columnToggle("name", true), columnToggle("id", true)],
+            table,
+            tableName: "r",
+            hiddenColumnsCounter,
+            hiddenColumnsBadge,
+        });
         instance._applyColumnVisibilityFromUrl();
 
         expect(table.hideColumn).toHaveBeenCalledWith("age");
@@ -150,6 +194,7 @@ describe("_applyColumnVisibilityFromUrl", () => {
         };
 
         const instance = makeInstance({
+            columnToggles: [],
             table,
             tableName: "r",
             hiddenColumnsCounter: document.createElement("span"),
@@ -162,19 +207,57 @@ describe("_applyColumnVisibilityFromUrl", () => {
 
 describe("_updateHiddenColumnsCounter", () => {
     it("shows the badge only when at least one column is hidden", () => {
-        window.history.replaceState({}, "", "/dataset/resource/view");
+        const table = fakeTable();
         const hiddenColumnsCounter = document.createElement("span");
         const hiddenColumnsBadge = document.createElement("span");
-        const instance = makeInstance({ tableName: "r", hiddenColumnsCounter, hiddenColumnsBadge });
+        const instance = makeInstance({
+            columnToggles: [columnToggle("age", true), columnToggle("name", true)],
+            table,
+            tableName: "r",
+            hiddenColumnsCounter,
+            hiddenColumnsBadge,
+        });
 
         instance._updateHiddenColumnsCounter();
         expect(hiddenColumnsCounter.textContent).toBe("0");
         expect(hiddenColumnsBadge.classList.contains("d-none")).toBe(true);
 
-        window.history.replaceState({}, "", "/x?hidden_column-r=age");
+        table.hideColumn("age");
         instance._updateHiddenColumnsCounter();
         expect(hiddenColumnsCounter.textContent).toBe("1");
         expect(hiddenColumnsBadge.classList.contains("d-none")).toBe(false);
+    });
+
+    it("counts columns hidden by default, with nothing in the URL", () => {
+        window.history.replaceState({}, "", "/dataset/resource/view");
+        const hiddenColumnsCounter = document.createElement("span");
+        const hiddenColumnsBadge = document.createElement("span");
+        const instance = makeInstance({
+            columnToggles: [columnToggle("age", true), columnToggle("created", false)],
+            table: fakeTable(["created"]),
+            tableName: "r",
+            hiddenColumnsCounter,
+            hiddenColumnsBadge,
+        });
+
+        instance._updateHiddenColumnsCounter();
+
+        expect(hiddenColumnsCounter.textContent).toBe("1");
+        expect(hiddenColumnsBadge.classList.contains("d-none")).toBe(false);
+    });
+
+    it("ignores toggles without a field or whose column is gone", () => {
+        const hiddenColumnsCounter = document.createElement("span");
+        const instance = makeInstance({
+            columnToggles: [columnToggle("", false), columnToggle("ghost", false)],
+            table: { getColumn: () => false },
+            hiddenColumnsCounter,
+            hiddenColumnsBadge: document.createElement("span"),
+        });
+
+        instance._updateHiddenColumnsCounter();
+
+        expect(hiddenColumnsCounter.textContent).toBe("0");
     });
 });
 

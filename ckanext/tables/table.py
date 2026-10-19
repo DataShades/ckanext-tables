@@ -378,6 +378,7 @@ class BulkActionDefinition:
         label: Display label for the action.
         callback: Function to be called when the action is triggered.
         icon: (Optional) Icon class for the action.
+        attrs: (Optional) Extra HTML attributes for the action's menu item.
         with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
             Defaults to True, since a bulk action affects every selected row.
     """
@@ -402,6 +403,7 @@ class TableActionDefinition:
         label: Display label for the action.
         callback: Function to be called when the action is triggered.
         icon: (Optional) Icon class for the action.
+        attrs: (Optional) Extra HTML attributes for the action's menu item.
         with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
             Defaults to True; set to False for a non-destructive actions.
     """
@@ -426,6 +428,7 @@ class RowActionDefinition:
         label: Display label for the action.
         callback: Function to be called when the action is triggered.
         icon: (Optional) Icon class for the action.
+        attrs: (Optional) Extra HTML attributes for the action's menu item.
         with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
     """
 
