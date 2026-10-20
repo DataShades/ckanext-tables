@@ -21,6 +21,7 @@ from .exporters import ALL_EXPORTERS
 from .generics import GenericTableView
 from .table import (
     COLUMN_ACTIONS_FIELD,
+    ROW_DISABLED_ACTIONS_FIELD,
     BulkActionDefinition,
     ColumnDefinition,
     RowActionDefinition,
@@ -79,6 +80,7 @@ __all__ = [
     "tables_build_params",
     "ALL_EXPORTERS",
     "COLUMN_ACTIONS_FIELD",
+    "ROW_DISABLED_ACTIONS_FIELD",
     "FILTER_OPERATORS",
     "CacheBackend",
     "FeatherCacheBackend",

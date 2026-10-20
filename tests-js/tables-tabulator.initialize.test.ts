@@ -65,12 +65,13 @@ describe("initialize", () => {
         const rowActionCallback = vi.spyOn(instance, "_rowActionCallback").mockImplementation(() => {});
         instance.initialize();
 
-        const menu = instances[0].config.rowContextMenu;
+        const fakeRow = { getData: () => ({}) };
+        const menu = instances[0].config.rowContextMenu(new Event("contextmenu"), fakeRow);
         expect(menu).toHaveLength(1);
         expect(menu[0].label).toContain("Delete");
         expect(menu[0].label).toContain("fa fa-trash");
+        expect(menu[0].disabled).toBe(false);
 
-        const fakeRow = { getData: () => ({}) };
         menu[0].action(new Event("contextmenu"), fakeRow);
         expect(rowActionCallback).toHaveBeenCalledWith(
             expect.objectContaining({ name: "delete" }),
@@ -102,8 +103,47 @@ describe("initialize", () => {
         instance.initialize();
 
         const holder = document.createElement("div");
-        holder.innerHTML = instances[0].config.rowContextMenu[0].label;
+        holder.innerHTML = instances[0].config.rowContextMenu(new Event("contextmenu"), { getData: () => ({}) })[0].label;
         expect(holder.querySelector("span")?.getAttribute("data-confirm-message")).toBe('Delete "this" <row>?');
+    });
+
+    it("grays out the row actions the row disables, with the reason as the tooltip", () => {
+        const dom = buildTableDom("res-dis");
+        const { FakeTabulator, instances } = makeFakeTabulatorClass();
+        (globalThis as any).Tabulator = FakeTabulator;
+
+        const instance = makeInstance({
+            el: makeFakeEl(dom.tableEl),
+            sandbox: { subscribe: vi.fn() },
+            options: {
+                config: { tableName: "res-dis" },
+                rowActions: {
+                    edit: { name: "edit", label: "Edit" },
+                    delete: { name: "delete", label: "Delete" },
+                    archive: { name: "archive", label: "Archive" },
+                },
+                enableFullscreenToggle: true,
+            },
+        });
+        instance.initialize();
+
+        const row = { getData: () => ({ __table_disabled_actions: { edit: 'Not "yours"', delete: "" } }) };
+        const [edit, del, archive] = instances[0].config.rowContextMenu(new Event("contextmenu"), row);
+        const span = (item: any) => {
+            const holder = document.createElement("div");
+            holder.innerHTML = item.label;
+            return holder.querySelector("span")!;
+        };
+
+        expect(edit.disabled).toBe(true);
+        expect(span(edit).getAttribute("title")).toBe('Not "yours"');
+        expect(span(edit).getAttribute("aria-disabled")).toBe("true");
+
+        expect(del.disabled).toBe(true);
+        expect(span(del).hasAttribute("title")).toBe(false);
+
+        expect(archive.disabled).toBe(false);
+        expect(span(archive).hasAttribute("aria-disabled")).toBe(false);
     });
 
     it("wires rowHeader.cellClick to toggle the row's selection", () => {

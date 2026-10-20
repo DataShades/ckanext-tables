@@ -344,6 +344,10 @@ body.tables-fullscreen {
     background-color: var(--tables-menu-hover-bg);
 }
 
+.tabulator-menu.tabulator-popup-container .tabulator-menu-item.tabulator-menu-item-disabled {
+    cursor: not-allowed;
+}
+
 .tabulator-edit-list .tabulator-edit-list-item,
 .tabulator-edit-list .tabulator-edit-list-placeholder {
     color: var(--tables-menu-text);

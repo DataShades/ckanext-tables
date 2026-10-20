@@ -56,6 +56,12 @@ def sample_table(simple_data: list[dict[str, str | int]]) -> TableDefinition:
                 label="Fail Row",
                 callback=mock.Mock(side_effect=RuntimeError("row boom")),
             ),
+            RowActionDefinition(
+                action="guarded",
+                label="Guarded",
+                callback=mock.Mock(return_value={"success": True}),
+                disabled=lambda row: {"Bob": "Not <b>Bob</b>", "Carl": True}.get(row["name"]),
+            ),
         ],
         bulk_actions=[
             BulkActionDefinition(
@@ -147,6 +153,24 @@ class TestAjaxTableMixin:
         mixin = self._make_mixin()
         response = mixin._apply_row_action(sample_table, "view", '{"name": "Alice"}')
         data = json.loads(response.get_data(as_text=True))
+        assert data["success"] is True
+
+    def test_apply_row_action_refuses_disabled_rows(self, sample_table: TableDefinition):
+        """The endpoint asks `disabled` again, the menu graying the item out isn't enough."""
+        mixin = self._make_mixin()
+        callback = sample_table.get_row_action("guarded").callback
+
+        data = json.loads(mixin._apply_row_action(sample_table, "guarded", '{"name": "Bob"}').get_data(as_text=True))
+        assert data["success"] is False
+        assert data["error"] == "Not &lt;b&gt;Bob&lt;/b&gt;"
+
+        data = json.loads(mixin._apply_row_action(sample_table, "guarded", '{"name": "Carl"}').get_data(as_text=True))
+        assert data["success"] is False
+        assert data["error"]
+
+        callback.assert_not_called()
+
+        data = json.loads(mixin._apply_row_action(sample_table, "guarded", '{"name": "Alice"}').get_data(as_text=True))
         assert data["success"] is True
 
     def test_apply_row_action_exception(self, sample_table: TableDefinition):

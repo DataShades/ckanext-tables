@@ -65,6 +65,10 @@ type TabulatorAction = {
     with_confirmation?: boolean;
 };
 
+// Row field with the row actions disabled for the row, as ``{action: reason}``;
+// keep in sync with ``ROW_DISABLED_ACTIONS_FIELD`` in table.py.
+const ROW_DISABLED_ACTIONS_FIELD = "__table_disabled_actions";
+
 declare var Tabulator: any;
 declare var htmx: {
     process: (element: HTMLElement) => void;
@@ -287,18 +291,9 @@ ckan.module("tables-tabulator", function ($) {
             }
 
             if (this.options.rowActions) {
-                const rowActions = this.options.rowActions as Record<string, TabulatorAction>;
-                this.options.config.rowContextMenu = Object.values(rowActions).map((action: TabulatorAction) => {
-                    const attrs = Object.entries(action.attrs || {})
-                        .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
-                        .join(" ");
-                    const icon = action.icon ? `<i class='${action.icon} me-1'></i> ` : "";
-
-                    return {
-                        label: `<span ${attrs}>${icon}${action.label}</span>`,
-                        action: this._rowActionCallback.bind(this, action),
-                    };
-                });
+                const rowActions = Object.values(this.options.rowActions as Record<string, TabulatorAction>);
+                this.options.config.rowContextMenu = (e: Event, row: TabulatorRow) =>
+                    rowActions.map((action: TabulatorAction) => this._rowActionMenuItem(action, row));
             }
 
             if (this.options.config.rowHeader) {
@@ -457,6 +452,31 @@ ckan.module("tables-tabulator", function ($) {
                 if (attr.name.startsWith("data-confirm-")) attrs[attr.name] = attr.value;
             });
             return attrs;
+        },
+
+        /**
+         * The context menu item of a row action. An action the server disabled
+         * for the row, see ``ROW_DISABLED_ACTIONS_FIELD``, is grayed out, with
+         * the reason as its tooltip.
+         */
+        _rowActionMenuItem: function (action: TabulatorAction, row: TabulatorRow): Record<string, unknown> {
+            const disabledActions = row.getData()[ROW_DISABLED_ACTIONS_FIELD] || {};
+            const disabledReason: string | undefined = disabledActions[action.name];
+            const isDisabled = disabledReason !== undefined;
+            const attrs = Object.entries({
+                ...(action.attrs || {}),
+                ...(isDisabled && disabledReason ? { title: disabledReason } : {}),
+                ...(isDisabled ? { "aria-disabled": "true" } : {}),
+            })
+                .map(([k, v]) => `${k}="${escapeHtml(String(v))}"`)
+                .join(" ");
+            const icon = action.icon ? `<i class='${action.icon} me-1'></i> ` : "";
+
+            return {
+                label: `<span ${attrs}>${icon}${action.label}</span>`,
+                disabled: isDisabled,
+                action: this._rowActionCallback.bind(this, action),
+            };
         },
 
         _rowActionCallback: function (action: TabulatorAction, e: Event, row: TabulatorRow): void {

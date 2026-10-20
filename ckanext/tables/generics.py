@@ -72,7 +72,15 @@ class AjaxTableMixin:
             return self._action_error(tk._("The row action is not implemented"))
 
         try:
-            result = row_action_func(json.loads(row))
+            row_data = json.loads(row)
+            disabled_reason = row_action_func.get_disabled_reason(row_data)
+
+            if disabled_reason is not None:
+                return self._action_error(
+                    markupsafe.escape(disabled_reason) or tk._("The row action is disabled for this row")
+                )
+
+            result = row_action_func(row_data)
         except Exception:
             log.exception("Error during row action %s", action)
             return self._action_error(_GENERIC_ACTION_ERROR)

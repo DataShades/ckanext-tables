@@ -15,6 +15,7 @@ FormatterResult: TypeAlias = str
 BulkActionHandler: TypeAlias = Callable[[list[Row]], "ActionHandlerResult"]
 TableActionHandler: TypeAlias = Callable[[], "ActionHandlerResult"]
 RowActionHandler: TypeAlias = Callable[[Row], "ActionHandlerResult"]
+RowActionDisabledHandler: TypeAlias = Callable[[Row], "bool | str | None"]
 
 
 class ActionHandlerResult(TypedDict):

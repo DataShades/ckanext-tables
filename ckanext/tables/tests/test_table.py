@@ -7,6 +7,7 @@ import ckan.plugins.toolkit as tk
 from ckanext.tables import formatters
 from ckanext.tables.data_sources import ListDataSource
 from ckanext.tables.table import (
+    ROW_DISABLED_ACTIONS_FIELD,
     BulkActionDefinition,
     ColumnDefinition,
     RowActionDefinition,
@@ -240,6 +241,42 @@ class TestTableDefinitionActions:
         action = RowActionDefinition(action="do", label="Do", callback=callback)
         action({"id": 1})
         callback.assert_called_once_with({"id": 1})
+
+    def test_row_action_disabled_reason(self):
+        def noop(row):
+            return {"success": True}
+
+        assert RowActionDefinition(action="do", label="Do", callback=noop).get_disabled_reason({}) is None
+
+        for result, reason in [(None, None), (False, None), ("", None), (True, ""), ("Not yours", "Not yours")]:
+            action = RowActionDefinition(action="do", label="Do", callback=noop, disabled=lambda row, r=result: r)
+            assert action.get_disabled_reason({"id": 1}) == reason
+
+    def test_get_data_adds_disabled_actions_from_raw_rows(self):
+        """`disabled` gets the row before formatters, and enabled rows get no field."""
+        seen = []
+
+        def is_disabled(row):
+            seen.append(row["active"])
+            return "Inactive" if not row["active"] else None
+
+        tbl = TableDefinition(
+            name="dis_tbl",
+            data_source=ListDataSource([{"active": True}, {"active": False}]),
+            columns=[ColumnDefinition(field="active", formatters=[(formatters.BooleanFormatter, {})])],
+            row_actions=[
+                RowActionDefinition(action="edit", label="Edit", callback=lambda row: {"success": True}),
+                RowActionDefinition(
+                    action="delete", label="Delete", callback=lambda row: {"success": True}, disabled=is_disabled
+                ),
+            ],
+        )
+
+        enabled, disabled = tbl.get_data(QueryParams())
+
+        assert seen == [True, False]
+        assert ROW_DISABLED_ACTIONS_FIELD not in enabled
+        assert disabled[ROW_DISABLED_ACTIONS_FIELD] == {"delete": "Inactive"}
 
     def test_bulk_action_callable(self):
         callback = mock.Mock(return_value={"success": True})

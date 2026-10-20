@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ckanext.tables.exporters import ExporterBase
 
 COLUMN_ACTIONS_FIELD = "__table_actions"
+ROW_DISABLED_ACTIONS_FIELD = "__table_disabled_actions"
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -172,8 +173,33 @@ class TableDefinition:
 
     def get_data(self, params: types.QueryParams) -> list[Any]:
         formatted_columns = [column for column in self.columns if column.formatters]
+        disableable_actions = [action for action in self.row_actions if action.disabled]
 
-        return [self._apply_formatters(row, formatted_columns) for row in self.get_raw_data(params)]
+        return [
+            self._apply_disabled_actions(self._apply_formatters(row, formatted_columns), row, disableable_actions)
+            for row in self.get_raw_data(params)
+        ]
+
+    def _apply_disabled_actions(
+        self, formatted_row: dict[str, Any], row: dict[str, Any], actions: list[RowActionDefinition]
+    ) -> dict[str, Any]:
+        """Add the row actions disabled for the row to ``ROW_DISABLED_ACTIONS_FIELD``, as ``{action: reason}``.
+
+        The ``disabled`` callbacks get the raw row, before formatters. The field
+        is left out when no action is disabled for the row.
+        """
+        disabled = {}
+
+        for action in actions:
+            reason = action.get_disabled_reason(row)
+
+            if reason is not None:
+                disabled[action.action] = reason
+
+        if disabled:
+            formatted_row[ROW_DISABLED_ACTIONS_FIELD] = disabled
+
+        return formatted_row
 
     def get_page(self, params: types.QueryParams) -> dict[str, Any]:
         """Return one page as the AJAX endpoint sends it: its rows, ``last_page`` and ``total``."""
@@ -430,6 +456,12 @@ class RowActionDefinition:
         icon: (Optional) Icon class for the action.
         attrs: (Optional) Extra HTML attributes for the action's menu item.
         with_confirmation: (Optional) Whether to show a confirmation dialog before executing the action.
+        disabled: (Optional) Function deciding per row whether the action is disabled.
+            It gets the raw row and returns a falsy value to keep the action enabled,
+            ``True`` to disable it, or a string to disable it with that reason, shown
+            as the menu item's tooltip. Disabled items are grayed out in the menu and
+            the action endpoint refuses them, calling the function again on the
+            posted row.
     """
 
     action: str
@@ -438,6 +470,19 @@ class RowActionDefinition:
     icon: str | None = None
     attrs: dict[str, Any] = dataclass_field(default_factory=dict)
     with_confirmation: bool = False
+    disabled: types.RowActionDisabledHandler | None = None
 
     def __call__(self, row: types.Row) -> types.ActionHandlerResult:
         return self.callback(row)
+
+    def get_disabled_reason(self, row: types.Row) -> str | None:
+        """Return why the action is disabled for the row, ``""`` without a reason, or None if it's enabled."""
+        if not self.disabled:
+            return None
+
+        result = self.disabled(row)
+
+        if not result:
+            return None
+
+        return result if isinstance(result, str) else ""
