@@ -67,6 +67,7 @@ def tables_build_params() -> QueryParams:
         filters=all_filters,
         sort_by=tk.request.args.get("sort[0][field]"),
         sort_order=tk.request.args.get("sort[0][dir]"),
+        search=tk.request.args.get("q", "").strip(),
     )
 
 

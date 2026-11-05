@@ -26,7 +26,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from pyarrow import csv as pa_csv
 from pyarrow import feather, orc
-from sqlalchemy import String, cast
+from sqlalchemy import String, cast, or_
 from sqlalchemy.sql import func, select
 from sqlalchemy.sql.elements import ColumnElement
 from typing_extensions import Self
@@ -66,6 +66,18 @@ class BaseDataSource:
     supports_sheets: ClassVar[bool] = False
 
     def filter(self, filters: list[FilterItem]) -> Self: ...
+
+    def search(self, query: str, fields: list[str]) -> Self:
+        """Keep the rows where any of *fields* contains *query*, case-insensitively.
+
+        Narrows the result of ``filter()``, which resets the source to its
+        unfiltered state, so call it after ``filter()``. Fields the source
+        doesn't have are ignored. Sources without search support raise
+        ``NotImplementedError``: don't set ``TableDefinition.search_fields``
+        for a table backed by one.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support search")
+
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self: ...
     def paginate(self, page: int, size: int) -> Self: ...
     def all(self) -> list[dict[str, Any]]: ...
@@ -196,6 +208,15 @@ class DatabaseDataSource(BaseDataSource):
         func = operators.get(operator)
         return func(column, casted_value) if func else None
 
+    def search(self, query: str, fields: list[str]) -> Self:
+        columns = [getattr(self.stmt.selected_columns, f) for f in fields if hasattr(self.stmt.selected_columns, f)]
+
+        if query and columns:
+            # Cast to text, as the "like" filter does, so non-string columns are searchable too.
+            self.stmt = self.stmt.where(or_(*(cast(column, String).ilike(f"%{query}%") for column in columns)))
+
+        return self
+
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
         if not sort_by or not hasattr(self.stmt.selected_columns, sort_by):
             return self
@@ -274,12 +295,44 @@ class ListDataSource(BaseDataSource):
         }
 
         if op_func := string_operators.get(operator):
-            return lambda row: op_func(str(row.get(field, "")), str(value))
+            match_all = operator == "!="
+
+            def predicate(row: dict[str, Any]) -> bool:
+                cell = row.get(field, "")
+
+                # A list cell (e.g. tags) matches when any item matches; for "!=",
+                # when no item equals the value.
+                if isinstance(cell, (list, tuple, set)):
+                    matches = (op_func(str(item), str(value)) for item in cell)
+                    return all(matches) if match_all else any(matches)
+
+                return op_func(str(cell), str(value))
+
+            return predicate
 
         if op_func := ordering_operators.get(operator):
             return lambda row: op_func(*_numeric_or_string_pair(row.get(field, ""), value))
 
         return None
+
+    def search(self, query: str, fields: list[str]) -> Self:
+        # Ignore the fields no row has, as the other data sources ignore unknown columns
+        fields = [field for field in fields if any(field in row for row in self.data)]
+
+        if not query or not fields:
+            return self
+
+        needle = query.lower()
+
+        def matches(cell: Any) -> bool:
+            if isinstance(cell, (list, tuple, set)):
+                return any(matches(item) for item in cell)
+
+            return cell is not None and needle in str(cell).lower()
+
+        self.filtered = [row for row in self.filtered if any(matches(row.get(field)) for field in fields)]
+
+        return self
 
     def sort(self, sort_by: str | None, sort_order: str | None) -> Self:
         if not sort_by:
@@ -588,6 +641,48 @@ class PandasDataSource(BaseDataSource):
 
         if clauses:
             self._where_sql = "WHERE " + " AND ".join(clauses)
+
+        return self
+
+    def search(self, query: str, fields: list[str]) -> Self:
+        if not query or not fields:
+            return self
+
+        if self._arrow is not None:
+            return self._search_arrow(query, fields)
+
+        return self._search_pandas(query, fields)
+
+    def _search_pandas(self, query: str, fields: list[str]) -> Self:
+        df = self._filtered_df
+
+        if df is None or df.empty:
+            return self
+
+        columns = [field for field in fields if field in df.columns]
+        if not columns:
+            return self
+
+        mask = pd.Series(False, index=df.index)
+        for column in columns:
+            str_accessor = df[column].astype(str).str  # pyright: ignore[reportAttributeAccessIssue]
+            mask |= str_accessor.contains(query, case=False, na=False, regex=False)
+
+        self._filtered_df = df[mask]  # pyright: ignore[reportAttributeAccessIssue]
+        return self
+
+    def _search_arrow(self, query: str, fields: list[str]) -> Self:
+        if self._arrow is None or self._arrow.num_rows == 0:
+            return self
+
+        columns = [field for field in fields if field in self._arrow.schema.names]
+        if not columns:
+            return self
+
+        # Same cast as the "like" filter in _build_arrow_clause.
+        clause = "(" + " OR ".join(f"CAST({_quote_ident(column)} AS VARCHAR) ILIKE ?" for column in columns) + ")"
+        self._where_sql = f"{self._where_sql} AND {clause}" if self._where_sql else f"WHERE {clause}"
+        self._where_params.extend([f"%{query}%"] * len(columns))
 
         return self
 

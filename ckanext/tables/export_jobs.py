@@ -134,6 +134,7 @@ def _rebuild_params(params: dict[str, Any]) -> QueryParams:
         filters=[FilterItem(**f) for f in params.get("filters", [])],
         sort_by=params.get("sort_by"),
         sort_order=params.get("sort_order"),
+        search=params.get("search", ""),
     )
 
 

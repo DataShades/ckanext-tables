@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.13.0] - 2026-11-05
+
+### 🚀 Features
+
+- Search input over `TableDefinition.search_fields`, via a new `BaseDataSource.search()` (list, database and resource data sources)
+- Quick filter selects above the table via `TableDefinition.quick_filters` and `QuickFilterDefinition`, with `attrs` for a searchable select widget
+- `show_filters`, `show_columns`, `show_refresh`, `show_fullscreen` and `show_total_count` to hide the default toolbar controls
+- Inline row actions (`row_actions_display="inline"`) and the actions column at the start (`row_actions_position="start"`)
+- `ListDataSource` filters match list cells by their items
+- Empty state template shown instead of an empty table (`empty_state_template`), with a clear search and filters action
+- `page_size_label` and a `"range"` pagination counter ("1 – 10 of 120")
+- `ColumnDefinition.width_grow`, Tabulator's `widthGrow`
+- Articles demo table showing the compact toolbar, inline row actions and the empty state
+
 ## [2.1.0] - 2026-09-22
 
 ### 🚀 Features

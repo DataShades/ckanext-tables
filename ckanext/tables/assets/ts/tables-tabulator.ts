@@ -99,8 +99,27 @@ ckan.module("tables-tabulator", function ($) {
         options: {
             config: null as any,
             rowActions: null as Record<string, TabulatorAction> | null,
+            // "menu": one button opening the actions menu; "inline": one button per action
+            rowActionsDisplay: "menu",
+            pageSizeLabel: null as string | null,
+            // "rows": "Showing 1-10 of 120 rows"; "range": "1 – 10 of 120"
+            paginationCounter: "rows",
             enableFullscreenToggle: true,
         },
+
+        _SEARCH_DEBOUNCE_MS: 300,
+
+        // Defaults of the optional search, quick filters and empty state, until
+        // _initAssignVariables finds their elements: code that runs without them
+        // (or before them) behaves as a table without these controls. Reassigned,
+        // never mutated, so sharing them across instances is safe.
+        searchInput: null as HTMLInputElement | null,
+        searchQuery: "",
+        searchTimer: null as ReturnType<typeof setTimeout> | null,
+        quickFilterSelects: [] as HTMLSelectElement[],
+        quickFilters: [] as TableFilter[],
+        emptyStateEl: null as HTMLElement | null,
+        totalRows: null as number | null,
 
         initialize: function (): void {
             $.proxyAll(this, /_/);
@@ -149,20 +168,54 @@ ckan.module("tables-tabulator", function ($) {
             this.totalCountEl = document.getElementById(this._id("total-count-value"));
             this.tableFilters = this._updateTableFilters();
 
-            // Column visibility controls
+            // Search input and quick filter selects, both optional
+            this.searchInput = document.getElementById(this._id("table-search")) as HTMLInputElement | null;
+            this.searchQuery = "";
+            this.searchTimer = null;
+            const quickFiltersEl = document.getElementById(this._id("quick-filters"));
+            this.quickFilterSelects = quickFiltersEl
+                ? Array.from(quickFiltersEl.querySelectorAll<HTMLSelectElement>("select.table-quick-filter"))
+                : [];
+            this.quickFilters = [];
+
+            // Shown instead of the table when a page has no rows, optional
+            this.emptyStateEl = document.getElementById(this._id("empty-state"));
+            this.tabulatorWrapperEl = this.el[0].closest(".tabulator-wrapper");
+
+            // Column visibility controls, optional too
             this.columnsModal = document.getElementById(this._id("columns-modal"));
             this.columnsContainer = document.getElementById(this._id("columns-container"));
             this.applyColumnsBtn = document.getElementById(this._id("apply-columns"));
             this.resetColumnsBtn = document.getElementById(this._id("reset-columns"));
             this.selectAllColumnsBtn = document.getElementById(this._id("select-all-columns"));
             this.deselectAllColumnsBtn = document.getElementById(this._id("deselect-all-columns"));
-            this.columnToggles = this.columnsContainer.querySelectorAll(".column-toggle");
+            this.columnToggles = this.columnsContainer ? this.columnsContainer.querySelectorAll(".column-toggle") : [];
             this.hiddenColumnsCounter = document.getElementById(this._id("hidden-columns-counter"));
             this.hiddenColumnsBadge = document.getElementById(this._id("hidden-columns-badge"));
         },
 
         _initFiltersFromUrl: function (): void {
             const url = new URL(window.location.href);
+
+            if (this.searchInput) {
+                this.searchQuery = (url.searchParams.get(this._urlKey("q")) || "").trim();
+                this.searchInput.value = this.searchQuery;
+            }
+
+            this.quickFilterSelects.forEach((select: HTMLSelectElement) => {
+                const value = url.searchParams.get(this._urlKey(`quick_filter_${select.dataset.field}`));
+                // Only values the select offers, so an edited URL can't filter by anything else
+                if (value && Array.from(select.options).some((option) => option.value === value)) {
+                    this._setQuickFilterValue(select, value);
+                }
+            });
+            this.quickFilters = this._collectQuickFilters();
+
+            // No Filters control (``show_filters=False``): no filters to restore
+            if (!this.filtersCounter) {
+                return;
+            }
+
             const fields = url.searchParams.getAll(this._urlKey("field"));
             const operators = url.searchParams.getAll(this._urlKey("operator"));
             const values = url.searchParams.getAll(this._urlKey("value"));
@@ -279,6 +332,7 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         teardown: function (): void {
+            clearTimeout(this.searchTimer);
             this.sandbox.unsubscribe("tables:tabulator:refresh", this._refreshData);
             document.removeEventListener("click", this._onDocumentRowActionsClick);
             this.table?.destroy();
@@ -290,7 +344,7 @@ ckan.module("tables-tabulator", function ($) {
                 this.options.config.ajaxURL = window.location.pathname;
             }
 
-            if (this.options.rowActions) {
+            if (this.options.rowActions && this.options.rowActionsDisplay !== "inline") {
                 const rowActions = Object.values(this.options.rowActions as Record<string, TabulatorAction>);
                 this.options.config.rowContextMenu = (e: Event, row: TabulatorRow) =>
                     rowActions.map((action: TabulatorAction) => this._rowActionMenuItem(action, row));
@@ -311,7 +365,7 @@ ckan.module("tables-tabulator", function ($) {
                 langs: {
                     "default": {
                         pagination: {
-                            page_size: ckan.i18n._("Rows per page"),
+                            page_size: this.options.pageSizeLabel || ckan.i18n._("Rows per page"),
                             first: '<i class="fa fa-angle-double-left"></i>',
                             prev:  '<i class="fa fa-angle-left"></i>',
                             next:  '<i class="fa fa-angle-right"></i>',
@@ -319,9 +373,9 @@ ckan.module("tables-tabulator", function ($) {
                         }
                     }
                 },
-                paginationCounter: "rows",
+                paginationCounter: this.options.paginationCounter === "range" ? this._rangeCounter : "rows",
                 paginationInitialPage: parseInt(initialPage || "1"),
-                ajaxParams: () => ({ filters: JSON.stringify(this.tableFilters) }),
+                ajaxParams: () => this._ajaxParams(),
                 ajaxResponse: (_url: string, _params: any, response: any) => {
                     if (this.totalCountEl && response.total !== undefined) {
                         this.totalCountEl.textContent = ckan.i18n.ngettext(
@@ -331,6 +385,12 @@ ckan.module("tables-tabulator", function ($) {
                             { num: response.total }
                         );
                     }
+                    if (response.total !== undefined) {
+                        // The exact row count for the range counter: Tabulator only
+                        // estimates it from last_page
+                        this.totalRows = response.total;
+                    }
+                    this._updateEmptyState(response.total);
                     return response;
                 },
             });
@@ -352,7 +412,7 @@ ckan.module("tables-tabulator", function ($) {
 
             let pending = true;
             const pageSize = this.options.config.paginationSize;
-            const hasTableFilters = () => this.tableFilters.length > 0;
+            const hasTableFilters = () => this._allFilters().length > 0 || this.searchQuery !== "";
 
             return function (this: any, url: string, config: any, params: any): Promise<any> {
                 const isEmbeddedPage =
@@ -520,21 +580,42 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _initAddTableEvents: function (): void {
-            this.applyFiltersBtn.addEventListener("click", this._onApplyFilters);
-            this.clearFiltersModalBtn.addEventListener("click", this._onClearFilters);
-            this.clearFiltersBtn.addEventListener("click", this._onClearFilters);
-            this.addFilterBtn.addEventListener("click", this._onAddFilter);
-            $(this.filtersModal).on("hidden.bs.modal", this._onCloseFilters);
+            if (this.filtersContainer) {
+                this.applyFiltersBtn.addEventListener("click", this._onApplyFilters);
+                this.clearFiltersModalBtn.addEventListener("click", this._onClearFilters);
+                this.clearFiltersBtn.addEventListener("click", this._onClearFilters);
+                this.addFilterBtn.addEventListener("click", this._onAddFilter);
+                $(this.filtersModal).on("hidden.bs.modal", this._onCloseFilters);
 
-            this.filtersContainer.addEventListener("click", (e: Event) => {
-                const removeBtn = (e.target as HTMLElement).closest(".btn-remove-filter");
-                if (removeBtn && this.filtersContainer.contains(removeBtn)) {
-                    this._onFilterItemRemove(removeBtn);
-                }
+                this.filtersContainer.addEventListener("click", (e: Event) => {
+                    const removeBtn = (e.target as HTMLElement).closest(".btn-remove-filter");
+                    if (removeBtn && this.filtersContainer.contains(removeBtn)) {
+                        this._onFilterItemRemove(removeBtn);
+                    }
+                });
+            }
+
+            if (this.searchInput) {
+                this.searchInput.addEventListener("input", this._onSearchInput);
+            }
+
+            this.quickFilterSelects.forEach((select: HTMLSelectElement) => {
+                select.addEventListener("change", this._onQuickFilterChange);
             });
 
+            if (this.emptyStateEl) {
+                this.emptyStateEl.addEventListener("click", (e: Event) => {
+                    if ((e.target as HTMLElement).closest("[data-table-clear-filters]")) {
+                        e.preventDefault();
+                        this._onClearSearchAndFilters();
+                    }
+                });
+            }
+
             // Column visibility event listeners
-            $(this.columnsModal).on("hidden.bs.modal", this._onCloseColumns);
+            if (this.columnsModal) {
+                $(this.columnsModal).on("hidden.bs.modal", this._onCloseColumns);
+            }
 
             if (this.applyColumnsBtn) {
                 this.applyColumnsBtn.addEventListener("click", this._onApplyColumns);
@@ -570,7 +651,7 @@ ckan.module("tables-tabulator", function ($) {
             this.table.on("tableBuilt", () => {
                 if (this.options.enableFullscreenToggle) {
                     this.btnFullscreen = document.getElementById(this._id("btn-fullscreen"));
-                    this.btnFullscreen.addEventListener("click", this._onFullscreen);
+                    this.btnFullscreen?.addEventListener("click", this._onFullscreen);
                 }
 
                 this._applyColumnVisibilityFromUrl();
@@ -594,7 +675,33 @@ ckan.module("tables-tabulator", function ($) {
             const rowActionsBtn = (e.target as HTMLElement).closest(".btn-row-actions");
             if (rowActionsBtn && this.el[0].contains(rowActionsBtn)) {
                 this._onRowActionsDropdownClick(e);
+                return;
             }
+
+            const rowActionBtn = (e.target as HTMLElement).closest<HTMLButtonElement>(".btn-row-action[data-row-action]");
+            if (rowActionBtn && this.el[0].contains(rowActionBtn)) {
+                this._onInlineRowActionClick(e, rowActionBtn);
+            }
+        },
+
+        /** A button of an inline row action, see ``row_actions_display``. */
+        _onInlineRowActionClick: function (e: Event, button: HTMLButtonElement): void {
+            e.preventDefault();
+
+            const action = this.options.rowActions?.[button.dataset.rowAction || ""] as TabulatorAction | undefined;
+            const rowEl = button.closest(".tabulator-row");
+            const row = rowEl
+                ? (this.table.getRows() as (TabulatorRow & { getElement: () => Element })[]).find(
+                      (r) => r.getElement() === rowEl
+                  )
+                : undefined;
+
+            if (!action || !row || button.disabled) return;
+
+            const disabledActions = row.getData()[ROW_DISABLED_ACTIONS_FIELD] || {};
+            if (action.name in disabledActions) return;
+
+            this._rowActionCallback(action, e, row);
         },
 
         _onRowActionsDropdownClick: function (e: Event): void {
@@ -628,10 +735,173 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _updateTableFilters: function (): TableFilter[] {
+            if (!this.filtersContainer) {
+                this.tableFilters = [];
+                return this.tableFilters;
+            }
+
             this.tableFilters = this._collectValidFilters();
             this.filtersCounter.textContent = this.tableFilters.length.toString();
             this.filtersCounter.classList.toggle("d-none", this.tableFilters.length === 0);
             return this.tableFilters;
+        },
+
+        /** The filters of the Filters modal and of the quick filter selects. */
+        _allFilters: function (): TableFilter[] {
+            return [...this.tableFilters, ...this.quickFilters];
+        },
+
+        _ajaxParams: function (): Record<string, string> {
+            const params: Record<string, string> = { filters: JSON.stringify(this._allFilters()) };
+
+            if (this.searchQuery) {
+                params.q = this.searchQuery;
+            }
+
+            return params;
+        },
+
+        _collectQuickFilters: function (): TableFilter[] {
+            return this.quickFilterSelects
+                .filter((select: HTMLSelectElement) => select.value && select.dataset.field)
+                .map((select: HTMLSelectElement) => ({
+                    field: select.dataset.field as string,
+                    operator: select.dataset.operator || "=",
+                    value: select.value,
+                }));
+        },
+
+        /**
+         * Set the value of a quick filter select from the code, firing
+         * ``tables:quick-filter:sync`` for a widget built on it (e.g. a
+         * searchable select) to show the new value.
+         */
+        _setQuickFilterValue: function (select: HTMLSelectElement, value: string): void {
+            if (select.value === value) return;
+
+            select.value = value;
+            select.dispatchEvent(new CustomEvent("tables:quick-filter:sync", { bubbles: true }));
+        },
+
+        _onQuickFilterChange: function (): void {
+            this.quickFilters = this._collectQuickFilters();
+
+            const url = new URL(window.location.href);
+            this.quickFilterSelects.forEach((select: HTMLSelectElement) => {
+                const key = this._urlKey(`quick_filter_${select.dataset.field}`);
+                if (select.value) {
+                    url.searchParams.set(key, select.value);
+                } else {
+                    url.searchParams.delete(key);
+                }
+            });
+            window.history.replaceState({}, "", url);
+
+            this.table.setPage(1);
+        },
+
+        /** "1 – 10 of 120", see the ``pagination_counter`` option. */
+        _rangeCounter: function (
+            pageSize: number,
+            currentRow: number,
+            _currentPage: number,
+            totalRows: number
+        ): string {
+            const total = typeof this.totalRows === "number" ? this.totalRows : totalRows;
+
+            if (!total) {
+                return ckan.i18n._("0 of 0");
+            }
+
+            return ckan.i18n._("%(start)d – %(end)d of %(total)d", {
+                start: currentRow,
+                end: Math.min(currentRow + pageSize - 1, total),
+                total,
+            });
+        },
+
+        /** Whether the search, a quick filter, a modal filter or a header filter is active. */
+        _isFiltered: function (): boolean {
+            const headerFilters = this.table?.getHeaderFilters?.() || [];
+            return this.searchQuery !== "" || this._allFilters().length > 0 || headerFilters.length > 0;
+        },
+
+        /**
+         * Show the empty state instead of the table when the page has no rows,
+         * see ``empty_state_template``: its "filtered" part when a filter is
+         * active, its "empty" part otherwise.
+         */
+        _updateEmptyState: function (total: number | undefined): void {
+            if (!this.emptyStateEl || total === undefined) return;
+
+            const isEmpty = total === 0;
+            const variant = this._isFiltered() ? "filtered" : "empty";
+
+            this.emptyStateEl.classList.toggle("d-none", !isEmpty);
+            this.emptyStateEl.querySelectorAll("[data-empty-state]").forEach((el: HTMLElement) => {
+                el.classList.toggle("d-none", el.dataset.emptyState !== variant);
+            });
+
+            const wasHidden = this.tabulatorWrapperEl?.classList.contains("d-none");
+            this.tabulatorWrapperEl?.classList.toggle("d-none", isEmpty);
+
+            if (wasHidden && !isEmpty) {
+                // Hidden tables have no size to lay out against
+                requestAnimationFrame(() => this.table?.redraw(true));
+            }
+        },
+
+        /** Clear the search and every filter, from the empty state. */
+        _onClearSearchAndFilters: function (): void {
+            const url = new URL(window.location.href);
+
+            if (this.searchInput) {
+                clearTimeout(this.searchTimer);
+                this.searchInput.value = "";
+            }
+            this.searchQuery = "";
+            url.searchParams.delete(this._urlKey("q"));
+
+            this.quickFilterSelects.forEach((select: HTMLSelectElement) => {
+                this._setQuickFilterValue(select, "");
+                url.searchParams.delete(this._urlKey(`quick_filter_${select.dataset.field}`));
+            });
+            this.quickFilters = [];
+
+            window.history.replaceState({}, "", url);
+
+            if (this.table.getHeaderFilters?.().length) {
+                this.table.clearHeaderFilter();
+            }
+
+            if (this.filtersContainer) {
+                // Also updates the URL and reloads page 1
+                this._onClearFilters();
+            } else {
+                this.table.setPage(1);
+            }
+        },
+
+        _onSearchInput: function (): void {
+            clearTimeout(this.searchTimer);
+            this.searchTimer = setTimeout(this._applySearch, this._SEARCH_DEBOUNCE_MS);
+        },
+
+        _applySearch: function (): void {
+            const query = this.searchInput.value.trim();
+            if (query === this.searchQuery) return;
+
+            this.searchQuery = query;
+
+            const url = new URL(window.location.href);
+            if (query) {
+                url.searchParams.set(this._urlKey("q"), query);
+            } else {
+                url.searchParams.delete(this._urlKey("q"));
+            }
+            window.history.replaceState({}, "", url);
+
+            this.table.setPage(1);
         },
 
         _removeUnfilledFilters: function (): void {
@@ -652,6 +922,8 @@ ckan.module("tables-tabulator", function ($) {
         },
 
         _updateClearButtonsState: function (): void {
+            if (!this.clearFiltersBtn) return;
+
             const hasFilters = this.tableFilters.length > 0;
             this.clearFiltersBtn.classList.toggle("btn-table-disabled", !hasFilters);
             this.clearFiltersModalBtn.classList.toggle("btn-table-disabled", !hasFilters);
@@ -789,7 +1061,11 @@ ckan.module("tables-tabulator", function ($) {
             try {
                 const url = new URL(window.location.href);
                 url.searchParams.set("exporter", exporter);
-                url.searchParams.set("filters", JSON.stringify(this.tableFilters));
+                url.searchParams.set("filters", JSON.stringify(this._allFilters()));
+                url.searchParams.delete("q");
+                if (this.searchQuery) {
+                    url.searchParams.set("q", this.searchQuery);
+                }
                 this.table.getSorters().forEach((s: { field: string; dir: string }) => {
                     url.searchParams.set(`sort[0][field]`, s.field);
                     url.searchParams.set(`sort[0][dir]`, s.dir);
@@ -1151,6 +1427,8 @@ ckan.module("tables-tabulator", function ($) {
                 const column = field ? this.table.getColumn(field) : null;
                 return column ? !column.isVisible() : false;
             }).length;
+
+            if (!this.hiddenColumnsCounter) return;
 
             this.hiddenColumnsCounter.textContent = hiddenCount.toString();
             this.hiddenColumnsBadge.classList.toggle("d-none", hiddenCount === 0);

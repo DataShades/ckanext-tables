@@ -59,6 +59,31 @@ body.tables-fullscreen {
         }
     }
 
+    .table-search {
+        position: relative;
+        flex: 0 1 20rem;
+
+        i {
+            position: absolute;
+            top: 50%;
+            left: 0.75rem;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .form-control {
+            padding-left: 2.25rem;
+        }
+    }
+
+    .table-quick-filters {
+        gap: 0.75rem;
+
+        .form-select {
+            width: auto;
+        }
+    }
+
     // A sheet name is the author's own text, up to 31 characters of it — keep
     // the selector from growing wide enough to push the rest of the controls
     // onto a second row.

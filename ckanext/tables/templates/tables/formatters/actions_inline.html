@@ -1,0 +1,30 @@
+{#
+Render one icon button per row action.
+
+Options:
+- `table` (types.TableDefinition) - table definition.
+- `row` (types.Row) - row data.
+- `initial_row` (types.Row) - row data before formatters.
+- `column` (types.ColumnDefinition) - column definition.
+#}
+
+{% from "macros/form/attributes.html" import attributes %}
+
+<div class="d-flex gap-1">
+    {% for action in table.row_actions %}
+        {% set disabled_reason = action.get_disabled_reason(initial_row) %}
+        {% set action_attrs = dict(action.attrs, **{'class': ('btn btn-sm btn-secondary btn-row-action ' ~ action.attrs.get('class', '')).strip()}) %}
+
+        <button type="button" data-row-action="{{ action.action }}"
+            title="{{ disabled_reason or action.label }}"
+            aria-label="{{ action.label }}"
+            {% if disabled_reason is not none %}disabled aria-disabled="true"{% endif %}
+            {{ attributes(action_attrs) }}>
+            {%- if action.icon -%}
+                <i class="{{ action.icon }}" aria-hidden="true"></i>
+            {%- else -%}
+                {{ action.label }}
+            {%- endif -%}
+        </button>
+    {% endfor %}
+</div>

@@ -27,6 +27,7 @@ from ckanext.tables.cache import (
     RedisCacheBackend,
 )
 from ckanext.tables.data_sources import (
+    BaseDataSource,
     CsvUrlDataSource,
     DatabaseDataSource,
     DataSourceError,
@@ -1855,3 +1856,97 @@ class TestArrowCountShortcut:
 
     def test_filtered_count_still_queries(self, arrow_ds):
         assert arrow_ds.filter([FilterItem("count", ">=", "10")]).count() == 2
+
+
+class TestListDataSourceListCells:
+    @pytest.fixture
+    def ds(self):
+        return ListDataSource(
+            [
+                {"name": "Alice", "tags": ["economy", "health"]},
+                {"name": "Bob", "tags": ["education"]},
+                {"name": "Charlie", "tags": []},
+            ]
+        )
+
+    def test_equal_matches_any_item(self, ds):
+        result = ds.filter([FilterItem("tags", "=", "health")]).all()
+        assert [row["name"] for row in result] == ["Alice"]
+
+    def test_not_equal_matches_rows_without_the_item(self, ds):
+        result = ds.filter([FilterItem("tags", "!=", "health")]).all()
+        assert [row["name"] for row in result] == ["Bob", "Charlie"]
+
+    def test_like_matches_any_item(self, ds):
+        result = ds.filter([FilterItem("tags", "like", "EDU")]).all()
+        assert [row["name"] for row in result] == ["Bob"]
+
+
+class TestDataSourceSearch:
+    """search() keeps the rows where any of the fields contains the query, on top of filter()."""
+
+    @pytest.fixture
+    def rows(self):
+        return [
+            {"fruit": "apple", "color": "red", "count": 10},
+            {"fruit": "banana", "color": "yellow", "count": 5},
+            {"fruit": "cherry", "color": "dark red", "count": 20},
+        ]
+
+    @pytest.fixture(params=["list", "pandas", "arrow"])
+    def ds(self, request, rows, tmp_path):
+        if request.param == "list":
+            return ListDataSource(rows)
+
+        df = pd.DataFrame(rows)
+
+        if request.param == "pandas":
+            return StubPandasDataSource(df)
+
+        return _ArrowStubDataSource(df, FeatherCacheBackend(cache_dir=str(tmp_path)))
+
+    def test_matches_any_field_case_insensitively(self, ds):
+        result = ds.filter([]).search("RED", ["fruit", "color"]).all()
+        assert [row["fruit"] for row in result] == ["apple", "cherry"]
+
+    def test_narrows_the_filtered_rows(self, ds):
+        result = ds.filter([FilterItem("fruit", "!=", "apple")]).search("red", ["color"]).all()
+        assert [row["fruit"] for row in result] == ["cherry"]
+
+    def test_count_reflects_the_search(self, ds):
+        assert ds.filter([]).search("an", ["fruit"]).count() == 1
+
+    def test_non_string_fields_are_searchable(self, ds):
+        result = ds.filter([]).search("20", ["count"]).all()
+        assert [row["fruit"] for row in result] == ["cherry"]
+
+    def test_unknown_fields_are_ignored(self, ds):
+        assert ds.filter([]).search("red", ["missing"]).count() == 3
+
+    def test_empty_query_keeps_every_row(self, ds):
+        assert ds.filter([]).search("", ["fruit"]).count() == 3
+
+    def test_query_is_not_a_regex(self, ds):
+        assert ds.filter([]).search(".*", ["fruit"]).count() == 0
+
+    def test_filter_resets_the_search(self, ds):
+        ds.filter([]).search("apple", ["fruit"])
+        assert ds.filter([]).count() == 3
+
+
+def test_search_is_not_supported_by_default():
+    with pytest.raises(NotImplementedError):
+        BaseDataSource().search("query", ["field"])
+
+
+@pytest.mark.usefixtures("clean_db")
+def test_database_data_source_search():
+    factories.User(name="search-alpha", fullname="First")
+    factories.User(name="search-beta", fullname="Alpha Second")
+    factories.User(name="search-gamma", fullname="Third")
+
+    ds = DatabaseDataSource(select(model.User.name, model.User.fullname).filter(model.User.email.is_not(None)))
+    result = ds.filter([]).search("ALPHA", ["name", "fullname"]).sort("name", "asc").all()
+
+    assert [row["name"] for row in result] == ["search-alpha", "search-beta"]
+    assert ds.filter([]).search("alpha", ["name", "fullname"]).count() == 2

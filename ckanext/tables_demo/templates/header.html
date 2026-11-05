@@ -3,7 +3,11 @@
 {% block header_account_logged %}
     {% if g.userobj.sysadmin %}
         {% if ui is defined %}
-            {{ ui.account_nav_item(_("Demo Dashboard"), h.url_for("tables_demo.dashboard"), icon="table") }}
+            {{ ui.account_nav_item(
+                ui.icon("table"),
+                h.url_for("tables_demo.dashboard"),
+                attrs={"class": "tables-demo-nav-link", "title": _("Demo Dashboard"), "aria-label": _("Demo Dashboard")}
+            ) }}
         {% else %}
             <li>
                 <a href="{{ h.url_for('tables_demo.dashboard') }}" title="{{ _('Demo Dashboard') }}">

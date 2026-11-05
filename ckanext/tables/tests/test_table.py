@@ -7,9 +7,11 @@ import ckan.plugins.toolkit as tk
 from ckanext.tables import formatters
 from ckanext.tables.data_sources import ListDataSource
 from ckanext.tables.table import (
+    COLUMN_ACTIONS_FIELD,
     ROW_DISABLED_ACTIONS_FIELD,
     BulkActionDefinition,
     ColumnDefinition,
+    QuickFilterDefinition,
     RowActionDefinition,
     TableActionDefinition,
     TableDefinition,
@@ -537,3 +539,232 @@ class TestTableDefinitionPages:
 
         assert len(page["data"]) == 2
         assert page["last_page"] == 2
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestTableDefinitionSearch:
+    def test_search_narrows_rows_and_total(self, simple_data):
+        table = TableDefinition(name="search_tbl", data_source=ListDataSource(simple_data), search_fields=["name"])
+        params = QueryParams(search="li")
+
+        assert [row["name"] for row in table.get_raw_data(params, paginate=False)] == ["Alice", "Charlie"]
+        assert table.get_total_count(params) == 2
+        assert [row["name"] for row in table.iter_raw_data(params)] == ["Alice", "Charlie"]
+
+    def test_search_applies_on_top_of_filters(self, simple_data):
+        table = TableDefinition(name="search_tbl", data_source=ListDataSource(simple_data), search_fields=["name"])
+        params = QueryParams(search="li", filters=[FilterItem("name", "!=", "Alice")])
+
+        assert [row["name"] for row in table.get_raw_data(params, paginate=False)] == ["Charlie"]
+
+    def test_search_is_ignored_without_search_fields(self, simple_table):
+        assert simple_table.get_total_count(QueryParams(search="li")) == 3
+
+    def test_default_search_placeholder(self, simple_table):
+        assert simple_table.search_placeholder == "Search"
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestTableDefinitionRowActionsLayout:
+    def _action(self, name="act"):
+        return RowActionDefinition(action=name, label=name, callback=lambda row: {"success": True})
+
+    def test_actions_column_goes_last_by_default(self, simple_data):
+        table = TableDefinition(
+            name="tbl", data_source=ListDataSource(simple_data), columns=[ColumnDefinition("name")], row_actions=[self._action()]
+        )
+        assert [c.field for c in table.columns] == ["name", COLUMN_ACTIONS_FIELD]
+
+    def test_actions_column_at_start(self, simple_data):
+        table = TableDefinition(
+            name="tbl",
+            data_source=ListDataSource(simple_data),
+            columns=[ColumnDefinition("name")],
+            row_actions=[self._action()],
+            row_actions_position="start",
+        )
+        assert [c.field for c in table.columns] == [COLUMN_ACTIONS_FIELD, "name"]
+
+    def test_inline_actions_column_uses_the_inline_template(self, simple_data):
+        table = TableDefinition(
+            name="tbl",
+            data_source=ListDataSource(simple_data),
+            row_actions=[self._action("a"), self._action("b")],
+            row_actions_display="inline",
+        )
+        column = table.columns[-1]
+
+        assert column.formatters == [
+            (formatters.ActionsFormatter, {"template": formatters.ActionsFormatter.INLINE_TEMPLATE})
+        ]
+        assert column.title == "Actions"
+
+    @pytest.mark.parametrize("option", ["row_actions_display", "row_actions_position"])
+    def test_invalid_options_are_rejected(self, simple_data, option):
+        with pytest.raises(ValueError, match=option):
+            TableDefinition(name="tbl", data_source=ListDataSource(simple_data), **{option: "nope"})
+
+
+@pytest.mark.usefixtures("with_plugins", "with_request_context")
+class TestInlineRowActions:
+    def test_renders_one_button_per_action_with_disabled_state(self, simple_data):
+        table = TableDefinition(
+            name="tbl",
+            data_source=ListDataSource(simple_data),
+            columns=[ColumnDefinition("name")],
+            row_actions=[
+                RowActionDefinition(
+                    action="remove", label="Remove", icon="fa fa-trash", callback=lambda row: {"success": True}
+                ),
+                RowActionDefinition(
+                    action="promote",
+                    label="Promote",
+                    callback=lambda row: {"success": True},
+                    disabled=lambda row: "Too young" if row["age"] < 30 else None,
+                ),
+            ],
+            row_actions_display="inline",
+        )
+
+        rows = table.get_data(QueryParams(size=10))
+        bob = next(row for row in rows if row["name"] == "Bob")
+        html = str(bob[COLUMN_ACTIONS_FIELD])
+
+        assert 'data-row-action="remove"' in html
+        assert 'class="fa fa-trash"' in html
+        assert 'data-row-action="promote"' in html
+        assert 'title="Too young"' in html
+        assert html.count("disabled") >= 1
+
+
+@pytest.mark.usefixtures("with_plugins", "with_request_context")
+class TestRenderTableControls:
+    def _render(self, tbl):
+        return tk.render("tables/render_table.html", extra_vars={"table": tbl})
+
+    def test_all_controls_by_default(self, simple_table):
+        html = self._render(simple_table)
+
+        assert f"filters-modal-{simple_table.id}" in html
+        assert f"columns-modal-{simple_table.id}" in html
+        assert f"refresh-table-{simple_table.id}" in html
+        assert f"btn-fullscreen-{simple_table.id}" in html
+        assert f"total-count-value-{simple_table.id}" in html
+        assert f"table-search-{simple_table.id}" not in html
+        assert f"quick-filters-{simple_table.id}" not in html
+
+    def test_controls_can_be_hidden(self, simple_data):
+        table = TableDefinition(
+            name="bare",
+            data_source=ListDataSource(simple_data),
+            show_filters=False,
+            show_columns=False,
+            show_refresh=False,
+            show_fullscreen=False,
+            show_total_count=False,
+        )
+        html = self._render(table)
+
+        assert f"filters-modal-{table.id}" not in html
+        assert f"columns-modal-{table.id}" not in html
+        assert f"refresh-table-{table.id}" not in html
+        assert f"btn-fullscreen-{table.id}" not in html
+        assert f"total-count-value-{table.id}" not in html
+        assert 'data-module-enable-fullscreen-toggle="false"' in html
+
+    def test_search_and_quick_filters(self, simple_data):
+        table = TableDefinition(
+            name="quick",
+            data_source=ListDataSource(simple_data),
+            search_fields=["name"],
+            search_placeholder="Find people",
+            quick_filters=[
+                QuickFilterDefinition(field="age", options=[("30", "Thirty")], placeholder="All ages"),
+            ],
+        )
+        html = self._render(table)
+
+        assert f'id="table-search-{table.id}"' in html
+        assert 'placeholder="Find people"' in html
+        assert 'data-field="age"' in html
+        assert 'data-operator="="' in html
+        assert '<option value="">All ages</option>' in html
+        assert '<option value="30">Thirty</option>' in html
+
+    def test_quick_filter_default_placeholder(self):
+        assert QuickFilterDefinition(field="age", options=[]).placeholder == "All"
+
+
+class TestColumnWidthGrow:
+    def test_to_dict_with_width_grow(self):
+        assert ColumnDefinition(field="id", width_grow=3).to_dict()["widthGrow"] == 3
+
+    def test_no_width_grow_by_default(self):
+        assert "widthGrow" not in ColumnDefinition(field="id").to_dict()
+
+
+@pytest.mark.usefixtures("with_request_context")
+class TestTableDefinitionPagination:
+    def test_defaults_keep_the_previous_pagination(self, simple_table):
+        assert simple_table.page_size_label is None
+        assert simple_table.pagination_counter == "rows"
+
+    def test_invalid_pagination_counter_is_rejected(self, simple_data):
+        with pytest.raises(ValueError, match="pagination_counter"):
+            TableDefinition(name="tbl", data_source=ListDataSource(simple_data), pagination_counter="nope")
+
+
+@pytest.mark.usefixtures("with_plugins", "with_request_context")
+class TestRenderTableEmptyState:
+    def _render(self, tbl):
+        return tk.render("tables/render_table.html", extra_vars={"table": tbl})
+
+    def test_no_empty_state_by_default(self, simple_table):
+        html = self._render(simple_table)
+
+        assert f"empty-state-{simple_table.id}" not in html
+        assert 'data-module-pagination-counter="rows"' in html
+        assert "data-module-page-size-label" not in html
+
+    def test_empty_state_template_is_rendered_hidden(self, simple_data):
+        table = TableDefinition(
+            name="empty_tbl",
+            data_source=ListDataSource(simple_data),
+            # any template rendering without extra variables will do
+            empty_state_template="tables/formatters/actions.html",
+        )
+        html = self._render(table)
+
+        assert f'class="table-empty-state d-none" id="empty-state-{table.id}"' in html
+        assert "btn-row-actions" in html
+
+
+@pytest.mark.usefixtures("with_plugins")
+class TestRenderQuickFilterAttrs:
+    def _table(self, simple_data):
+        return TableDefinition(
+            name="quick",
+            data_source=ListDataSource(simple_data),
+            quick_filters=[
+                QuickFilterDefinition(
+                    field="age",
+                    options=[("30", "Thirty"), ("25", "Twenty-five")],
+                    placeholder="All ages",
+                    attrs={"data-module": "searchable", "class": "extra"},
+                ),
+            ],
+        )
+
+    def test_attrs_are_rendered_on_the_select(self, app, simple_data):
+        with app.flask_app.test_request_context("/"):
+            html = tk.render("tables/render_table.html", extra_vars={"table": self._table(simple_data)})
+
+        assert 'data-module="searchable"' in html
+        assert 'class="form-select table-quick-filter extra"' in html
+
+    def test_value_from_the_url_is_selected(self, app, simple_data):
+        with app.flask_app.test_request_context("/?quick_filter_age-quick=25"):
+            html = tk.render("tables/render_table.html", extra_vars={"table": self._table(simple_data)})
+
+        assert '<option value="25" selected>' in html
+        assert '<option value="30">' in html

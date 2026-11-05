@@ -178,10 +178,12 @@ class ActionsFormatter(BaseFormatter):
 
     Options:
         - `template` (str): The path to the template to render.
-          Defaults to `tables/formatters/actions.html`.
+          Defaults to `tables/formatters/actions.html`, a button opening the
+          actions menu. `INLINE_TEMPLATE` renders one button per action.
     """
 
     _DEFAULT_TEMPLATE = "tables/formatters/actions.html"
+    INLINE_TEMPLATE = "tables/formatters/actions_inline.html"
 
     def format(self, value: types.Value, options: types.Options) -> types.FormatterResult:
         template = options.get("template", self._DEFAULT_TEMPLATE)
@@ -207,6 +209,7 @@ class ActionsFormatter(BaseFormatter):
                     "table": self.table,
                     "column": self.column,
                     "row": self.row,
+                    "initial_row": self.initial_row,
                 },
             )
         )

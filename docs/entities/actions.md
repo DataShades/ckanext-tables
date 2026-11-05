@@ -6,6 +6,10 @@ Actions are operations that can be performed on table data. There are 3 types of
 2. **Table Actions**: Actions that can be performed on the table as a whole. It doesn't have an access to the row data, so it's typically used for operations that affect the entire table, e.g. cleaning the table data.
 3. **Row Actions**: Actions that can be performed on individual rows. These actions are accessible via a per-row menu and receive the row's data in the action callback.
 
+Row actions are shown in a dropdown menu by default. Set `row_actions_display="inline"` on the
+table to show one icon button per action instead (the action `icon` is the button content, the
+`label` its tooltip), and `row_actions_position="start"` to put the actions column first.
+
 Each action callback returns an `ActionHandlerResult` object, below you can see its definition. The action endpoint always responds `200` and wraps this in a fixed JSON envelope, whether the action succeeded, doesn't exist, or raised — see [Generic Views' HTTP Response Contract](../generics.md#http-response-contract) for the full status-code table.
 
 !!! warning "`message`/`error` render as HTML — escape untrusted input"

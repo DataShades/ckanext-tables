@@ -1,5 +1,8 @@
 from faker import Faker
 
+ARTICLE_STATUSES = ["draft", "review", "published"]
+ARTICLE_TAGS = ["climate", "economy", "education", "energy", "health", "housing", "transport", "water"]
+
 
 def generate_mock_data(num_records: int) -> list[dict[str, str | bool]]:
     fake = Faker()
@@ -12,6 +15,24 @@ def generate_mock_data(num_records: int) -> list[dict[str, str | bool]]:
             "email": fake.email(),
             "sysadmin": False,
             "created": fake.date_time_this_decade().isoformat(),
+        }
+        for i in range(1, num_records + 1)
+    ]
+
+
+def generate_mock_articles(num_records: int) -> list[dict[str, str | bool | list[str]]]:
+    fake = Faker()
+
+    return [
+        {
+            "id": str(i),
+            "title": fake.sentence(nb_words=6).rstrip("."),
+            "author": fake.name(),
+            "status": fake.random_element(ARTICLE_STATUSES),
+            # a list cell: the "tag" quick filter matches any of its items
+            "tags": fake.random_elements(ARTICLE_TAGS, length=fake.random_int(1, 3), unique=True),
+            "pinned": False,
+            "updated": fake.date_time_this_year().isoformat(),
         }
         for i in range(1, num_records + 1)
     ]

@@ -41,6 +41,7 @@ class QueryParams:
     filters: list[FilterItem] = dataclass_field(default_factory=list)
     sort_by: str | None = None
     sort_order: str | None = None
+    search: str = ""
 
 
 @dataclass(frozen=True)

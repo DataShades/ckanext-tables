@@ -11,7 +11,37 @@
 <div class="table-wrapper" data-table-id="{{ table.id }}">
 {% block table_control %}
     <div class="table-control d-flex flex-wrap">
+        {% block table_search %}
+            {% if table.search_fields %}
+                <div class="table-search">
+                    <i class="fa fa-search" aria-hidden="true"></i>
+                    <input type="search" class="form-control" id="table-search-{{ table.id }}"
+                        placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
+                </div>
+            {% endif %}
+        {% endblock %}
+
+        {% block table_quick_filters %}
+            {% if table.quick_filters %}
+                <div class="table-quick-filters d-flex flex-wrap" id="quick-filters-{{ table.id }}">
+                    {% for quick_filter in table.quick_filters %}
+                        {# the value kept in the URL, see _onQuickFilterChange in tables-tabulator.ts #}
+                        {% set selected = request.args.get('quick_filter_' ~ quick_filter.field ~ '-' ~ table.name, '') %}
+                        {% set select_attrs = dict(quick_filter.attrs, **{'class': ('form-select table-quick-filter ' ~ quick_filter.attrs.get('class', '')).strip()}) %}
+                        <select data-field="{{ quick_filter.field }}" data-operator="{{ quick_filter.operator }}"
+                            aria-label="{{ quick_filter.placeholder }}" {{ attributes(select_attrs) }}>
+                            <option value="">{{ quick_filter.placeholder }}</option>
+                            {% for value, label in quick_filter.options %}
+                                <option value="{{ value }}"{{ ' selected' if value == selected }}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endblock %}
+
         {% block table_filters %}
+            {% if table.show_filters %}
             <div id="filter-template-{{ table.id }}" style="display:none;">
                 {{ filter_item(table, '', '=', '') }}
             </div>
@@ -26,9 +56,11 @@
                     <i class="fa fa-times"></i>
                 </button>
             </div>
+            {% endif %}
         {% endblock %}
 
         {% block table_columns %}
+            {% if table.show_columns %}
             {% snippet "tables/snippets/table_columns_modal.html", table=table %}
 
             <button class="btn btn-sm btn-secondary align-items-baseline" data-bs-toggle="modal" data-bs-target="#columns-modal-{{ table.id }}" title="{{ _('Manage Columns') }}">
@@ -39,6 +71,7 @@
                     <span id="hidden-columns-counter-{{ table.id }}">0</span>
                 </span>
             </button>
+            {% endif %}
         {% endblock %}
 
         {% block table_global_filters %}
@@ -150,20 +183,34 @@
         {% endblock %}
 
         {% block table_refresh %}
+            {% if table.show_refresh %}
             <button class="btn btn-sm btn-secondary" id="refresh-table-{{ table.id }}" title="{{ _('Refresh Table') }}" aria-label="{{ _('Refresh Table') }}">
                 <i class="fa fa-arrows-rotate"></i>
             </button>
+            {% endif %}
         {% endblock %}
 
         {% block table_total_count %}
+            {% if table.show_total_count %}
             <div class="d-flex align-items-center ms-auto">
                 <span id="total-count-value-{{ table.id }}" class="me-1"></span>
             </div>
+            {% endif %}
 
-            <button type="button" class="btn btn-sm btn-secondary btn-fullscreen d-none d-sm-inline-block" id="btn-fullscreen-{{ table.id }}" title="{{ _('Fullscreen toggle') }}" aria-label="{{ _('Fullscreen toggle') }}"><i class="fa fa-expand"></i></button>
+            {% if table.show_fullscreen %}
+            <button type="button" class="btn btn-sm btn-secondary btn-fullscreen d-none d-sm-inline-block {{ '' if table.show_total_count else 'ms-auto' }}" id="btn-fullscreen-{{ table.id }}" title="{{ _('Fullscreen toggle') }}" aria-label="{{ _('Fullscreen toggle') }}"><i class="fa fa-expand"></i></button>
+            {% endif %}
         {% endblock %}
     </div>
 {% endblock table_control %}
+
+{% block table_empty_state %}
+    {% if table.empty_state_template %}
+        <div class="table-empty-state d-none" id="empty-state-{{ table.id }}">
+            {% snippet table.empty_state_template, table=table %}
+        </div>
+    {% endif %}
+{% endblock %}
 
 {% block table_container %}
     <div class="tabulator-wrapper">
@@ -172,6 +219,10 @@
             data-module="tables-tabulator"
             data-module-config="{{ h.tables_json_dumps(table.get_tabulator_config()) }}"
             data-module-row-actions="{{ h.tables_json_dumps(table.get_row_actions()) }}"
+            data-module-row-actions-display="{{ table.row_actions_display }}"
+            {% if table.page_size_label %}data-module-page-size-label="{{ table.page_size_label }}"{% endif %}
+            data-module-pagination-counter="{{ table.pagination_counter }}"
+            data-module-enable-fullscreen-toggle="{{ 'true' if table.show_fullscreen else 'false' }}"
             {% if initial_page %}data-module-initial-page="{{ initial_page }}"{% endif %}
         >
             {% snippet "tables/snippets/table_skeleton.html" %}

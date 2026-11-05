@@ -182,6 +182,7 @@ class ExportTableMixin:
             "filters": [{"field": f.field, "operator": f.operator, "value": f.value} for f in params.filters],
             "sort_by": params.sort_by,
             "sort_order": params.sort_order,
+            "search": params.search,
         }
 
         job = tk.enqueue_job(

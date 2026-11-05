@@ -712,14 +712,14 @@ class CachedDataSourceMixin:
         invalidate_cache_entry(self.cache_backend, self.get_cache_base_key(), self.cache_ttl)
         self._generation_memo = None
 
-    def get_cached_count(self, filters: list[FilterItem]) -> int | None:
-        """Return the cached row count for *filters*, or ``None`` on a cache miss."""
-        result = _metadata_get(self._count_cache_key(filters))
+    def get_cached_count(self, filters: list[FilterItem], search: str = "") -> int | None:
+        """Return the cached row count for *filters* and *search*, or ``None`` on a cache miss."""
+        result = _metadata_get(self._count_cache_key(filters, search))
         return int(result) if result is not None else None
 
-    def set_cached_count(self, filters: list[FilterItem], count: int) -> None:
-        """Cache *count* for *filters* under the current generation."""
-        _metadata_set(self._count_cache_key(filters), count, self.cache_ttl)
+    def set_cached_count(self, filters: list[FilterItem], count: int, search: str = "") -> None:
+        """Cache *count* for *filters* and *search* under the current generation."""
+        _metadata_set(self._count_cache_key(filters, search), count, self.cache_ttl)
 
     def get_cached_columns(self) -> list[str] | None:
         """Return the cached column list, or ``None`` on a cache miss."""
@@ -772,15 +772,19 @@ class CachedDataSourceMixin:
 
         return self._generation_memo
 
-    def _count_cache_key(self, filters: list[FilterItem]) -> str:
-        """Return the cache sub-key for a given set of filters (count ignores page/size/sort)."""
+    def _count_cache_key(self, filters: list[FilterItem], search: str = "") -> str:
+        """Return the cache sub-key for a given set of filters and search (count ignores page/size/sort)."""
         key = self.get_cache_key()
         generation = self._generation()
 
-        if not filters:
+        if not filters and not search:
             return f"{key}:count:{generation}"
 
         filters_key = "|".join(f"{f.field}:{f.operator}:{f.value}" for f in filters)
+
+        if search:
+            filters_key = f"{filters_key}|search:{search}"
+
         return f"{key}:count:{generation}:{filters_key}"
 
 

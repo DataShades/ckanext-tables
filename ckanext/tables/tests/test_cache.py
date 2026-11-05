@@ -671,6 +671,14 @@ class TestCachedDataSourceMixinCounts:
         other_filter = ds._count_cache_key([FilterItem("age", "=", 31)])
         assert no_filter != with_filter != other_filter
 
+    def test_count_cache_key_differs_by_search(self, feather_backend):
+        ds = _FakeCachedDataSource(feather_backend)
+        filters = [FilterItem("age", "=", 30)]
+
+        assert ds._count_cache_key([]) != ds._count_cache_key([], "alice")
+        assert ds._count_cache_key(filters) != ds._count_cache_key(filters, "alice")
+        assert ds._count_cache_key([], "alice") != ds._count_cache_key([], "bob")
+
     def test_invalidate_orphans_previously_cached_counts(self, feather_backend):
         ds = _FakeCachedDataSource(feather_backend)
         ds.set_cached_count([], 3)

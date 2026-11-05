@@ -1,0 +1,23 @@
+{#
+    Empty state of the demo articles table, see `ArticlesTable`.
+
+    The table shows the "filtered" part when the search or a filter is
+    active, the "empty" part when it has no data at all.
+#}
+
+<div class="text-center py-5">
+    <i class="fa fa-newspaper fa-3x text-muted mb-3" aria-hidden="true"></i>
+
+    <div data-empty-state="filtered">
+        <h3 class="h5">{{ _("No articles match your search") }}</h3>
+        <p class="text-muted">{{ _("Try different words, or another status or tag.") }}</p>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-table-clear-filters>
+            {{ _("Clear search") }} <i class="fa fa-times" aria-hidden="true"></i>
+        </button>
+    </div>
+
+    <div class="d-none" data-empty-state="empty">
+        <h3 class="h5">{{ _("There are no articles") }}</h3>
+        <p class="text-muted">{{ _('Use "Recreate Articles" in the Table Actions menu to get them back.') }}</p>
+    </div>
+</div>

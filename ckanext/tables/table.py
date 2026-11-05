@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 
 COLUMN_ACTIONS_FIELD = "__table_actions"
 ROW_DISABLED_ACTIONS_FIELD = "__table_disabled_actions"
+ROW_ACTIONS_DISPLAYS = ("menu", "inline")
+ROW_ACTIONS_POSITIONS = ("start", "end")
+PAGINATION_COUNTERS = ("rows", "range")
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -64,6 +67,34 @@ class TableDefinition:
             htmx-driven links (see ``render_table.html``'s ``table_sheets`` block)
             fetch from to switch sheets in place, instead of navigating the page.
             Left unset (the default) for anything with no sheets to switch between.
+        search_fields: (Optional) Fields searched by the search input rendered above
+            the table: a row matches when any of them contains the query,
+            case-insensitively. No search input without fields. The data source
+            must implement ``search()``.
+        search_placeholder: (Optional) Placeholder of the search input. Defaults to "Search".
+        quick_filters: (Optional) List of QuickFilterDefinition objects, rendered as
+            selects above the table.
+        row_actions_display: (Optional) How row actions are shown: ``"menu"`` (the
+            default), a dropdown menu opened from one button, or ``"inline"``, one
+            icon button per action.
+        row_actions_position: (Optional) Where the row actions column goes: ``"end"``
+            (the default) or ``"start"``.
+        show_filters: (Optional) Whether to render the Filters control. Defaults to True.
+        show_columns: (Optional) Whether to render the Columns control. Defaults to True.
+        show_refresh: (Optional) Whether to render the Refresh button. Defaults to True.
+        show_fullscreen: (Optional) Whether to render the Fullscreen button. Defaults to True.
+        show_total_count: (Optional) Whether to render the total row count above
+            the table. Defaults to True.
+        empty_state_template: (Optional) Template shown instead of the table when a
+            page has no rows. It gets the ``table``. Its elements with
+            ``data-empty-state="filtered"`` show when the search or a filter is
+            active, those with ``data-empty-state="empty"`` when the table has no
+            data at all; a ``data-table-clear-filters`` element clears the search
+            and every filter. Without it, the table shows ``placeholder``.
+        page_size_label: (Optional) Label of the page size select. Defaults to
+            "Rows per page", translated on the client.
+        pagination_counter: (Optional) Format of the pagination counter: ``"rows"``
+            (the default), "Showing 1-10 of 120 rows", or ``"range"``, "1 – 10 of 120".
     """
 
     name: str
@@ -81,6 +112,19 @@ class TableDefinition:
     sheets: list[str] = dataclass_field(default_factory=list)
     current_sheet: int = 0
     sheet_switch_url: str | None = None
+    search_fields: list[str] = dataclass_field(default_factory=list)
+    search_placeholder: str | None = None
+    quick_filters: list[QuickFilterDefinition] = dataclass_field(default_factory=list)
+    row_actions_display: str = "menu"
+    row_actions_position: str = "end"
+    show_filters: bool = True
+    show_columns: bool = True
+    show_refresh: bool = True
+    show_fullscreen: bool = True
+    show_total_count: bool = True
+    empty_state_template: str | None = None
+    page_size_label: str | None = None
+    pagination_counter: str = "rows"
 
     def __post_init__(self):
         if not _SAFE_NAME_RE.match(self.name):
@@ -97,23 +141,54 @@ class TableDefinition:
         # outlives the request that created it.
         self._formatter_cache: dict[Any, Any] = {}
 
+        if self.row_actions_display not in ROW_ACTIONS_DISPLAYS:
+            raise ValueError(
+                f"TableDefinition.row_actions_display {self.row_actions_display!r} is invalid: "
+                f"it must be one of {ROW_ACTIONS_DISPLAYS}"
+            )
+
+        if self.row_actions_position not in ROW_ACTIONS_POSITIONS:
+            raise ValueError(
+                f"TableDefinition.row_actions_position {self.row_actions_position!r} is invalid: "
+                f"it must be one of {ROW_ACTIONS_POSITIONS}"
+            )
+
         if self.placeholder is None:
             self.placeholder = tk._("No data found")
 
+        if self.pagination_counter not in PAGINATION_COUNTERS:
+            raise ValueError(
+                f"TableDefinition.pagination_counter {self.pagination_counter!r} is invalid: "
+                f"it must be one of {PAGINATION_COUNTERS}"
+            )
+
+        if self.search_placeholder is None:
+            self.search_placeholder = tk._("Search")
+
         if self.row_actions:
-            self.columns = [
-                *self.columns,
-                ColumnDefinition(
-                    field=COLUMN_ACTIONS_FIELD,
-                    title="",
-                    formatters=[(formatters.ActionsFormatter, {})],
-                    filterable=False,
-                    tabulator_formatter="html",
-                    sortable=False,
-                    resizable=False,
-                    width=50,
-                ),
-            ]
+            actions_column = self._make_actions_column()
+
+            if self.row_actions_position == "start":
+                self.columns = [actions_column, *self.columns]
+            else:
+                self.columns = [*self.columns, actions_column]
+
+    def _make_actions_column(self) -> ColumnDefinition:
+        inline = self.row_actions_display == "inline"
+
+        return ColumnDefinition(
+            field=COLUMN_ACTIONS_FIELD,
+            title=tk._("Actions") if inline else "",
+            formatters=[
+                (formatters.ActionsFormatter, {"template": formatters.ActionsFormatter.INLINE_TEMPLATE} if inline else {})
+            ],
+            filterable=False,
+            tabulator_formatter="html",
+            sortable=False,
+            resizable=False,
+            # One icon button per action when inline, and room for the "Actions" title
+            width=max(96, 24 + 36 * len(self.row_actions)) if inline else 50,
+        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self.name!r}, id={self.id!r})"
@@ -221,10 +296,10 @@ class TableDefinition:
 
     def get_raw_data(self, params: types.QueryParams, paginate: bool = True) -> list[dict[str, Any]]:
         if not paginate:
-            return self.data_source.filter(params.filters).sort(params.sort_by, params.sort_order).all()
+            return self._filtered_source(params).sort(params.sort_by, params.sort_order).all()
 
         return (
-            self.data_source.filter(params.filters)
+            self._filtered_source(params)
             .sort(params.sort_by, params.sort_order)
             .paginate(params.page, params.size)
             .all()
@@ -232,23 +307,37 @@ class TableDefinition:
 
     def iter_raw_data(self, params: types.QueryParams) -> Iterator[dict[str, Any]]:
         """Yield the same rows as ``get_raw_data(params, paginate=False)``, without building the full list first."""
-        return self.data_source.filter(params.filters).sort(params.sort_by, params.sort_order).iter_rows()
+        return self._filtered_source(params).sort(params.sort_by, params.sort_order).iter_rows()
 
     def get_total_count(self, params: types.QueryParams) -> int:
         cached_source = self.data_source if isinstance(self.data_source, CachedDataSourceMixin) else None
+        search = self._search_query(params)
 
         if cached_source is not None:
-            cached = cached_source.get_cached_count(params.filters)
+            cached = cached_source.get_cached_count(params.filters, search)
             if cached is not None:
                 return cached
 
-        # for total count we only apply filter, without sort and pagination
-        count = self.data_source.filter(params.filters).count()
+        # for total count we only apply filter and search, without sort and pagination
+        count = self._filtered_source(params).count()
 
         if cached_source is not None:
-            cached_source.set_cached_count(params.filters, count)
+            cached_source.set_cached_count(params.filters, count, search)
 
         return count
+
+    def _search_query(self, params: types.QueryParams) -> str:
+        """Return the search query of *params*, or ``""`` when the table has nothing to search."""
+        return params.search if self.search_fields else ""
+
+    def _filtered_source(self, params: types.QueryParams) -> BaseDataSource:
+        """Apply the filters and the search of *params* to the data source."""
+        source = self.data_source.filter(params.filters)
+
+        if search := self._search_query(params):
+            source = source.search(search, self.search_fields)
+
+        return source
 
     def _apply_formatters(
         self, row: dict[str, Any], formatted_columns: list[ColumnDefinition] | None = None
@@ -330,6 +419,9 @@ class ColumnDefinition:
         tabulator_formatter_params: Parameters for the built-in tabulator formatter.
         width: The width of the column in pixels.
         min_width: The minimum width of the column in pixels.
+        width_grow: How much of the free width the column takes, relative to the
+            other columns, with the default ``fitColumns`` layout. E.g. ``3`` makes
+            it three times as wide as a column without it.
         visible: Whether the column is visible.
         sorter: The default sorter for the column (e.g., "string", "number").
         filterable: Whether the column can be filtered by the user.
@@ -346,6 +438,7 @@ class ColumnDefinition:
     tabulator_formatter_params: dict[str, Any] = dataclass_field(default_factory=dict)
     width: int | None = None
     min_width: int | None = None
+    width_grow: int | None = None
     visible: bool = True
     sortable: bool = True
     filterable: bool = True
@@ -373,6 +466,7 @@ class ColumnDefinition:
         mappings = {
             "width": "width",
             "min_width": "minWidth",
+            "width_grow": "widthGrow",
             "tabulator_formatter": "formatter",
             "tabulator_formatter_params": "formatterParams",
         }
@@ -393,6 +487,35 @@ class ColumnDefinition:
             result["headerFilterPlaceholder"] = tk._("Search")
 
         return result
+
+
+@dataclass(frozen=True)
+class QuickFilterDefinition:
+    """A select rendered above the table, filtering one field by the chosen value.
+
+    Attributes:
+        field: The field to filter.
+        options: The values to choose from, as ``(value, label)`` pairs.
+        placeholder: (Optional) Label of the empty option, which removes the filter.
+            Defaults to "All".
+        operator: (Optional) The filter operator, one of ``FILTER_OPERATORS``.
+            Defaults to ``"="``.
+        attrs: (Optional) Extra HTML attributes for the select, e.g. a
+            ``data-module`` turning it into a searchable select. When the table
+            sets the value of the select itself (from the URL, or clearing the
+            filters), it fires a bubbling ``tables:quick-filter:sync`` event on
+            the select, for such a widget to show the new value.
+    """
+
+    field: str
+    options: list[tuple[str, str]]
+    placeholder: str | None = None
+    operator: str = "="
+    attrs: dict[str, Any] = dataclass_field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.placeholder is None:
+            object.__setattr__(self, "placeholder", tk._("All"))
 
 
 @dataclass(frozen=True)
